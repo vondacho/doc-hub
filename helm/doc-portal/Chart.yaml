@@ -1,0 +1,21 @@
+apiVersion: v2
+name: doc-portal
+description: Documentation hub web frontend — living documentation organised by product, with its catalog, landscapes and registration
+type: application
+
+# Chart version. Bump on every change to the chart itself.
+version: 0.1.0
+
+# Version of doc-portal shipped by default. Matches "version" in
+# doc-portal/package.json and is used as the default image tag.
+appVersion: "0.0.1"
+
+keywords:
+  - astro
+  - living-documentation
+  - product-catalog
+home: https://github.com/vondacho/doc-hub
+sources:
+  - https://github.com/vondacho/doc-hub/tree/main/doc-portal
+maintainers:
+  - name: Olivier von Dach

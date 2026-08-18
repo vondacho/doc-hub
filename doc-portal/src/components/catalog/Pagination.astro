@@ -1,0 +1,72 @@
+---
+/*
+ * Previous / next over a result set, ten products at a time.
+ *
+ * Links rather than buttons, carrying the query with them, so a page of results
+ * is addressable — the same reason the search box is a GET form. `rel=prev/next`
+ * is there because this is exactly the case it was defined for.
+ */
+
+interface Props {
+	page: number;
+	pageCount: number;
+	total: number;
+	pageSize: number;
+	/** The current query, carried into the page links. */
+	query: string;
+}
+
+const { page, pageCount, total, pageSize, query } = Astro.props;
+
+function href(target: number): string {
+	const params = new URLSearchParams();
+	if (query) params.set('q', query);
+	if (target > 1) params.set('page', String(target));
+	const search = params.toString();
+	return search ? `/catalog?${search}` : '/catalog';
+}
+
+const first = (page - 1) * pageSize + 1;
+const last = Math.min(page * pageSize, total);
+
+const linkClass =
+	'rounded-full border border-slate-300 px-5 py-2.5 font-semibold transition hover:border-brand hover:text-brand focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand dark:border-slate-600 dark:hover:border-sky-400 dark:hover:text-sky-400';
+const disabledClass =
+	'rounded-full border border-slate-200 px-5 py-2.5 font-semibold text-slate-400 dark:border-slate-800 dark:text-slate-600';
+---
+
+<nav
+	aria-label="Result pages"
+	class="mt-10 flex flex-wrap items-center justify-between gap-4 border-t border-slate-200 pt-6 dark:border-slate-800"
+>
+	<p class="text-sm text-ink-muted dark:text-slate-400">
+		Showing <strong class="font-semibold text-ink dark:text-slate-100">{first}–{last}</strong> of{' '}
+		<strong class="font-semibold text-ink dark:text-slate-100">{total}</strong> products — page{' '}
+		{page} of {pageCount}
+	</p>
+
+	<div class="flex gap-3">
+		{
+			page > 1 ? (
+				<a href={href(page - 1)} rel="prev" class={linkClass}>
+					← Previous
+				</a>
+			) : (
+				<span class={disabledClass} aria-hidden="true">
+					← Previous
+				</span>
+			)
+		}
+		{
+			page < pageCount ? (
+				<a href={href(page + 1)} rel="next" class={linkClass}>
+					Next →
+				</a>
+			) : (
+				<span class={disabledClass} aria-hidden="true">
+					Next →
+				</span>
+			)
+		}
+	</div>
+</nav>

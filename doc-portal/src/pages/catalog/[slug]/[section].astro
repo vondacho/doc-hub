@@ -1,0 +1,139 @@
+---
+import Layout from '../../../layouts/Layout.astro';
+import Hero from '../../../components/home/Hero.astro';
+import SiteFooter from '../../../components/home/SiteFooter.astro';
+import { findProduct } from '../../../lib/products';
+import { campaignsHubUrl, findInternalSection, productSections } from '../../../lib/product-sections';
+
+/*
+ * One route for the six perspectives this hub owns — documentation, roadmap,
+ * epics, sprints, campaigns, incidents.
+ *
+ * They are scaffolds, and each says so in the same words: what the page will
+ * hold, and which automation is expected to fill it. That is deliberately not a
+ * "coming soon" placeholder — a reader who lands here should leave knowing where
+ * the content will come from and who to ask, which is information a blank page
+ * withholds.
+ *
+ * C4 and Events never reach this route: they are model-hub's and their panels
+ * link straight out. A URL typed by hand for one of them 404s, which is correct
+ * — this portal does not render them at any address.
+ */
+const { slug, section: sectionSlug } = Astro.params;
+const product = slug ? findProduct(slug) : undefined;
+const section = sectionSlug ? findInternalSection(sectionSlug) : undefined;
+
+if (!product || !section) {
+	return new Response(null, { status: 404, statusText: 'Not found' });
+}
+
+const siblings = productSections.filter((candidate) => candidate.slug !== section.slug);
+const campaignsUrl = section.slug === 'campaigns' ? campaignsHubUrl() : undefined;
+---
+
+<Layout
+	title={`${section.title} — ${product.name} — Doc Hub`}
+	description={`${section.title} for ${product.name}: ${section.question}`}
+>
+	<main id="main">
+		<Hero
+			kicker={section.title}
+			title={section.title}
+			lead={section.description}
+			parent={{ label: product.name, href: `/catalog/${product.slug}` }}
+			compact
+		/>
+
+		<section class="mx-auto w-full max-w-5xl px-6 py-12 sm:py-16">
+			<p class="text-lg text-ink-muted dark:text-slate-400">{section.question}</p>
+
+			<div
+				class="mt-8 rounded-2xl border border-slate-200 bg-white p-7 shadow-sm dark:border-slate-700 dark:bg-night-raised"
+			>
+				<p
+					class="inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold tracking-wide text-ink-muted uppercase dark:bg-slate-700 dark:text-slate-300"
+				>
+					Not fed yet
+				</p>
+
+				<h2 class="mt-4 text-xl font-semibold">What this page will hold</h2>
+				<ul class="mt-4 space-y-2 text-ink-muted dark:text-slate-400">
+					{
+						(section.contents ?? []).map((item) => (
+							<li class="flex gap-3">
+								<span aria-hidden="true" class="text-brand dark:text-sky-400">
+									—
+								</span>
+								<span>{item}</span>
+							</li>
+						))
+					}
+				</ul>
+
+				{
+					section.source && (
+						<>
+							<h2 class="mt-8 text-xl font-semibold">Where the content comes from</h2>
+							<p class="mt-3 text-ink-muted dark:text-slate-400">{section.source}</p>
+						</>
+					)
+				}
+
+				{
+					campaignsUrl && (
+						<p class="mt-4">
+							<a
+								href={campaignsUrl}
+								rel="noreferrer"
+								class="font-semibold text-brand underline-offset-4 hover:underline dark:text-sky-400"
+							>
+								Open the quality portal
+								<span class="sr-only"> (leaves this site)</span>
+								<span aria-hidden="true">&nbsp;↗</span>
+							</a>
+						</p>
+					)
+				}
+
+				<p class="mt-8 border-t border-slate-200 pt-5 text-sm text-ink-muted dark:border-slate-800 dark:text-slate-400">
+					Content is provisioned by automation rather than typed here — pipelines on
+					<code class="rounded bg-slate-100 px-1.5 py-0.5 text-xs dark:bg-slate-700">develop</code>,
+					campaign runs, Helm deployments and observability. Until this one is wired,
+					<a
+						href={`mailto:${product.contact}`}
+						class="font-medium underline underline-offset-4 hover:text-brand dark:hover:text-sky-400"
+						>{product.owner}</a
+					> is who to ask.
+				</p>
+			</div>
+
+			<nav aria-labelledby="other-perspectives" class="mt-12">
+				<h2 id="other-perspectives" class="text-sm font-semibold text-ink-muted dark:text-slate-400">
+					Other perspectives on {product.name}
+				</h2>
+				<ul class="mt-4 flex flex-wrap gap-3">
+					{
+						siblings.map((sibling) => (
+							<li>
+								<a
+									href={sibling.href(product)}
+									rel={sibling.external ? 'noreferrer' : undefined}
+									class="inline-block rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold transition hover:border-brand hover:text-brand dark:border-slate-600 dark:hover:border-sky-400 dark:hover:text-sky-400"
+								>
+									{sibling.title}
+									{sibling.external && (
+										<>
+											<span class="sr-only"> (leaves this site)</span>
+											<span aria-hidden="true">&nbsp;↗</span>
+										</>
+									)}
+								</a>
+							</li>
+						))
+					}
+				</ul>
+			</nav>
+		</section>
+	</main>
+	<SiteFooter />
+</Layout>

@@ -1,0 +1,78 @@
+---
+/*
+ * One product, as it appears in a result list.
+ *
+ * The card carries the four things a search result has to answer before anyone
+ * clicks it: what it is, who owns it, where it is in its life, and how current
+ * the documentation behind the link is. The last one is the point of this hub —
+ * a documentation portal that hides the age of its documentation is a wiki with
+ * better typography.
+ */
+import type { Product } from '../../lib/products';
+
+interface Props {
+	product: Product;
+}
+
+const { product } = Astro.props;
+
+const lifecycleLabel: Record<Product['lifecycle'], string> = {
+	incubating: 'Incubating',
+	active: 'Active',
+	maintained: 'Maintained',
+	sunset: 'Sunset',
+};
+
+const days = product.metrics.docsUpdatedDaysAgo;
+const freshnessLabel = days === 1 ? 'updated yesterday' : `updated ${days} days ago`;
+---
+
+<li>
+	<a
+		href={`/catalog/${product.slug}`}
+		class="group flex h-full flex-col rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition hover:-translate-y-0.5 hover:border-brand hover:shadow-md motion-reduce:hover:translate-y-0 dark:border-slate-700 dark:bg-night-raised dark:hover:border-sky-400"
+	>
+		<div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
+			<h3 class="text-xl font-semibold">{product.name}</h3>
+			<span class="text-sm text-ink-muted dark:text-slate-400">
+				{product.domain} · v{product.version}
+			</span>
+		</div>
+
+		<p class="mt-2 grow text-ink-muted dark:text-slate-400">{product.summary}</p>
+
+		<dl class="mt-4 flex flex-wrap gap-x-6 gap-y-1 text-sm">
+			<div class="flex gap-2">
+				<dt class="text-ink-muted dark:text-slate-400">Owner</dt>
+				<dd class="font-medium">{product.owner}</dd>
+			</div>
+			<div class="flex gap-2">
+				<dt class="text-ink-muted dark:text-slate-400">Lifecycle</dt>
+				<dd class="font-medium">{lifecycleLabel[product.lifecycle]}</dd>
+			</div>
+			<div class="flex gap-2">
+				<dt class="text-ink-muted dark:text-slate-400">Documentation</dt>
+				<dd class="font-medium">{freshnessLabel}</dd>
+			</div>
+		</dl>
+
+		<div class="mt-4 flex flex-wrap items-center gap-2">
+			{
+				product.tags.map((tag) => (
+					<span class="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-ink-muted dark:bg-slate-700 dark:text-slate-300">
+						{tag}
+					</span>
+				))
+			}
+			<span class="ml-auto font-semibold text-brand dark:text-sky-400">
+				Open
+				<span
+					aria-hidden="true"
+					class="inline-block transition group-hover:translate-x-1 motion-reduce:transition-none"
+				>
+					&nbsp;→
+				</span>
+			</span>
+		</div>
+	</a>
+</li>

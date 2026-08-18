@@ -1,0 +1,85 @@
+---
+/*
+ * The indicators band: six stat tiles, no chart.
+ *
+ * Six current values with no history behind them is the case a KPI row exists
+ * for — a bar chart of six unrelated measures would invite a comparison between
+ * a percentage, a letter grade and two counts, which means nothing. Add a
+ * sparkline to a tile the day the registry can answer "and what was it last
+ * month?"; that is a change to this component and to nothing else.
+ *
+ * Status is never carried by colour alone. Each tile prints an icon whose shape
+ * differs from the other four, a word, and the colour — in that order of
+ * reliability. Two of the four status colours sit below 3:1 on a light surface
+ * by design, and roughly one reader in twelve separates none of them.
+ *
+ * The numbers wear text tokens; only the icon and the rule under the tile carry
+ * the status colour. A value printed in green reads as a link on half the
+ * screens it lands on.
+ */
+import { indicatorsOf, statusPresentation } from '../../lib/indicators';
+import type { Product } from '../../lib/products';
+
+interface Props {
+	product: Product;
+}
+
+const { product } = Astro.props;
+const indicators = indicatorsOf(product);
+---
+
+<section aria-labelledby="product-indicators" class="mx-auto w-full max-w-5xl px-6 pt-12">
+	<h2
+		id="product-indicators"
+		class="text-xs font-semibold tracking-[0.14em] uppercase text-ink-muted dark:text-slate-400"
+	>
+		Indicators
+	</h2>
+
+	<ul class="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+		{
+			indicators.map((indicator) => {
+				const presentation = statusPresentation[indicator.status];
+				return (
+					<li class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700 dark:bg-night-raised">
+						<div class="flex items-start justify-between gap-3">
+							<h3 class="text-sm font-medium text-ink-muted dark:text-slate-400">
+								{indicator.label}
+							</h3>
+							<span class={`flex items-center gap-1.5 text-xs font-semibold ${presentation.text}`}>
+								<svg
+									viewBox="0 0 24 24"
+									class="h-4 w-4"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="1.8"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									aria-hidden="true"
+								>
+									<path d={presentation.icon} />
+								</svg>
+								{indicator.statusLabel}
+							</span>
+						</div>
+
+						<p class="mt-3 text-4xl font-semibold tracking-tight tabular-nums">
+							{indicator.value}
+						</p>
+
+						<div class={`mt-4 h-1 w-12 rounded-full ${presentation.dot}`} aria-hidden="true"></div>
+
+						<p class="mt-4 text-sm text-ink-muted dark:text-slate-400">{indicator.hint}</p>
+					</li>
+				);
+			})
+		}
+	</ul>
+
+	<p class="mt-4 text-sm text-ink-muted dark:text-slate-400">
+		Reported by automation — pipelines, campaign runs and observability. The values above are
+		placeholders from <code class="rounded bg-slate-100 px-1.5 py-0.5 text-xs dark:bg-slate-700"
+			>src/lib/products.ts</code
+		> until the registry is wired up.
+	</p>
+</section>

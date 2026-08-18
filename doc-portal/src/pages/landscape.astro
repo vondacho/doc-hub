@@ -1,0 +1,83 @@
+---
+import Layout from '../layouts/Layout.astro';
+import Hero from '../components/home/Hero.astro';
+import SectionPanels, { type Panel } from '../components/home/SectionPanels.astro';
+import SiteFooter from '../components/home/SiteFooter.astro';
+import { modelC4Url, modelEventcatalogUrl, modelPortalUrl } from '../lib/links';
+
+/*
+ * The two landscapes: structure and traffic.
+ *
+ * Both are model-hub's, generated from a DSL — LikeC4 for the C4 model,
+ * EventCatalog for the events — so both panels link out rather than rendering a
+ * second, staler view over the same source. Their addresses are configuration
+ * and are resolved here, per request, which this page can do because it is
+ * server-rendered.
+ *
+ * The distinction worth keeping in the copy: the catalog describes one product
+ * at a time, and a landscape only exists between products. Anything that is true
+ * of a single product belongs on its product view, not here.
+ */
+const landscapes: readonly Panel[] = [
+	{
+		title: 'C4 landscape',
+		description:
+			'Context, container, component and deployment views of the whole system, generated from one LikeC4 model — so the four zoom levels cannot contradict each other, or the code they describe.',
+		href: modelC4Url(),
+		cta: 'Open the C4 model',
+		status: 'live',
+		external: true,
+		icon: 'M4 4h7v7H4V4Zm9 0h7v7h-7V4ZM4 13h7v7H4v-7Zm9 0h7v7h-7v-7Z',
+	},
+	{
+		title: 'Events landscape',
+		description:
+			'Every message that crosses a product boundary: who publishes it, who consumes it, which schema version is in flight, and what breaks if it changes.',
+		href: modelEventcatalogUrl(),
+		cta: 'Open the event catalogue',
+		status: 'live',
+		external: true,
+		icon: 'M13 3 4.5 13.5H11L10 21l8.5-10.5H12L13 3Z',
+	},
+] as const;
+---
+
+<Layout
+	title="Landscape — Doc Hub"
+	description="The two views that cross products: the C4 model of the whole system, and the events that travel between its parts."
+>
+	<main id="main">
+		<Hero
+			kicker="Landscape"
+			title="Two views that only exist between products."
+			lead="A product view answers what one product does. A landscape answers what the products
+				are to each other — how the system is structured, and what travels across its
+				boundaries. Both are generated from a model rather than drawn, which is why they
+				are still true a quarter after the diagram would have been."
+			parent={{ label: 'Home', href: '/' }}
+			actions={[{ label: 'Open the architecture portal', href: modelPortalUrl(), external: true }]}
+			compact
+		/>
+
+		<SectionPanels panels={landscapes} label="Landscapes" columns={2} />
+
+		<section class="mx-auto w-full max-w-5xl px-6 pb-20">
+			<div
+				class="rounded-2xl border border-slate-200 bg-slate-50 p-7 dark:border-slate-700 dark:bg-night-raised"
+			>
+				<h2 class="text-lg font-semibold">Why these are links rather than pages</h2>
+				<p class="mt-3 text-ink-muted dark:text-slate-400">
+					Both landscapes are built by model-hub from a DSL kept beside the code — LikeC4 for the
+					structure, EventCatalog for the messages. Rendering a copy here would produce a second
+					view over the same source, updated on a different schedule, and the two would disagree
+					within a sprint. The addresses are read from the environment on every request, so moving
+					either site is a configuration change rather than a rebuild.
+				</p>
+				<p class="mt-3 text-ink-muted dark:text-slate-400">
+					Each product view carries the same two panels, scoped to that product.
+				</p>
+			</div>
+		</section>
+	</main>
+	<SiteFooter />
+</Layout>

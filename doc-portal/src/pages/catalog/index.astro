@@ -1,0 +1,98 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import Hero from '../../components/home/Hero.astro';
+import SearchBar from '../../components/catalog/SearchBar.astro';
+import ProductCard from '../../components/catalog/ProductCard.astro';
+import Pagination from '../../components/catalog/Pagination.astro';
+import SiteFooter from '../../components/home/SiteFooter.astro';
+import { paginate, searchProducts } from '../../lib/products';
+
+/*
+ * The catalog: a search box and its results, ten to a page.
+ *
+ * Both inputs come from the URL, which is what makes a result linkable — see
+ * SearchBar for why that is a GET form and not a fetch. `page` is parsed
+ * defensively because it arrives from a query string: anything unparseable is
+ * page 1, and anything out of range is clamped by `paginate` rather than
+ * rendering an empty list that reads as "nothing matched".
+ */
+const query = (Astro.url.searchParams.get('q') ?? '').trim();
+const requestedPage = Number.parseInt(Astro.url.searchParams.get('page') ?? '1', 10);
+const results = searchProducts(query);
+const page = paginate(results, Number.isNaN(requestedPage) ? 1 : requestedPage);
+---
+
+<Layout
+	title={query ? `“${query}” — Catalog — Doc Hub` : 'Catalog — Doc Hub'}
+	description="Every registered product, searchable by name, domain, owning team or tag."
+>
+	<main id="main">
+		<Hero
+			kicker="Catalog"
+			title="Every registered product, and the documentation behind it."
+			lead="One entry per product, owned by a named team, with the eight perspectives on it one
+				click away. Search by what you remember — the product name, the domain it belongs
+				to, the team that answers for it, or a tag."
+			parent={{ label: 'Home', href: '/' }}
+			compact
+		/>
+
+		<section aria-labelledby="catalog-results" class="mx-auto w-full max-w-5xl px-6 py-12 sm:py-16">
+			<SearchBar
+				query={query}
+				label="Search the catalog"
+				hint="Every word has to match, so a second word narrows the result rather than widening it."
+			/>
+
+			<h2 id="catalog-results" class="mt-12 text-lg font-semibold">
+				{
+					query
+						? `${page.total} ${page.total === 1 ? 'product' : 'products'} matching “${query}”`
+						: `${page.total} registered products`
+				}
+			</h2>
+
+			{
+				page.total === 0 ? (
+					<div class="mt-6 rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm dark:border-slate-700 dark:bg-night-raised">
+						<p class="text-lg font-semibold">Nothing matched “{query}”.</p>
+						<p class="mt-2 text-ink-muted dark:text-slate-400">
+							Try a single word, a domain such as <em>reporting</em>, or a team name. If the
+							product exists but is not here, it has not been registered yet.
+						</p>
+						<div class="mt-6 flex flex-wrap justify-center gap-3">
+							<a
+								href="/catalog"
+								class="rounded-full border border-slate-300 px-5 py-2.5 font-semibold transition hover:border-brand hover:text-brand dark:border-slate-600 dark:hover:border-sky-400 dark:hover:text-sky-400"
+							>
+								Show every product
+							</a>
+							<a
+								href="/registration"
+								class="rounded-full bg-brand px-5 py-2.5 font-semibold text-white transition hover:bg-brand-strong"
+							>
+								Register a product
+							</a>
+						</div>
+					</div>
+				) : (
+					<>
+						<ul class="mt-6 grid gap-5">
+							{page.items.map((product) => (
+								<ProductCard product={product} />
+							))}
+						</ul>
+						<Pagination
+							page={page.page}
+							pageCount={page.pageCount}
+							total={page.total}
+							pageSize={page.pageSize}
+							query={query}
+						/>
+					</>
+				)
+			}
+		</section>
+	</main>
+	<SiteFooter />
+</Layout>

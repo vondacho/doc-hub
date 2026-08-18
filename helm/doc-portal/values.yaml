@@ -1,0 +1,158 @@
+# Default values for doc-portal.
+# Tuned for a local single-node cluster (Rancher Desktop / Docker Desktop).
+
+replicaCount: 1
+
+image:
+  repository: doc-portal
+  # Defaults to .Chart.AppVersion when empty.
+  tag: ""
+  # IfNotPresent so a locally built image is used without a registry push.
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+# Port the standalone @astrojs/node server listens on. Injected as PORT and
+# used as the container port, so the two cannot drift apart.
+containerPort: 4321
+
+serviceAccount:
+  create: true
+  annotations: {}
+  # Defaults to the fullname template when empty.
+  name: ""
+
+podAnnotations: {}
+podLabels: {}
+
+# Update strategy, applied as-is. The portal is stateless, so a rolling update
+# is always safe here.
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxSurge: 1
+    maxUnavailable: 0
+
+podSecurityContext:
+  runAsNonRoot: true
+  # Must match the "app" user baked into doc-portal/Dockerfile. 1000 is
+  # deliberately avoided there — the node base image already uses it.
+  runAsUser: 10001
+  runAsGroup: 10001
+  fsGroup: 10001
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+service:
+  type: ClusterIP
+  port: 4321
+
+# On by default, matching the dev-hub chart: a browser frontend nobody can open
+# is not a useful default, and *.localhost costs nothing on a local cluster.
+ingress:
+  enabled: true
+  # Empty uses the cluster's default IngressClass. Rancher Desktop ships
+  # "traefik" as the default.
+  className: ""
+  annotations: {}
+  hosts:
+    - host: doc-portal.localhost
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    # No CPU limit: the Node server is bursty at startup and during SSR.
+    memory: 512Mi
+
+# Probes hit the /healthz route served by src/pages/healthz.ts. Node boots
+# fast, so the startup budget is tight.
+probes:
+  path: /healthz
+  startup:
+    enabled: true
+    initialDelaySeconds: 2
+    periodSeconds: 2
+    failureThreshold: 15
+  liveness:
+    enabled: true
+    periodSeconds: 10
+    failureThreshold: 3
+  readiness:
+    enabled: true
+    periodSeconds: 5
+    failureThreshold: 3
+
+# ---------------------------------------------------------------------------
+# Application configuration.
+# Rendered into a ConfigMap and injected wholesale via envFrom.
+#
+# Every value here is a **browser-facing link, not an in-cluster call**: the
+# visitor's browser resolves it, so an in-cluster address like
+# http://model-c4:8080 would be wrong even though the portal is server-rendered
+# — and it would also be wrong because those releases live in the model-hub,
+# api-hub and qa-hub namespaces, not this one.
+#
+# src/lib/links.ts reads each one through process.env at call time and falls
+# back to the same default the chart ships, so an unset value and the default
+# look identical in the page. Override one to something obviously wrong if you
+# ever need to prove the wiring works.
+# ---------------------------------------------------------------------------
+app:
+  # api-hub's portal — the API perspective, linked from the footer. api-hub owns
+  # the contracts, their scorecards and the registry end to end.
+  apiPortalUrl: http://api-portal.localhost
+
+  # model-hub's own portal, linked from /landscape and the footer.
+  modelPortalUrl: http://model-portal.localhost
+
+  # The C4 landscape — model-hub's LikeC4 site. Used by /landscape and by the
+  # C4 panel of every product view, and reachable through /go/c4.
+  modelC4Url: http://model-c4.localhost
+
+  # The events landscape — model-hub's EventCatalog site. Same two places.
+  modelEventcatalogUrl: http://model-eventcatalog.localhost
+
+  # dev-hub's portal — practices, code design, stacks. Footer only.
+  devPortalUrl: http://dev-portal.localhost
+
+  # qa-hub's portal — where campaign results will come from.
+  qaPortalUrl: http://qa-portal.localhost
+
+  # The CMS holding the product registry. Nothing reads it yet: /registration
+  # validates an entry and prints the payload it would POST. The address is
+  # configured now so that wiring it up is a values change and an API call.
+  registryUrl: http://registry.localhost
+
+  # Arbitrary extra entries, merged verbatim into the same ConfigMap and so
+  # injected as env vars too:
+  #   extraConfig:
+  #     LOG_LEVEL: debug
+  extraConfig: {}
+
+# Flags passed to the Node process, e.g. "--max-old-space-size=384".
+nodeOptions: ""
+
+# Additional raw environment variables (full valueFrom syntax available), e.g.
+#   - name: REGISTRY_TOKEN
+#     valueFrom:
+#       secretKeyRef: { name: registry, key: token }
+extraEnv: []
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

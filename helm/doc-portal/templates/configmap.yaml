@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "doc-portal.fullname" . }}
+  labels:
+    {{- include "doc-portal.labels" . | nindent 4 }}
+data:
+  # All read by src/lib/links.ts through process.env at call time — by
+  # /landscape, by the C4 and Events panels of every product view, by the
+  # footer, and by the /go/[target] redirects.
+  API_PORTAL_URL: {{ .Values.app.apiPortalUrl | quote }}
+  MODEL_PORTAL_URL: {{ .Values.app.modelPortalUrl | quote }}
+  MODEL_C4_URL: {{ .Values.app.modelC4Url | quote }}
+  MODEL_EVENTCATALOG_URL: {{ .Values.app.modelEventcatalogUrl | quote }}
+  DEV_PORTAL_URL: {{ .Values.app.devPortalUrl | quote }}
+  QA_PORTAL_URL: {{ .Values.app.qaPortalUrl | quote }}
+  REGISTRY_URL: {{ .Values.app.registryUrl | quote }}
+  {{- range $key, $value := .Values.app.extraConfig }}
+  {{ $key }}: {{ $value | quote }}
+  {{- end }}

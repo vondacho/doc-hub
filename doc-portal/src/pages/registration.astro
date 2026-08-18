@@ -1,0 +1,273 @@
+---
+import Layout from '../layouts/Layout.astro';
+import Hero from '../components/home/Hero.astro';
+import SiteFooter from '../components/home/SiteFooter.astro';
+import { registryUrl } from '../lib/links';
+
+/*
+ * Registration — the "create" half of this hub.
+ *
+ * The form validates on the server and then stops: there is no registry behind
+ * it yet, so nothing is written anywhere. That is stated on the result panel in
+ * as many words, and the payload that *would* be sent is printed, because the
+ * failure mode this avoids is a form that looks like it worked.
+ *
+ * Wiring it up is one POST from this file to registryUrl() plus whatever
+ * credential the CMS wants. Everything else here — the fields, the validation,
+ * the round trip through the same URL — stays as it is.
+ *
+ * Validation is server-side and the `required` attributes are a convenience, not
+ * the check: a form is an HTTP endpoint, and the browser is not the only client
+ * it will ever have.
+ */
+
+interface Submission {
+	values: Record<string, string>;
+	errors: Record<string, string>;
+}
+
+const fields = [
+	{
+		name: 'name',
+		label: 'Product name',
+		type: 'text',
+		placeholder: 'Portfolio Reporting',
+		hint: 'As the business says it, not as the repository spells it.',
+	},
+	{
+		name: 'slug',
+		label: 'Identifier',
+		type: 'text',
+		placeholder: 'portfolio-reporting',
+		hint: 'Lower case, digits and hyphens. It becomes the product’s address here and never changes.',
+	},
+	{
+		name: 'domain',
+		label: 'Domain',
+		type: 'text',
+		placeholder: 'Reporting',
+		hint: 'The business domain it belongs to — the first thing anyone searches by.',
+	},
+	{
+		name: 'owner',
+		label: 'Owning team',
+		type: 'text',
+		placeholder: 'Reporting squad',
+		hint: 'The team that answers questions about it. A person’s name here ages badly.',
+	},
+	{
+		name: 'contact',
+		label: 'Contact address',
+		type: 'email',
+		placeholder: 'reporting@example.org',
+		hint: 'A team mailbox rather than an individual, for the same reason.',
+	},
+	{
+		name: 'repository',
+		label: 'Repository',
+		type: 'url',
+		placeholder: 'https://github.com/example/portfolio-reporting',
+		hint: 'Where the code and its living documentation are generated from.',
+	},
+] as const;
+
+function validate(form: FormData): Submission {
+	const values: Record<string, string> = {};
+	const errors: Record<string, string> = {};
+
+	for (const field of fields) {
+		values[field.name] = String(form.get(field.name) ?? '').trim();
+	}
+	values.summary = String(form.get('summary') ?? '').trim();
+
+	for (const field of fields) {
+		if (!values[field.name]) errors[field.name] = 'Required.';
+	}
+
+	if (values.slug && !/^[a-z0-9]+(-[a-z0-9]+)*$/.test(values.slug)) {
+		errors.slug = 'Lower case letters, digits and single hyphens only.';
+	}
+	if (values.contact && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(values.contact)) {
+		errors.contact = 'That is not an email address.';
+	}
+	if (values.repository && !/^https?:\/\/\S+$/.test(values.repository)) {
+		errors.repository = 'A full URL, starting with https://.';
+	}
+	if (!values.summary) {
+		errors.summary = 'Required — it is what the catalog card shows.';
+	} else if (values.summary.length > 240) {
+		errors.summary = 'Two hundred and forty characters at most. One sentence.';
+	}
+
+	return { values, errors };
+}
+
+let submission: Submission | undefined;
+
+if (Astro.request.method === 'POST') {
+	submission = validate(await Astro.request.formData());
+}
+
+const errors = submission?.errors ?? {};
+const values = submission?.values ?? {};
+const accepted = submission !== undefined && Object.keys(errors).length === 0;
+
+// What would be sent to the CMS. Printed rather than posted, on purpose.
+const payload = accepted
+	? JSON.stringify(
+			{
+				slug: values.slug,
+				name: values.name,
+				summary: values.summary,
+				domain: values.domain,
+				owner: values.owner,
+				contact: values.contact,
+				repository: values.repository,
+				lifecycle: 'incubating',
+				registered: new Date().toISOString().slice(0, 10),
+			},
+			null,
+			2,
+		)
+	: '';
+
+const inputClass =
+	'mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-ink shadow-sm placeholder:text-ink-muted focus-visible:border-brand focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand dark:border-slate-600 dark:bg-night-raised dark:text-slate-100 dark:placeholder:text-slate-500';
+const errorInputClass = inputClass.replace('border-slate-300', 'border-critical');
+---
+
+<Layout
+	title="Register a product — Doc Hub"
+	description="Add a product to the registry: who owns it, where its code lives, and which pipelines keep its documentation current."
+>
+	<main id="main">
+		<Hero
+			kicker="Registration"
+			title="Register a product."
+			lead="A product exists in this hub once it has an entry: a name the business uses, a team
+				that answers for it, and a repository its documentation can be generated from. The
+				entry is the small, hand-written half — everything on the product view after that
+				is produced by automation."
+			parent={{ label: 'Home', href: '/' }}
+			compact
+		/>
+
+		<section class="mx-auto w-full max-w-3xl px-6 py-12 sm:py-16">
+			{
+				accepted && (
+					<div class="mb-10 rounded-2xl border border-warning bg-white p-7 shadow-sm dark:bg-night-raised">
+						<h2 class="text-xl font-semibold">Validated — and not saved.</h2>
+						<p class="mt-3 text-ink-muted dark:text-slate-400">
+							The entry below is well formed, and nothing was written: this portal has no
+							registry behind it yet. When one exists at{' '}
+							<code class="rounded bg-slate-100 px-1.5 py-0.5 text-xs dark:bg-slate-700">
+								{registryUrl()}
+							</code>
+							, this page will POST exactly this and redirect to the new product view.
+						</p>
+						<pre class="mt-5 overflow-x-auto rounded-xl bg-slate-900 p-5 text-sm text-slate-100">
+{payload}
+						</pre>
+						<p class="mt-4 text-sm text-ink-muted dark:text-slate-400">
+							To register the product today, hand this to the platform team along with the
+							pipeline that will generate its documentation.
+						</p>
+					</div>
+				)
+			}
+
+			{
+				submission && !accepted && (
+					<div class="mb-10 rounded-2xl border border-critical bg-white p-6 shadow-sm dark:bg-night-raised">
+						<h2 class="text-lg font-semibold">The entry is not complete.</h2>
+						<p class="mt-2 text-ink-muted dark:text-slate-400">
+							{Object.keys(errors).length}{' '}
+							{Object.keys(errors).length === 1 ? 'field needs' : 'fields need'} attention —
+							each is marked below.
+						</p>
+					</div>
+				)
+			}
+
+			<form method="post" novalidate class="space-y-6">
+				{
+					fields.map((field) => (
+						<div>
+							<label for={field.name} class="block font-semibold">
+								{field.label}
+							</label>
+							<input
+								id={field.name}
+								name={field.name}
+								type={field.type}
+								value={values[field.name] ?? ''}
+								placeholder={field.placeholder}
+								required
+								aria-describedby={`${field.name}-hint`}
+								aria-invalid={errors[field.name] ? 'true' : undefined}
+								class={errors[field.name] ? errorInputClass : inputClass}
+							/>
+							<p id={`${field.name}-hint`} class="mt-2 text-sm text-ink-muted dark:text-slate-400">
+								{field.hint}
+							</p>
+							{errors[field.name] && (
+								<p class="mt-1 text-sm font-semibold text-critical">{errors[field.name]}</p>
+							)}
+						</div>
+					))
+				}
+
+				<div>
+					<label for="summary" class="block font-semibold">Summary</label>
+					<textarea
+						id="summary"
+						name="summary"
+						rows="3"
+						required
+						maxlength="240"
+						placeholder="Produces the periodic and on-demand statements a client reads: positions, performance, fees and tax lots."
+						aria-describedby="summary-hint"
+						aria-invalid={errors.summary ? 'true' : undefined}
+						class={errors.summary ? errorInputClass : inputClass}>{values.summary ?? ''}</textarea
+					>
+					<p id="summary-hint" class="mt-2 text-sm text-ink-muted dark:text-slate-400">
+						One sentence, in the words a product manager would use. It is what the catalog card
+						shows, and it is the only part of the entry most people will ever read.
+					</p>
+					{errors.summary && <p class="mt-1 text-sm font-semibold text-critical">{errors.summary}</p>}
+				</div>
+
+				<div class="flex flex-wrap items-center gap-4 pt-2">
+					<button
+						type="submit"
+						class="rounded-full bg-brand px-7 py-3 font-semibold text-white transition hover:bg-brand-strong focus-visible:outline-2 focus-visible:outline-offset-3 focus-visible:outline-brand"
+					>
+						Submit the entry
+					</button>
+					<a
+						href="/catalog"
+						class="font-semibold text-brand underline-offset-4 hover:underline dark:text-sky-400"
+					>
+						Back to the catalog
+					</a>
+				</div>
+			</form>
+
+			<aside
+				class="mt-12 rounded-2xl border border-slate-200 bg-slate-50 p-7 dark:border-slate-700 dark:bg-night-raised"
+			>
+				<h2 class="text-lg font-semibold">What happens after registration</h2>
+				<p class="mt-3 text-ink-muted dark:text-slate-400">
+					The entry is the seed, not the documentation. Once it exists, the product's pipelines
+					publish against it: the documentation section is regenerated on every build of
+					<code class="rounded bg-slate-100 px-1.5 py-0.5 text-xs dark:bg-slate-700">develop</code>,
+					contracts are registered in api-hub, the C4 and event views come from model-hub's models,
+					campaign results arrive from qa-hub, and incidents from observability. A product whose
+					entry exists and whose pipelines publish nothing shows up here as an ageing product —
+					which is the honest answer, and the reason the indicator is on the card.
+				</p>
+			</aside>
+		</section>
+	</main>
+	<SiteFooter />
+</Layout>

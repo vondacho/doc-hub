@@ -1,0 +1,59 @@
+---
+import Layout from '../../../layouts/Layout.astro';
+import Hero from '../../../components/home/Hero.astro';
+import ProductDetails from '../../../components/product/ProductDetails.astro';
+import IndicatorBand from '../../../components/product/IndicatorBand.astro';
+import SectionPanels, { type Panel } from '../../../components/home/SectionPanels.astro';
+import SiteFooter from '../../../components/home/SiteFooter.astro';
+import { findProduct } from '../../../lib/products';
+import { productSections } from '../../../lib/product-sections';
+
+/*
+ * The product view: three bands, in the order the questions are asked.
+ *
+ *   1. details    — what this product is, and who answers for it
+ *   2. indicators — what the automation last measured about it
+ *   3. panels     — the eight perspectives, six of them here and two in model-hub
+ *
+ * An unknown slug is a real 404 rather than a friendly empty page: a stale link
+ * to a product that was renamed or never existed should say so with a status
+ * code, not with a 200 that search engines and monitoring both believe.
+ */
+const { slug } = Astro.params;
+const product = slug ? findProduct(slug) : undefined;
+
+if (!product) {
+	return new Response(null, { status: 404, statusText: 'Product not found' });
+}
+
+const panels: readonly Panel[] = productSections.map((section) => ({
+	title: section.title,
+	description: section.description,
+	href: section.href(product),
+	cta: section.cta,
+	status: section.status,
+	icon: section.icon,
+	...(section.external ? { external: true } : {}),
+}));
+---
+
+<Layout
+	title={`${product.name} — Doc Hub`}
+	description={product.summary}
+>
+	<main id="main">
+		<Hero
+			kicker="Product"
+			crumb={product.name}
+			title={product.name}
+			lead={product.summary}
+			parent={{ label: 'Catalog', href: '/catalog' }}
+			compact
+		/>
+
+		<ProductDetails product={product} />
+		<IndicatorBand product={product} />
+		<SectionPanels panels={panels} label="Perspectives on this product" columns={4} />
+	</main>
+	<SiteFooter />
+</Layout>

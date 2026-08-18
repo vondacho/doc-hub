@@ -1,0 +1,85 @@
+---
+/*
+ * Contact details are PLACEHOLDERS on the reserved example.org domain — replace
+ * them with real addresses (or drop the column) before this goes anywhere
+ * public. An address that looks real but is not is worse than an obvious
+ * stand-in.
+ *
+ * The Platform column links out through /go/* rather than resolving the
+ * addresses here: the footer is on every page, including any page that later
+ * becomes prerendered, and one redirect hop is cheaper than a hostname baked
+ * into an image.
+ */
+const year = new Date().getFullYear();
+
+const columns = [
+	{
+		title: 'Catalog',
+		links: [
+			{ label: 'All products', href: '/catalog' },
+			{ label: 'Register a product', href: '/registration' },
+			{ label: 'Landscapes', href: '/landscape' },
+		],
+	},
+	{
+		title: 'Landscape',
+		links: [
+			{ label: 'C4 model', href: '/go/c4' },
+			{ label: 'Event catalogue', href: '/go/events' },
+			{ label: 'Architecture portal', href: '/go/model' },
+		],
+	},
+	{
+		title: 'Platform',
+		links: [
+			{ label: 'API portal', href: '/go/api' },
+			{ label: 'Development portal', href: '/go/dev' },
+			{ label: 'Quality portal', href: '/go/qa' },
+			{ label: 'Service health', href: '/healthz' },
+		],
+	},
+	{
+		title: 'Contact',
+		links: [
+			{ label: 'Documentation team', href: 'mailto:doc-hub@example.org' },
+			{ label: 'Report an issue', href: 'mailto:doc-hub-support@example.org' },
+		],
+	},
+];
+---
+
+<footer class="border-t border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-night-raised">
+	<div class="mx-auto w-full max-w-5xl px-6 py-14">
+		<div class="grid gap-10 sm:grid-cols-2 md:grid-cols-4">
+			{
+				columns.map(({ title, links }) => (
+					<nav aria-labelledby={`footer-${title.toLowerCase()}`}>
+						<h2
+							id={`footer-${title.toLowerCase()}`}
+							class="text-xs font-semibold tracking-[0.14em] uppercase"
+						>
+							{title}
+						</h2>
+						<ul class="mt-4 space-y-2 text-sm">
+							{links.map(({ label, href }) => (
+								<li>
+									<a
+										href={href}
+										class="text-ink-muted underline-offset-4 hover:text-brand hover:underline dark:text-slate-400 dark:hover:text-sky-400"
+									>
+										{label}
+									</a>
+								</li>
+							))}
+						</ul>
+					</nav>
+				))
+			}
+		</div>
+
+		<div class="mt-12 flex flex-col gap-2 border-t border-slate-200 pt-6 text-sm text-ink-muted sm:flex-row sm:items-center sm:justify-between dark:border-slate-800 dark:text-slate-400">
+			<p>© {year} Doc Hub. All rights reserved.</p>
+			<p>Living documentation — generated, current, and organised by product.</p>
+		</div>
+	</div>
+</footer>

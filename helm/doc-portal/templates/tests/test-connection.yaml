@@ -1,0 +1,44 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "doc-portal.fullname" . }}-test-connection
+  labels:
+    {{- include "doc-portal.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/hook: test
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  containers:
+    # More than /healthz: that route is a bare handler and answers 200 even if
+    # every rendered page is broken. So this fetches one URL per thing that can
+    # independently fail:
+    #   /                              server-side rendering works at all
+    #   /catalog                       the search page with no query
+    #   /catalog?q=data                the query path — search and pagination
+    #   /catalog/portfolio-reporting   a product view: details, indicators, panels
+    #   /catalog/.../documentation     a per-product section page
+    #   /landscape                     resolves MODEL_C4_URL and
+    #                                  MODEL_EVENTCATALOG_URL from the ConfigMap,
+    #                                  so it proves envFrom is wired
+    #   /registration                  the form, GET side
+    #
+    # The two product URLs name a product from the placeholder registry compiled
+    # into the image. When the real registry lands they will 404 and this test
+    # will go red — point them at a product that is actually registered rather
+    # than deleting them; a catalog that lists products it cannot open is the
+    # failure most worth catching here.
+    - name: health
+      image: curlimages/curl:8.11.1
+      args:
+        - --fail
+        - --silent
+        - --show-error
+        - http://{{ include "doc-portal.fullname" . }}:{{ .Values.service.port }}{{ .Values.probes.path }}
+        - http://{{ include "doc-portal.fullname" . }}:{{ .Values.service.port }}/
+        - http://{{ include "doc-portal.fullname" . }}:{{ .Values.service.port }}/catalog
+        - "http://{{ include "doc-portal.fullname" . }}:{{ .Values.service.port }}/catalog?q=data"
+        - http://{{ include "doc-portal.fullname" . }}:{{ .Values.service.port }}/catalog/portfolio-reporting
+        - http://{{ include "doc-portal.fullname" . }}:{{ .Values.service.port }}/catalog/portfolio-reporting/documentation
+        - http://{{ include "doc-portal.fullname" . }}:{{ .Values.service.port }}/landscape
+        - http://{{ include "doc-portal.fullname" . }}:{{ .Values.service.port }}/registration

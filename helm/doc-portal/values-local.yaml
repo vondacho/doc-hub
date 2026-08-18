@@ -1,0 +1,51 @@
+# Overrides for a locally built image on a single-node cluster
+# (Rancher Desktop / Docker Desktop).
+#
+#   ./helm/doc-portal/deploy.sh
+#
+# or by hand:
+#
+#   cd doc-portal && docker build -t doc-portal:dev .
+#   helm upgrade --install doc-portal helm/doc-portal \
+#     -n doc-hub --create-namespace \
+#     -f helm/doc-portal/values-local.yaml
+#   kubectl rollout restart deployment/doc-portal -n doc-hub
+
+image:
+  repository: doc-portal
+  tag: dev
+  # The image is built straight into the node's image store, never pulled.
+  pullPolicy: Never
+
+# Rancher Desktop runs Traefik as the default IngressClass and *.localhost
+# resolves to 127.0.0.1, so the portal is reachable from the host browser
+# without a port-forward. Named explicitly here rather than relying on the
+# cluster default.
+ingress:
+  enabled: true
+  className: traefik
+  hosts:
+    - host: doc-portal.localhost
+      paths:
+        - path: /
+          pathType: Prefix
+
+# api-hub, model-hub, dev-hub and qa-hub are separate repos and separate
+# releases, in their own namespaces. These are the ingress hosts their own
+# values-local.yaml files enable on this cluster — reachable from the browser
+# whether or not those releases are installed, and dead links when they are not.
+app:
+  apiPortalUrl: http://api-portal.localhost
+  modelPortalUrl: http://model-portal.localhost
+  modelC4Url: http://model-c4.localhost
+  modelEventcatalogUrl: http://model-eventcatalog.localhost
+  devPortalUrl: http://dev-portal.localhost
+  qaPortalUrl: http://qa-portal.localhost
+  registryUrl: http://registry.localhost
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    memory: 256Mi

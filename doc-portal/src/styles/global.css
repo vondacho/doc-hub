@@ -1,0 +1,46 @@
+@import 'tailwindcss';
+
+/*
+ * Portal theme, kept deliberately close to dev-hub's dev-portal so the two
+ * portals read as one platform.
+ *
+ * Dark mode follows the OS. If this portal ever grows an explicit toggle,
+ * switch to a `@custom-variant dark` driven by a data-attribute rather than
+ * scattering a second mechanism through the components.
+ */
+
+@theme {
+  --color-ink: oklch(0.24 0.03 255);
+  --color-ink-muted: oklch(0.52 0.03 255);
+  --color-brand: oklch(0.52 0.19 262);
+  --color-brand-strong: oklch(0.44 0.2 262);
+  --color-night: oklch(0.19 0.03 255);
+  --color-night-raised: oklch(0.24 0.03 255);
+
+  /*
+   * Status palette — reserved, and never reused as a decorative colour.
+   *
+   * These four are the only colours in the portal that carry meaning, and they
+   * are used on the product indicator tiles. Two rules travel with them:
+   *
+   *   - a status is always rendered as icon + word + colour, never colour
+   *     alone. `warning` and `serious` are below 3:1 on the light surface by
+   *     design, which is exactly why the word has to be there;
+   *   - nothing else may borrow them. A "brand" element tinted `--color-good`
+   *     makes every real status on the page unreadable.
+   */
+  --color-good: #0ca30c;
+  --color-warning: #fab219;
+  --color-serious: #ec835a;
+  --color-critical: #d03b3b;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}

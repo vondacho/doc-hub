@@ -1,0 +1,24 @@
+---
+import Layout from '../layouts/Layout.astro';
+import Hero from '../components/home/Hero.astro';
+import SiteFooter from '../components/home/SiteFooter.astro';
+---
+
+<Layout title="Not found — Doc Hub" description="That page does not exist here.">
+	<main id="main">
+		<Hero
+			kicker="404"
+			title="That page is not here."
+			lead="The link may be stale, or the product may have been renamed — an identifier never
+				changes once registered, so a product that used to be at this address was probably
+				never registered at all. The catalog is the place to look."
+			parent={{ label: 'Home', href: '/' }}
+			actions={[
+				{ label: 'Browse the catalog', href: '/catalog' },
+				{ label: 'Register a product', href: '/registration' },
+			]}
+			compact
+		/>
+	</main>
+	<SiteFooter />
+</Layout>
