@@ -1,0 +1,47 @@
+# Overrides for a locally built image on a single-node cluster
+# (Rancher Desktop / Docker Desktop).
+#
+#   ./helm/doc-sm/deploy.sh
+#
+# or by hand:
+#
+#   cd doc-sm && docker build -t doc-sm:dev .
+#   helm upgrade --install doc-sm helm/doc-sm \
+#     -n doc-hub --create-namespace \
+#     -f helm/doc-sm/values-local.yaml
+#   kubectl rollout restart deployment/doc-sm -n doc-hub
+
+image:
+  repository: doc-sm
+  tag: dev
+  # The image is built straight into the node's image store, never pulled.
+  pullPolicy: Never
+
+# Rancher Desktop runs Traefik as the default IngressClass and *.localhost
+# resolves to 127.0.0.1, so the portal is reachable from the host browser
+# without a port-forward. Named explicitly here rather than relying on the
+# cluster default.
+ingress:
+  enabled: true
+  className: traefik
+  hosts:
+    - host: doc-sm.localhost
+      paths:
+        - path: /
+          pathType: Prefix
+
+# doc-portal and doc-registry are separate releases in this same namespace.
+# These are the ingress hosts their own values-local.yaml files enable on this
+# cluster, so both are reachable from the browser — and dead links when those
+# releases are not installed, which doc-sm does not care about: it never calls
+# either one.
+app:
+  docPortalUrl: http://doc-portal.localhost
+  registryUrl: http://doc-registry.localhost
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    memory: 256Mi

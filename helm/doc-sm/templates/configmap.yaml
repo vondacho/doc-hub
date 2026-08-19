@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "doc-sm.fullname" . }}
+  labels:
+    {{- include "doc-sm.labels" . | nindent 4 }}
+data:
+  # Both are read by src/lib/links.ts through process.env at call time, and both
+  # are **browser-facing links**: the visitor's browser resolves them, so an
+  # in-cluster address like http://doc-registry:1337 would be wrong here.
+  #
+  # doc-portal's ConfigMap carries a REGISTRY_API_URL alongside these because it
+  # fetches the catalog while rendering. doc-sm has no such entry, and that
+  # absence is the point: a story map is a file the visitor picked, so this
+  # component calls nothing at all.
+  DOC_PORTAL_URL: {{ .Values.app.docPortalUrl | quote }}
+  REGISTRY_URL: {{ .Values.app.registryUrl | quote }}
+  {{- range $key, $value := .Values.app.extraConfig }}
+  {{ $key }}: {{ $value | quote }}
+  {{- end }}

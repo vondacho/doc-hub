@@ -1,0 +1,51 @@
+# Overrides that point doc-sm at the image published to GitHub Container
+# Registry by .github/workflows/build-images.yml, instead of one built into the
+# local node's image store.
+#
+# This file is deliberately thin: it changes **where the image comes from** and
+# nothing else. Everything that describes an environment — ingress hosts, app
+# URLs, resources — stays in the values file for that environment. So stack the
+# two, with this one last so its image.* wins:
+#
+#   helm upgrade --install doc-sm helm/doc-sm \
+#     -n doc-hub --create-namespace \
+#     -f helm/doc-sm/values-local.yaml \
+#     -f helm/doc-sm/values-ghcr.yaml
+#
+# Note that helm/doc-sm/deploy.sh does not read this file — it builds the image
+# locally on purpose. Use --no-build and the command above instead, or just
+# `helm upgrade` directly.
+
+image:
+  repository: ghcr.io/vondacho/doc-hub/doc-sm
+  tag: main
+  # "main" moves, so IfNotPresent would keep running whatever the node happens
+  # to have cached. Always makes the kubelet re-resolve the tag on every pod
+  # start — but a pod only starts if something asks it to, and a rebuild under
+  # an unchanged tag renders a byte-identical Deployment that Kubernetes sees no
+  # reason to touch. That is the same trap deploy.sh documents, and it has the
+  # same answer:
+  #
+  #   kubectl rollout restart deployment/doc-sm -n doc-hub
+  #
+  # Pinning an immutable tag instead sidesteps both problems, because the
+  # Deployment then genuinely changes:
+  #
+  #   --set image.tag=sha-1a2b3c4     # any build, exactly
+  #   --set image.tag=1.2.3           # a v1.2.3 release tag
+  pullPolicy: Always
+
+# A GHCR package is **private** when first published, and stays private until
+# it is switched over under Packages > Package settings on github.com. While it
+# is private the kubelet cannot pull it anonymously and the pods sit in
+# ImagePullBackOff, so create a pull secret and name it here:
+#
+#   kubectl create secret docker-registry ghcr \
+#     -n doc-hub \
+#     --docker-server=ghcr.io \
+#     --docker-username=vondacho \
+#     --docker-password='<a PAT with read:packages>'
+#
+# Left empty rather than filled in, because a name pointing at a Secret that
+# was never created fails the pull just as surely as having no name at all.
+imagePullSecrets: []

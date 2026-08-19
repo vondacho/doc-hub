@@ -1,0 +1,40 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "doc-sm.fullname" . }}-test-connection
+  labels:
+    {{- include "doc-sm.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/hook: test
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  containers:
+    # More than /healthz: that route is a bare handler and answers 200 even if
+    # every rendered page is broken. So this fetches one URL per thing that can
+    # independently fail:
+    #   /healthz   the Node server is serving
+    #   /          the board page: its shell, the legend, and the script tag
+    #              that loads the island
+    #   /dsl       the format reference, which renders the example story map
+    #              through the same parser the board uses
+    #
+    # There is no fourth URL, and that is a fact about doc-sm rather than a gap
+    # in the test. It calls no registry and owns no database, so there is no
+    # integration for a request to prove.
+    #
+    # What a 200 on / does *not* prove: that the board works. The board is
+    # `client:only`, so the server sends an empty island and every card, drag and
+    # export happens in the visitor's browser. This test claims the route and the
+    # assets are being served — nothing beyond that, and nothing here can.
+    - name: health
+      image: curlimages/curl:8.11.1
+      args:
+        - --fail
+        - --silent
+        - --show-error
+        - --output
+        - /dev/null
+        - http://{{ include "doc-sm.fullname" . }}:{{ .Values.service.port }}{{ .Values.probes.path }}
+        - http://{{ include "doc-sm.fullname" . }}:{{ .Values.service.port }}/
+        - http://{{ include "doc-sm.fullname" . }}:{{ .Values.service.port }}/dsl

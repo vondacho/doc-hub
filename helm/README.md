@@ -9,12 +9,13 @@ monorepo-of-standalone-modules convention as dev-hub, api-hub and model-hub,
 | `doc-portal/` | `doc-portal` Astro frontend | present |
 | `doc-registry/` | `doc-registry` Strapi CMS and its admin UI | present |
 | `doc-registry-db/` | `doc-registry-db` PostgreSQL instance | present |
+| `doc-sm/` | `doc-sm` story mapping board | present |
 
-All three charts are **built from this repo**: `values-local.yaml` pins
+All four charts are **built from this repo**: `values-local.yaml` pins
 `tag: dev` with `pullPolicy: Never`, so the image has to be built into the
 node's image store first — there is nothing to pull.
 
-The ingress is enabled **by default** on the two web components. A browser
+The ingress is enabled **by default** on the three web components. A browser
 frontend nobody can open is not a useful default, and `*.localhost` costs
 nothing on a local cluster. The database has no ingress at all.
 
@@ -60,9 +61,10 @@ and only the first arrow is a hard one.
 ./helm/doc-registry-db/deploy.sh    # first: the registry crash-loops without it
 ./helm/doc-registry/deploy.sh
 ./helm/doc-portal/deploy.sh         # reads the registry, but starts without it
+./helm/doc-sm/deploy.sh             # depends on nothing; deploy it whenever
 ```
 
-That is the whole thing, and all three scripts are the same script: each builds
+That is the whole thing, and all four scripts are the same script: each builds
 its image with whichever engine Rancher Desktop is configured for, installs the
 release into the `doc-hub` namespace (creating it), restarts the pods onto the
 rebuilt image, waits for the rollout, prints the running pods with their image
@@ -133,6 +135,19 @@ port-forward. With `ingress.enabled=false`:
 kubectl -n doc-hub port-forward svc/doc-portal 4321:4321
 ```
 
+```bash
+helm test doc-sm -n doc-hub
+open http://doc-sm.localhost
+```
+
+`doc-sm`'s test fetches `/healthz`, `/` and `/dsl`, and that is the whole list —
+not a thinner test than the portal's eight, but a component with less to check.
+It calls no registry and owns no database, so there is no integration a request
+could prove. Note what a 200 on `/` does *not* prove: the board is `client:only`,
+so the server sends an empty island and every card, drag and export happens in
+the browser. The test claims the route and the assets are served, and nothing
+more.
+
 `helm test` fetches one URL per thing that can independently fail — `/healthz`,
 `/`, `/catalog`, `/catalog?q=data`, a product view, one of its section pages,
 `/landscape` and `/registration`. A bare health check passes while every
@@ -178,6 +193,7 @@ Its test asserts more than reachability — it authenticates, and then checks th
 ./helm/doc-portal/uninstall.sh                   # the release
 ./helm/doc-registry/uninstall.sh                 # the release, data untouched
 ./helm/doc-registry-db/uninstall.sh              # the release, data kept
+./helm/doc-sm/uninstall.sh                       # the release; it has no data
 
 ./helm/doc-registry/uninstall.sh --secret        # and its Strapi secrets
 ./helm/doc-registry-db/uninstall.sh --data       # and every registered product
@@ -352,10 +368,44 @@ build`. This machine currently reports `moby`.
 - No ingress: nothing outside the cluster has any business opening a database
   port.
 
+## Notes on the doc-sm chart
+
+`doc-sm` is the story mapping board: activities, steps and stories on one board,
+read from and written to a `.storymap` file.
+
+**It is the only release here that depends on nothing.** No database, no volume,
+no registry call, no Secret — and so no install order. Deploy it before or after
+anything else; nothing waits for it and it waits for nothing. Its ConfigMap
+carries two entries against `doc-portal`'s eight, and both are browser-facing
+links rather than in-cluster calls, because this component makes no requests at
+all.
+
+**Nothing it holds can be lost by deleting a pod**, because it holds nothing. A
+story map lives in the file the visitor exports; work that has not been exported
+lives in their browser tab, which is what the board's unload warning is for. That
+is the same position the repo already takes on C4 and events — the model belongs
+in a repository, not in the registry.
+
+**Port 4322**, not the portal's 4321, which leaves 4323 and 4324 for the sibling
+boards `doc-em` and `doc-es`.
+
+**One hydrated component.** The board page is prerendered and loads a React
+island; every other page is server-rendered HTML with no script. That is the
+only client-side JavaScript in doc-hub, and it is argued at the top of
+`doc-sm/src/components/board/StoryMapBoard.tsx`. The practical consequence for
+this chart is that `helm test` can prove the route and the assets are served and
+nothing further — see Verify above.
+
+**The two `emptyDir`s are pure insurance here.** `readOnlyRootFilesystem: true`
+is on, and `/tmp` plus `/app/node_modules/.astro` are mounted exactly as in
+`doc-portal`, because the Astro node adapter bakes a session path in at build
+time. doc-sm uses no sessions and writes nothing at run time; the mounts are
+there so the day it does is not a deployment incident.
+
 ## Chart layout
 
-All three charts have the same shape; the registry pair adds what stateful
-components need.
+All four charts have the same shape; the registry pair adds what stateful
+components need, and `doc-sm` is `doc-portal` with a shorter ConfigMap.
 
 ```
 doc-portal/                     doc-registry/                 doc-registry-db/
@@ -376,6 +426,10 @@ doc-portal/                     doc-registry/                 doc-registry-db/
     tests/test-connection.yaml      tests/test-connection.yaml    tests/test-connection.yaml
 ```
 
-The two web releases are stateless, so `replicaCount` is free to move in both.
+`doc-sm/` is not a fourth column above because it would repeat `doc-portal/`
+line for line — same files, same templates, a shorter `configmap.yaml` and a
+different port. Copy that column when reading it.
+
+The three web releases are stateless, so `replicaCount` is free to move in all.
 `doc-registry-db` is the opposite on both counts, and is the only place in this
 repo where that is true.

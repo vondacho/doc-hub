@@ -1,0 +1,95 @@
+---
+import Layout from '../layouts/Layout.astro';
+import StoryMapBoard from '../components/board/StoryMapBoard.tsx';
+import { swatchClass, kindLabel, kindDescription, KIND_ORDER } from '../lib/board/kinds';
+import { docPortalUrl } from '../lib/links';
+
+// Prerendered, and this is the one place doc-sm departs from doc-portal's
+// all-server posture.
+//
+// This page asks the server for nothing. No configuration is read, no registry
+// is called, and the response is byte-identical for every visitor — the map
+// comes from a file the visitor picks, in their browser, after the page has
+// loaded. Prerendering makes that fact structural instead of a claim in a
+// comment. /healthz stays a server route.
+//
+// Drop this the day the board can load a map from a URL.
+export const prerender = true;
+
+const portal = docPortalUrl();
+---
+
+<Layout
+	title="Story mapping — doc-hub"
+	description="A user story mapping board. Import and export a .storymap file; nothing is stored on the server."
+>
+	<main id="main" class="mx-auto w-full max-w-[110rem] px-6 py-10">
+		<header class="mb-8">
+			<p class="text-xs font-semibold tracking-[0.16em] text-ink-muted uppercase dark:text-slate-400">
+				doc-hub · story mapping
+			</p>
+			<h1 class="mt-2 text-3xl font-bold sm:text-4xl">Map the work before you plan it</h1>
+			<p class="mt-3 max-w-prose text-ink-muted dark:text-slate-400">
+				Activities across the top, the steps people take underneath them left to right, and the stories
+				stacked into the release that will carry them. Everything below the last release band is known
+				and not committed to.
+			</p>
+		</header>
+
+		<!--
+			The legend is not decoration. Colour is kind on this board, and the rule
+			that governs doc-portal's status palette governs these three too: colour
+			is never the only signal. This says in words what the fills say in hue,
+			and every card repeats it in its accessible name.
+		-->
+		<section aria-labelledby="legend" class="mb-6">
+			<h2 id="legend" class="sr-only">What the colours mean</h2>
+			<ul class="flex flex-wrap gap-x-6 gap-y-2 text-sm">
+				{
+					KIND_ORDER.map((kind) => (
+						<li class="flex items-center gap-2">
+							<span class={`inline-block h-3.5 w-3.5 rounded-sm border ${swatchClass[kind]}`} aria-hidden="true" />
+							<span class="font-semibold">{kindLabel[kind]}</span>
+							<span class="text-ink-muted dark:text-slate-400">{kindDescription[kind]}</span>
+						</li>
+					))
+				}
+			</ul>
+		</section>
+
+		<!--
+			The only hydrated component in doc-hub. See the header comment in
+			StoryMapBoard.tsx for why this one earns it and a search form does not.
+
+			client:only rather than client:load: there is nothing to server-render.
+			The board's content comes from a file the visitor has not picked yet, so
+			SSR would emit an empty grid, ship it, and throw it away — and it would
+			invite hydration-mismatch warnings from the ids dnd-kit generates for its
+			announcement region, for markup with no value.
+		-->
+		<StoryMapBoard client:only="react" />
+
+		<noscript>
+			<div class="rounded-2xl border border-slate-200 p-6 dark:border-slate-700">
+				<h2 class="font-semibold">The board needs JavaScript</h2>
+				<p class="mt-2 max-w-prose text-ink-muted dark:text-slate-400">
+					A story map is edited by dragging cards, which is not something a page can do without
+					scripting. The file format is plain text and is documented on
+					<a class="font-semibold text-brand underline" href="/dsl">the format page</a>, which needs no
+					scripting at all.
+				</p>
+			</div>
+		</noscript>
+
+		<footer class="mt-10 border-t border-slate-200 pt-6 text-sm text-ink-muted dark:border-slate-700 dark:text-slate-400">
+			<p>
+				Nothing here is stored on the server. The <code>.storymap</code> file you export is the map —
+				keep it in the product's repository, next to the code it describes.
+			</p>
+			<p>The <a class="font-semibold text-brand underline" href="/dsl">format is documented</a>,
+			and the <a class="font-semibold text-brand underline" href={portal}>documentation portal</a>
+			holds the product catalogue.
+			</p>
+		</footer>
+	</main>
+</Layout>

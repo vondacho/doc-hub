@@ -1,0 +1,21 @@
+apiVersion: v2
+name: doc-sm
+description: Story mapping board — activities, steps and stories on one board, read from and written to a .storymap file
+type: application
+
+# Chart version. Bump on every change to the chart itself.
+version: 0.1.0
+
+# Version of doc-sm shipped by default. Matches "version" in
+# doc-sm/package.json and is used as the default image tag.
+appVersion: "0.0.1"
+
+keywords:
+  - astro
+  - story-mapping
+  - living-documentation
+home: https://github.com/vondacho/doc-hub
+sources:
+  - https://github.com/vondacho/doc-hub/tree/main/doc-sm
+maintainers:
+  - name: Olivier von Dach

@@ -1,8 +1,14 @@
 # Builds a container image for each doc-hub component and publishes it to the
 # GitHub Container Registry (ghcr.io) attached to this repository.
 #
-# The three components are the three directories that own a Dockerfile:
-# doc-portal (Astro/node), doc-registry (Strapi CMS)
+# The components are the directories built and published from here:
+# doc-portal (Astro/node), doc-registry (Strapi CMS) and doc-sm (Astro/node,
+# the story mapping board).
+#
+# doc-registry-db owns a Dockerfile too and is deliberately not built here — it
+# is stock PostgreSQL plus an initdb script. If that ever changes, add it to the
+# filters below and to the fallback list, and give helm/doc-registry-db a
+# values-ghcr.yaml that resolves.
 #
 # There is no separate "npm ci && npm run build" job on purpose. Each
 # Dockerfile is already multi-stage and runs the real build in its `build`
@@ -12,6 +18,7 @@
 # Images land at:
 #   ghcr.io/vondacho/doc-hub/doc-portal
 #   ghcr.io/vondacho/doc-hub/doc-registry
+#   ghcr.io/vondacho/doc-hub/doc-sm
 #
 # They are nested under the repository path so GHCR links each package back to
 # this repo automatically (via the org.opencontainers.image.source label set
@@ -76,7 +83,7 @@ jobs:
         if: github.ref_type != 'tag' && inputs.all != true
         with:
           # A change to this workflow rebuilds everything, so a pipeline edit is
-          # exercised against all three components rather than the one that
+          # exercised against every component rather than the one that
           # happens to have been touched alongside it.
           filters: |
             workflow: &workflow
@@ -87,6 +94,9 @@ jobs:
             doc-registry:
               - *workflow
               - 'doc-registry/**'
+            doc-sm:
+              - *workflow
+              - 'doc-sm/**'
 
       - id: select
         env:
@@ -94,10 +104,10 @@ jobs:
         run: |
           set -euo pipefail
           # A release tag republishes the whole system: the point of v1.2.3 is
-          # that all three images carry it, whether or not each one changed.
+          # that every image carries it, whether or not each one changed.
           # Same for an explicit "build everything" dispatch.
           if [ "${{ github.ref_type }}" = 'tag' ] || [ "${{ inputs.all }}" = 'true' ]; then
-            components='["doc-portal","doc-registry"]'
+            components='["doc-portal","doc-registry","doc-sm"]'
           else
             # paths-filter emits every matched filter name, including the
             # "workflow" helper the anchors are attached to — drop it, it is
@@ -162,7 +172,7 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          # Per-component cache scopes. Sharing one scope would let the three
+          # Per-component cache scopes. Sharing one scope would let the
           # components evict each other's layers out of the 10 GB budget.
           cache-from: type=gha,scope=${{ matrix.component }}
           cache-to: type=gha,mode=max,scope=${{ matrix.component }}
