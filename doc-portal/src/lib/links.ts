@@ -7,7 +7,7 @@
  * .env file.
  *
  * These are **browser-facing links, not in-cluster calls**: the visitor's
- * browser resolves them, so an in-cluster address like http://model-c4:8080
+ * browser resolves them, so an in-cluster address like http://arch-c4:8080
  * would be wrong even though this portal is server-rendered.
  *
  * The defaults are the Traefik ingress hosts a local cluster enables.
@@ -22,19 +22,19 @@ export function apiPortalUrl(): string {
   return fromEnv('API_PORTAL_URL', 'http://api-portal.localhost');
 }
 
-/** model-hub's portal: the architecture perspective on a product. */
+/** arch-hub's portal: the architecture perspective on a product. */
 export function modelPortalUrl(): string {
-  return fromEnv('MODEL_PORTAL_URL', 'http://model-portal.localhost');
+  return fromEnv('MODEL_PORTAL_URL', 'http://arch-portal.localhost');
 }
 
-/** The C4 model site built by model-hub, from the LikeC4 DSL. */
+/** The C4 model site built by arch-hub, from the LikeC4 DSL. */
 export function modelC4Url(): string {
-  return fromEnv('MODEL_C4_URL', 'http://model-c4.localhost');
+  return fromEnv('MODEL_C4_URL', 'http://arch-c4.localhost');
 }
 
 /** The EventCatalog site built by model-hub. */
 export function modelEventcatalogUrl(): string {
-  return fromEnv('MODEL_EVENTCATALOG_URL', 'http://model-eventcatalog.localhost');
+  return fromEnv('MODEL_EVENTCATALOG_URL', 'http://arch-eventcatalog.localhost');
 }
 
 /** dev-hub's portal: practices, code design, stacks and the MCP servers. */
@@ -55,5 +55,5 @@ export function qaPortalUrl(): string {
  * an API call, not a hunt through the pages for a hardcoded host.
  */
 export function registryUrl(): string {
-  return fromEnv('REGISTRY_URL', 'http://registry.localhost');
+  return fromEnv('REGISTRY_URL', 'http://doc-registry.localhost');
 }

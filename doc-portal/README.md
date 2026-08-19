@@ -55,15 +55,15 @@ Two more things follow the same rule:
 Addresses of the neighbouring hubs, read per request (`src/lib/links.ts`), so
 changing one takes a restart rather than a rebuild:
 
-| Variable | Default | Used by |
-|---|---|---|
-| `API_PORTAL_URL` | `http://api-portal.localhost` | Footer |
-| `MODEL_PORTAL_URL` | `http://model-portal.localhost` | `/landscape` |
-| `MODEL_C4_URL` | `http://model-c4.localhost` | `/landscape`, the C4 panel of every product |
-| `MODEL_EVENTCATALOG_URL` | `http://model-eventcatalog.localhost` | `/landscape`, the Events panel of every product |
-| `DEV_PORTAL_URL` | `http://dev-portal.localhost` | Footer |
-| `QA_PORTAL_URL` | `http://qa-portal.localhost` | The campaigns section |
-| `REGISTRY_URL` | `http://registry.localhost` | `/registration`, once it posts |
+| Variable | Default                              | Used by |
+|---|--------------------------------------|---|
+| `API_PORTAL_URL` | `http://api-portal.localhost`        | Footer |
+| `MODEL_PORTAL_URL` | `http://arch-portal.localhost`       | `/landscape` |
+| `MODEL_C4_URL` | `http://arch-c4.localhost`           | `/landscape`, the C4 panel of every product |
+| `MODEL_EVENTCATALOG_URL` | `http://arch-eventcatalog.localhost` | `/landscape`, the Events panel of every product |
+| `DEV_PORTAL_URL` | `http://dev-portal.localhost`        | Footer |
+| `QA_PORTAL_URL` | `http://qa-portal.localhost`         | The campaigns section |
+| `REGISTRY_URL` | `http://doc-registry.localhost`      | `/registration`, once it posts |
 
 `HOST` and `PORT` (default `4321`) are read by the standalone Node adapter.
 

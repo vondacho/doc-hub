@@ -36,12 +36,12 @@ ingress:
 # whether or not those releases are installed, and dead links when they are not.
 app:
   apiPortalUrl: http://api-portal.localhost
-  modelPortalUrl: http://model-portal.localhost
-  modelC4Url: http://model-c4.localhost
-  modelEventcatalogUrl: http://model-eventcatalog.localhost
+  modelPortalUrl: http://arch-portal.localhost
+  modelC4Url: http://arch-c4.localhost
+  modelEventcatalogUrl: http://arch-eventcatalog.localhost
   devPortalUrl: http://dev-portal.localhost
   qaPortalUrl: http://qa-portal.localhost
-  registryUrl: http://registry.localhost
+  registryUrl: http://doc-registry.localhost
 
 resources:
   requests:

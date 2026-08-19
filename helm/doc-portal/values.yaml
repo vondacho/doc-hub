@@ -103,7 +103,7 @@ probes:
 #
 # Every value here is a **browser-facing link, not an in-cluster call**: the
 # visitor's browser resolves it, so an in-cluster address like
-# http://model-c4:8080 would be wrong even though the portal is server-rendered
+# http://arch-c4:8080 would be wrong even though the portal is server-rendered
 # — and it would also be wrong because those releases live in the model-hub,
 # api-hub and qa-hub namespaces, not this one.
 #
@@ -118,14 +118,14 @@ app:
   apiPortalUrl: http://api-portal.localhost
 
   # model-hub's own portal, linked from /landscape and the footer.
-  modelPortalUrl: http://model-portal.localhost
+  modelPortalUrl: http://arch-portal.localhost
 
   # The C4 landscape — model-hub's LikeC4 site. Used by /landscape and by the
   # C4 panel of every product view, and reachable through /go/c4.
-  modelC4Url: http://model-c4.localhost
+  modelC4Url: http://arch-c4.localhost
 
   # The events landscape — model-hub's EventCatalog site. Same two places.
-  modelEventcatalogUrl: http://model-eventcatalog.localhost
+  modelEventcatalogUrl: http://arch-eventcatalog.localhost
 
   # dev-hub's portal — practices, code design, stacks. Footer only.
   devPortalUrl: http://dev-portal.localhost
@@ -136,7 +136,7 @@ app:
   # The CMS holding the product registry. Nothing reads it yet: /registration
   # validates an entry and prints the payload it would POST. The address is
   # configured now so that wiring it up is a values change and an API call.
-  registryUrl: http://registry.localhost
+  registryUrl: http://doc-registry.localhost
 
   # Arbitrary extra entries, merged verbatim into the same ConfigMap and so
   # injected as env vars too:

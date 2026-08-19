@@ -60,24 +60,6 @@ const landscapes: readonly Panel[] = [
 		/>
 
 		<SectionPanels panels={landscapes} label="Landscapes" columns={2} />
-
-		<section class="mx-auto w-full max-w-5xl px-6 pb-20">
-			<div
-				class="rounded-2xl border border-slate-200 bg-slate-50 p-7 dark:border-slate-700 dark:bg-night-raised"
-			>
-				<h2 class="text-lg font-semibold">Why these are links rather than pages</h2>
-				<p class="mt-3 text-ink-muted dark:text-slate-400">
-					Both landscapes are built by model-hub from a DSL kept beside the code — LikeC4 for the
-					structure, EventCatalog for the messages. Rendering a copy here would produce a second
-					view over the same source, updated on a different schedule, and the two would disagree
-					within a sprint. The addresses are read from the environment on every request, so moving
-					either site is a configuration change rather than a rebuild.
-				</p>
-				<p class="mt-3 text-ink-muted dark:text-slate-400">
-					Each product view carries the same two panels, scoped to that product.
-				</p>
-			</div>
-		</section>
 	</main>
 	<SiteFooter />
 </Layout>

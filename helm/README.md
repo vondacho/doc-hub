@@ -151,9 +151,9 @@ build`. This machine currently reports `moby`.
 
 - **They are browser-facing links, not in-cluster calls.** Each points at a
   Traefik ingress host because the *visitor's browser* resolves it.
-  `http://model-c4:8080` would be wrong here even though the portal is
+  `http://arch-c4:8080` would be wrong here even though the portal is
   server-rendered — and it would also be wrong because those releases live in
-  the `model-hub`, `api-hub` and `qa-hub` namespaces, not this one.
+  the `arch-hub`, `api-hub` and `qa-hub` namespaces, not this one.
 - **`/go/*` exists for the links that are quoted rather than rendered** — a
   bookmark, a printed URL, or any page that later becomes prerendered. It reads
   the environment per request and 302s. The portal's own pages skip the hop.
