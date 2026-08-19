@@ -1,0 +1,74 @@
+{
+  "kind": "collectionType",
+  "collectionName": "products",
+  "info": {
+    "singularName": "product",
+    "pluralName": "products",
+    "displayName": "Product",
+    "description": "One registered product. The hand-written seed of everything doc-portal shows: the automation fills the metrics, nobody types them."
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "slug": {
+      "type": "uid",
+      "targetField": "name",
+      "required": true,
+      "regex": "^[a-z0-9]+(-[a-z0-9]+)*$"
+    },
+    "name": {
+      "type": "string",
+      "required": true,
+      "unique": true,
+      "maxLength": 80
+    },
+    "summary": {
+      "type": "text",
+      "required": true,
+      "maxLength": 240
+    },
+    "domain": {
+      "type": "string",
+      "required": true,
+      "maxLength": 80
+    },
+    "owner": {
+      "type": "string",
+      "required": true,
+      "maxLength": 80
+    },
+    "contact": {
+      "type": "email",
+      "required": true
+    },
+    "lifecycle": {
+      "type": "enumeration",
+      "enum": ["incubating", "active", "maintained", "sunset"],
+      "default": "incubating",
+      "required": true
+    },
+    "version": {
+      "type": "string",
+      "regex": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)$"
+    },
+    "registered": {
+      "type": "date",
+      "required": true
+    },
+    "repository": {
+      "type": "string",
+      "required": true,
+      "regex": "^https?://\\S+$"
+    },
+    "tags": {
+      "type": "json"
+    },
+    "metrics": {
+      "type": "component",
+      "repeatable": false,
+      "component": "registry.metrics"
+    }
+  }
+}

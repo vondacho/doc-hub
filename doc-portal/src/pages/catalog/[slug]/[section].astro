@@ -2,7 +2,8 @@
 import Layout from '../../../layouts/Layout.astro';
 import Hero from '../../../components/home/Hero.astro';
 import SiteFooter from '../../../components/home/SiteFooter.astro';
-import { findProduct } from '../../../lib/products';
+import RegistryUnavailable from '../../../components/catalog/RegistryUnavailable.astro';
+import { findProduct, RegistryError, type Product } from '../../../lib/products';
 import { campaignsHubUrl, findInternalSection, productSections } from '../../../lib/product-sections';
 
 /*
@@ -20,27 +21,71 @@ import { campaignsHubUrl, findInternalSection, productSections } from '../../../
  * — this portal does not render them at any address.
  */
 const { slug, section: sectionSlug } = Astro.params;
-const product = slug ? findProduct(slug) : undefined;
 const section = sectionSlug ? findInternalSection(sectionSlug) : undefined;
 
-if (!product || !section) {
+/*
+ * The section is decided here, from a compiled-in list; the product comes from
+ * the registry over HTTP. So an unknown section is always a 404, while an
+ * unknown product is a 404 only if the registry actually answered — see the
+ * product view for why the distinction is worth the extra branch.
+ */
+let product: Product | undefined;
+let registryError: string | undefined;
+
+if (section) {
+	try {
+		product = slug ? await findProduct(slug) : undefined;
+	} catch (error) {
+		if (!(error instanceof RegistryError)) throw error;
+		registryError = error.message;
+		Astro.response.status = 503;
+	}
+}
+
+if (!section || (!registryError && !product)) {
 	return new Response(null, { status: 404, statusText: 'Not found' });
 }
+
+// A const rather than reusing `product` directly: TypeScript keeps a const's
+// narrowing inside the .map callbacks further down the template, which it drops
+// for a binding that could have been reassigned in between.
+const shown = product;
 
 const siblings = productSections.filter((candidate) => candidate.slug !== section.slug);
 const campaignsUrl = section.slug === 'campaigns' ? campaignsHubUrl() : undefined;
 ---
 
 <Layout
-	title={`${section.title} — ${product.name} — Doc Hub`}
-	description={`${section.title} for ${product.name}: ${section.question}`}
+	title={shown ? `${section.title} — ${shown.name} — Doc Hub` : 'Catalog unavailable — Doc Hub'}
+	description={
+		shown
+			? `${section.title} for ${shown.name}: ${section.question}`
+			: 'The product registry could not be read.'
+	}
 >
 	<main id="main">
+		{ !shown ? (
+			<>
+				<Hero
+					kicker={section.title}
+					title="This page cannot be shown."
+					lead="The registry this portal reads is not answering, so there is no way to tell
+						which product this section belongs to — which is a different thing from knowing
+						there is none."
+					parent={{ label: 'Catalog', href: '/catalog' }}
+					compact
+				/>
+				<section class="mx-auto w-full max-w-5xl px-6 py-12 sm:py-16">
+					<RegistryUnavailable detail={registryError!} />
+				</section>
+			</>
+		) : (
+		<>
 		<Hero
 			kicker={section.title}
 			title={section.title}
 			lead={section.description}
-			parent={{ label: product.name, href: `/catalog/${product.slug}` }}
+			parent={{ label: shown.name, href: `/catalog/${shown.slug}` }}
 			compact
 		/>
 
@@ -100,23 +145,23 @@ const campaignsUrl = section.slug === 'campaigns' ? campaignsHubUrl() : undefine
 					<code class="rounded bg-slate-100 px-1.5 py-0.5 text-xs dark:bg-slate-700">develop</code>,
 					campaign runs, Helm deployments and observability. Until this one is wired,
 					<a
-						href={`mailto:${product.contact}`}
+						href={`mailto:${shown.contact}`}
 						class="font-medium underline underline-offset-4 hover:text-brand dark:hover:text-sky-400"
-						>{product.owner}</a
+						>{shown.owner}</a
 					> is who to ask.
 				</p>
 			</div>
 
 			<nav aria-labelledby="other-perspectives" class="mt-12">
 				<h2 id="other-perspectives" class="text-sm font-semibold text-ink-muted dark:text-slate-400">
-					Other perspectives on {product.name}
+					Other perspectives on {shown.name}
 				</h2>
 				<ul class="mt-4 flex flex-wrap gap-3">
 					{
 						siblings.map((sibling) => (
 							<li>
 								<a
-									href={sibling.href(product)}
+									href={sibling.href(shown)}
 									rel={sibling.external ? 'noreferrer' : undefined}
 									class="inline-block rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold transition hover:border-brand hover:text-brand dark:border-slate-600 dark:hover:border-sky-400 dark:hover:text-sky-400"
 								>
@@ -134,6 +179,8 @@ const campaignsUrl = section.slug === 'campaigns' ? campaignsHubUrl() : undefine
 				</ul>
 			</nav>
 		</section>
+		</>
+		)}
 	</main>
 	<SiteFooter />
 </Layout>

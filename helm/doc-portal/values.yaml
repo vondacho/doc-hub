@@ -133,10 +133,24 @@ app:
   # qa-hub's portal — where campaign results will come from.
   qaPortalUrl: http://qa-portal.localhost
 
-  # The CMS holding the product registry. Nothing reads it yet: /registration
-  # validates an entry and prints the payload it would POST. The address is
-  # configured now so that wiring it up is a values change and an API call.
+  # The CMS holding the product registry, as the *browser* sees it. Printed on
+  # /registration as the address an entry would be posted to, and the link a
+  # person follows to open the admin UI.
   registryUrl: http://doc-registry.localhost
+
+  # The same CMS, as *this server* sees it — the one entry here that is an
+  # in-cluster call rather than a browser-facing link, and the only one that
+  # must not be an ingress host.
+  #
+  # The catalog is read from it on every request: /catalog, its search and
+  # pagination, and every product view under it. src/lib/links.ts keeps the two
+  # addresses apart on purpose (registryUrl vs registryApiUrl) because they are
+  # resolved by different resolvers and collapsing them breaks whichever caller
+  # you were not thinking about.
+  #
+  # doc-registry is a release in this same namespace, so the Service name is
+  # enough. Cross-namespace would need doc-registry.<namespace>.svc.
+  registryApiUrl: http://doc-registry:1337
 
   # Arbitrary extra entries, merged verbatim into the same ConfigMap and so
   # injected as env vars too:

@@ -11,6 +11,8 @@
  * would be wrong even though this portal is server-rendered.
  *
  * The defaults are the Traefik ingress hosts a local cluster enables.
+ *
+ * `registryApiUrl` at the bottom is the single exception, and says why.
  */
 
 function fromEnv(name: string, fallback: string): string {
@@ -48,12 +50,35 @@ export function qaPortalUrl(): string {
 }
 
 /**
- * The CMS holding the product registry.
+ * The CMS holding the product registry, **as the browser sees it**.
  *
- * Nothing reads it yet — /registration is a form over a registry that does not
- * exist. The address is here so that wiring it up is a configuration change and
- * an API call, not a hunt through the pages for a hardcoded host.
+ * Printed rather than called: /registration shows it as the address an entry
+ * would be posted to, and it is where a person goes to open the admin UI. It
+ * follows the same rule as every other address in this file.
  */
 export function registryUrl(): string {
   return fromEnv('REGISTRY_URL', 'http://doc-registry.localhost');
+}
+
+/**
+ * The same CMS, **as this server sees it** — and the one exception to the rule
+ * stated at the top of this file.
+ *
+ * The catalog is fetched during server-side rendering, so the request leaves
+ * the portal's own process and never the visitor's browser. In the cluster that
+ * makes the ingress host the wrong address: it would route back out through
+ * Traefik and in again, to reach a Service sitting one DNS name away. The right
+ * address is the in-cluster one, `http://doc-registry:1337`, which is what the
+ * chart injects.
+ *
+ * Keeping the two apart is the whole reason this function exists rather than
+ * reusing registryUrl(). They point at the same CMS and are resolved by
+ * different resolvers, and collapsing them breaks whichever caller is not the
+ * one you were thinking about.
+ *
+ * The default is the dev server's: `npm run develop` in doc-registry listens on
+ * 1337, so a local portal finds a local registry with no configuration.
+ */
+export function registryApiUrl(): string {
+  return fromEnv('REGISTRY_API_URL', 'http://localhost:1337');
 }

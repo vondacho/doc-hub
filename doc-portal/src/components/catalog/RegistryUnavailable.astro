@@ -1,0 +1,65 @@
+---
+import { registryUrl } from '../../lib/links';
+
+/*
+ * What the catalog shows when the registry cannot be read.
+ *
+ * A panel rather than a 500, for the same reason the per-product sections are
+ * pages rather than dead links: a visitor who lands on a blank error learns
+ * nothing, and the one thing worth telling them here is *which* system is down,
+ * because it is not the one whose address is in their URL bar.
+ *
+ * It is deliberately not the "nothing matched" empty state. That one invites
+ * you to search for something else; this one says the catalog is unavailable
+ * and there is nothing to search. Rendering an outage as an empty result is how
+ * a broken registry comes to look like a hub with no products in it.
+ *
+ * The caller sets the status code — 503, never 200. A page that says "this is
+ * broken" while answering OK is invisible to everything that watches the site.
+ */
+
+interface Props {
+	/** The RegistryError's message. Printed as-is: it names the address and the failure. */
+	detail: string;
+}
+
+const { detail } = Astro.props;
+---
+
+<div
+	class="mt-6 rounded-2xl border border-critical bg-white p-8 shadow-sm dark:border-critical dark:bg-night-raised"
+	role="alert"
+>
+	<p class="text-lg font-semibold">The registry is not answering.</p>
+	<p class="mt-3 text-ink-muted dark:text-slate-400">
+		This portal renders the catalog from the product registry on every request, and that
+		request did not succeed. Nothing is wrong with the products — they are in the registry,
+		and this page will show them again as soon as it can be read.
+	</p>
+	<p class="mt-4 rounded-xl bg-slate-100 p-4 font-mono text-sm break-words dark:bg-slate-700">
+		{detail}
+	</p>
+	<p class="mt-4 text-sm text-ink-muted dark:text-slate-400">
+		The registry's own admin UI is at{' '}
+		<a
+			href={registryUrl()}
+			class="font-semibold text-brand underline-offset-4 hover:underline dark:text-sky-400"
+			rel="noreferrer">{registryUrl()}</a
+		>. If that opens, the portal is reaching it at a different address than you are — it
+		calls the registry from inside the cluster, not from your browser.
+	</p>
+	<div class="mt-6 flex flex-wrap gap-3">
+		<a
+			href="/catalog"
+			class="rounded-full bg-brand px-5 py-2.5 font-semibold text-white transition hover:bg-brand-strong"
+		>
+			Try again
+		</a>
+		<a
+			href="/"
+			class="rounded-full border border-slate-300 px-5 py-2.5 font-semibold transition hover:border-brand hover:text-brand dark:border-slate-600 dark:hover:border-sky-400 dark:hover:text-sky-400"
+		>
+			Back to the hub
+		</a>
+	</div>
+</div>

@@ -7,14 +7,20 @@ import { registryUrl } from '../lib/links';
 /*
  * Registration — the "create" half of this hub.
  *
- * The form validates on the server and then stops: there is no registry behind
- * it yet, so nothing is written anywhere. That is stated on the result panel in
- * as many words, and the payload that *would* be sent is printed, because the
- * failure mode this avoids is a form that looks like it worked.
+ * The form validates on the server and then stops. The registry now exists and
+ * the catalog is read from it, but **reads and writes are not the same
+ * problem**: doc-registry grants the public role find and findOne only, so this
+ * portal can list products without a credential and cannot create one. That is
+ * deliberate — a create endpoint open to the internet is a registry anybody can
+ * fill with anything.
  *
- * Wiring it up is one POST from this file to registryUrl() plus whatever
- * credential the CMS wants. Everything else here — the fields, the validation,
- * the round trip through the same URL — stays as it is.
+ * Wiring it up is one POST from this file to registryApiUrl() carrying an API
+ * token, minted in the registry's admin UI under Settings > API Tokens and
+ * injected here as a Secret. Everything else — the fields, the validation, the
+ * round trip through the same URL — stays as it is.
+ *
+ * Until then the payload that *would* be sent is printed, because the failure
+ * mode worth avoiding is a form that looks like it worked.
  *
  * Validation is server-side and the `required` attributes are a convenience, not
  * the check: a form is an HTTP endpoint, and the browser is not the only client
@@ -158,19 +164,21 @@ const errorInputClass = inputClass.replace('border-slate-300', 'border-critical'
 					<div class="mb-10 rounded-2xl border border-warning bg-white p-7 shadow-sm dark:bg-night-raised">
 						<h2 class="text-xl font-semibold">Validated — and not saved.</h2>
 						<p class="mt-3 text-ink-muted dark:text-slate-400">
-							The entry below is well formed, and nothing was written: this portal has no
-							registry behind it yet. When one exists at{' '}
+							The entry below is well formed, and nothing was written. The registry at{' '}
 							<code class="rounded bg-slate-100 px-1.5 py-0.5 text-xs dark:bg-slate-700">
 								{registryUrl()}
-							</code>
-							, this page will POST exactly this and redirect to the new product view.
+							</code>{' '}
+							is live — the catalog you just came from is read from it — but it accepts
+							reads without a credential and writes only with one. Once this page carries an
+							API token it will POST exactly this and redirect to the new product view.
 						</p>
 						<pre class="mt-5 overflow-x-auto rounded-xl bg-slate-900 p-5 text-sm text-slate-100">
 {payload}
 						</pre>
 						<p class="mt-4 text-sm text-ink-muted dark:text-slate-400">
-							To register the product today, hand this to the platform team along with the
-							pipeline that will generate its documentation.
+							To register the product today, enter it in the registry's admin UI — or hand
+							this to the platform team along with the pipeline that will generate its
+							documentation.
 						</p>
 					</div>
 				)

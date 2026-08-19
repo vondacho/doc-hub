@@ -5,7 +5,8 @@ import ProductDetails from '../../../components/product/ProductDetails.astro';
 import IndicatorBand from '../../../components/product/IndicatorBand.astro';
 import SectionPanels, { type Panel } from '../../../components/home/SectionPanels.astro';
 import SiteFooter from '../../../components/home/SiteFooter.astro';
-import { findProduct } from '../../../lib/products';
+import RegistryUnavailable from '../../../components/catalog/RegistryUnavailable.astro';
+import { findProduct, RegistryError, type Product } from '../../../lib/products';
 import { productSections } from '../../../lib/product-sections';
 
 /*
@@ -18,42 +19,80 @@ import { productSections } from '../../../lib/product-sections';
  * An unknown slug is a real 404 rather than a friendly empty page: a stale link
  * to a product that was renamed or never existed should say so with a status
  * code, not with a 200 that search engines and monitoring both believe.
+ *
+ * That 404 is only honest when the registry answered, though. "This product does
+ * not exist" and "I could not find out whether it exists" are different claims,
+ * and the second one is a 503 — otherwise a registry outage tells every visitor
+ * that every product was deleted, and tells monitoring the same.
  */
 const { slug } = Astro.params;
-const product = slug ? findProduct(slug) : undefined;
 
-if (!product) {
+let product: Product | undefined;
+let registryError: string | undefined;
+
+try {
+	product = slug ? await findProduct(slug) : undefined;
+} catch (error) {
+	if (!(error instanceof RegistryError)) throw error;
+	registryError = error.message;
+	Astro.response.status = 503;
+}
+
+if (!registryError && !product) {
 	return new Response(null, { status: 404, statusText: 'Product not found' });
 }
 
-const panels: readonly Panel[] = productSections.map((section) => ({
-	title: section.title,
-	description: section.description,
-	href: section.href(product),
-	cta: section.cta,
-	status: section.status,
-	icon: section.icon,
-	...(section.external ? { external: true } : {}),
-}));
+const panels: readonly Panel[] = product
+	? productSections.map((section) => ({
+			title: section.title,
+			description: section.description,
+			href: section.href(product!),
+			cta: section.cta,
+			status: section.status,
+			icon: section.icon,
+			...(section.external ? { external: true } : {}),
+		}))
+	: [];
 ---
 
 <Layout
-	title={`${product.name} — Doc Hub`}
-	description={product.summary}
+	title={product ? `${product.name} — Doc Hub` : 'Catalog unavailable — Doc Hub'}
+	description={product?.summary ?? 'The product registry could not be read.'}
 >
 	<main id="main">
-		<Hero
-			kicker="Product"
-			crumb={product.name}
-			title={product.name}
-			lead={product.summary}
-			parent={{ label: 'Catalog', href: '/catalog' }}
-			compact
-		/>
+		{
+			product ? (
+				<>
+					<Hero
+						kicker="Product"
+						crumb={product.name}
+						title={product.name}
+						lead={product.summary}
+						parent={{ label: 'Catalog', href: '/catalog' }}
+						compact
+					/>
 
-		<ProductDetails product={product} />
-		<IndicatorBand product={product} />
-		<SectionPanels panels={panels} label="Perspectives on this product" columns={4} />
+					<ProductDetails product={product} />
+					<IndicatorBand product={product} />
+					<SectionPanels panels={panels} label="Perspectives on this product" columns={4} />
+				</>
+			) : (
+				<>
+					<Hero
+						kicker="Product"
+						title="This product cannot be shown."
+						lead="The registry this portal reads is not answering, so there is no way to tell
+							whether this product exists — which is a different thing from knowing it does
+							not."
+						parent={{ label: 'Catalog', href: '/catalog' }}
+						compact
+					/>
+					<section class="mx-auto w-full max-w-5xl px-6 py-12 sm:py-16">
+						<RegistryUnavailable detail={registryError!} />
+					</section>
+				</>
+			)
+		}
 	</main>
 	<SiteFooter />
 </Layout>

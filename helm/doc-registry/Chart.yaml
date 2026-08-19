@@ -1,0 +1,21 @@
+apiVersion: v2
+name: doc-registry
+description: Strapi CMS holding the registered products of the documentation hub, with its admin web UI
+type: application
+
+# Chart version. Bump on every change to the chart itself.
+version: 0.1.0
+
+# Version of doc-registry shipped by default. Matches "version" in
+# doc-registry/package.json and is used as the default image tag.
+appVersion: "0.1.0"
+
+keywords:
+  - strapi
+  - cms
+  - product-registry
+home: https://github.com/vondacho/doc-hub
+sources:
+  - https://github.com/vondacho/doc-hub/tree/main/doc-registry
+maintainers:
+  - name: Olivier von Dach

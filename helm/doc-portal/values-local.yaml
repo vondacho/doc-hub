@@ -42,6 +42,8 @@ app:
   devPortalUrl: http://dev-portal.localhost
   qaPortalUrl: http://qa-portal.localhost
   registryUrl: http://doc-registry.localhost
+  # In-cluster, not the ingress host: this one is called by the portal itself.
+  registryApiUrl: http://doc-registry:1337
 
 resources:
   requests:

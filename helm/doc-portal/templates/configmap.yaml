@@ -15,6 +15,13 @@ data:
   DEV_PORTAL_URL: {{ .Values.app.devPortalUrl | quote }}
   QA_PORTAL_URL: {{ .Values.app.qaPortalUrl | quote }}
   REGISTRY_URL: {{ .Values.app.registryUrl | quote }}
+
+  # The one address in this ConfigMap the *portal* resolves rather than the
+  # visitor's browser: the catalog is fetched during server-side rendering. An
+  # ingress host here would leave the cluster and come back in to reach a
+  # Service one DNS name away — and would break entirely the moment the ingress
+  # is disabled, which the in-cluster name does not care about.
+  REGISTRY_API_URL: {{ .Values.app.registryApiUrl | quote }}
   {{- range $key, $value := .Values.app.extraConfig }}
   {{ $key }}: {{ $value | quote }}
   {{- end }}

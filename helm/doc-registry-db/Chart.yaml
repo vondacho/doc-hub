@@ -1,0 +1,21 @@
+apiVersion: v2
+name: doc-registry-db
+description: PostgreSQL instance backing the doc-registry Strapi CMS
+type: application
+
+# Chart version. Bump on every change to the chart itself.
+version: 0.1.0
+
+# PostgreSQL major version shipped by doc-registry-db/Dockerfile. Used as the
+# default image tag.
+appVersion: "17"
+
+keywords:
+  - postgresql
+  - strapi
+  - product-registry
+home: https://github.com/vondacho/doc-hub
+sources:
+  - https://github.com/vondacho/doc-hub/tree/main/doc-registry-db
+maintainers:
+  - name: Olivier von Dach

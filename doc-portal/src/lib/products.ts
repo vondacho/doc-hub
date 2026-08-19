@@ -1,16 +1,31 @@
 /**
  * The product registry — the one thing this hub is organised by.
  *
- * PLACEHOLDER DATA. Every product below is invented, and the module exists to
- * give the catalog, the search and the product view something real to render
- * before the registry is stood up. The pitch puts that registry in a Strapi CMS
- * (see src/lib/links.ts#registryUrl), fed mostly by automation: CI/CD pipelines
- * on `develop`, campaign runs, Helm deployments and observability.
+ * Read from doc-registry, the Strapi CMS, over its content API. This file used
+ * to hold sixteen invented products and promised that "replacing it is
+ * deliberately a one-file job: `searchProducts`, `findProduct` and `paginate`
+ * are the whole surface the pages use, so swapping the seed array for a fetch —
+ * and making these three async — changes nothing above them." That is what
+ * happened, and the promise held: the pages differ only by `await`.
  *
- * Replacing it is deliberately a one-file job. `searchProducts`, `findProduct`
- * and `paginate` are the whole surface the pages use, so swapping the seed array
- * for a fetch — and making these three async — changes nothing above them.
+ * The seed data did not disappear, it moved. doc-registry/src/seed/products.ts
+ * loads the same sixteen entries into an empty collection on first boot, so the
+ * catalog looks identical to before while now being editable by a human and
+ * writable by a pipeline.
+ *
+ * Search and pagination stay **here**, in the portal, rather than becoming
+ * query parameters. Two reasons, and the second is the load-bearing one:
+ *
+ *   - the behaviour is already specified and tested here, down to "every term
+ *     has to match" and "an out-of-range page is clamped, not empty";
+ *   - a registry of a few hundred products fits in one response, and the whole
+ *     set has to be fetched anyway for the count. Pushing the filter into
+ *     Strapi would trade an in-memory `filter` for a query language, and buy
+ *     nothing until the catalog is large enough that the fetch itself is the
+ *     problem — at which point `fetchProducts` is the one function to change.
  */
+
+import { registryApiUrl } from './links';
 
 export type Lifecycle = 'incubating' | 'active' | 'maintained' | 'sunset';
 
@@ -59,362 +74,180 @@ export interface Product {
  */
 export const PAGE_SIZE = 10;
 
-export const products: readonly Product[] = [
-	{
-		slug: 'client-onboarding',
-		name: 'Client Onboarding',
-		summary:
-			'Opens a relationship end to end: identification, due diligence, risk classification and the first funded account.',
-		domain: 'Client lifecycle',
-		owner: 'Onboarding squad',
-		contact: 'onboarding@example.org',
-		lifecycle: 'active',
-		version: '4.2.0',
-		registered: '2024-02-19',
-		repository: 'https://github.com/example/client-onboarding',
-		tags: ['kyc', 'due diligence', 'workflow', 'regulatory'],
-		metrics: {
-			docsUpdatedDaysAgo: 2,
-			apiContracts: 9,
-			contractScore: 'A',
-			acceptancePassRate: 98,
-			openIncidents: 0,
-			roadmapItemsInFlight: 4,
-		},
-	},
-	{
-		slug: 'portfolio-reporting',
-		name: 'Portfolio Reporting',
-		summary:
-			'Produces the periodic and on-demand statements a client reads: positions, performance, fees and tax lots.',
-		domain: 'Reporting',
-		owner: 'Reporting squad',
-		contact: 'reporting@example.org',
-		lifecycle: 'active',
-		version: '7.1.3',
-		registered: '2023-06-01',
-		repository: 'https://github.com/example/portfolio-reporting',
-		tags: ['statements', 'performance', 'pdf', 'scheduling'],
-		metrics: {
-			docsUpdatedDaysAgo: 6,
-			apiContracts: 5,
-			contractScore: 'B',
-			acceptancePassRate: 91,
-			openIncidents: 1,
-			roadmapItemsInFlight: 6,
-		},
-	},
-	{
-		slug: 'order-management',
-		name: 'Order Management',
-		summary:
-			'Captures, validates and routes investment orders, and keeps their state from instruction to execution.',
-		domain: 'Trading',
-		owner: 'Trading platform team',
-		contact: 'trading@example.org',
-		lifecycle: 'active',
-		version: '11.0.0',
-		registered: '2022-11-08',
-		repository: 'https://github.com/example/order-management',
-		tags: ['orders', 'routing', 'fix', 'execution'],
-		metrics: {
-			docsUpdatedDaysAgo: 1,
-			apiContracts: 14,
-			contractScore: 'A',
-			acceptancePassRate: 96,
-			openIncidents: 2,
-			roadmapItemsInFlight: 3,
-		},
-	},
-	{
-		slug: 'payments',
-		name: 'Payments',
-		summary:
-			'Initiates, screens and settles outgoing and incoming payments, with the audit trail each one has to carry.',
-		domain: 'Cash',
-		owner: 'Payments squad',
-		contact: 'payments@example.org',
-		lifecycle: 'active',
-		version: '6.4.1',
-		registered: '2023-01-23',
-		repository: 'https://github.com/example/payments',
-		tags: ['iso20022', 'sanctions screening', 'settlement', 'sepa'],
-		metrics: {
-			docsUpdatedDaysAgo: 4,
-			apiContracts: 11,
-			contractScore: 'B',
-			acceptancePassRate: 89,
-			openIncidents: 3,
-			roadmapItemsInFlight: 5,
-		},
-	},
-	{
-		slug: 'custody-settlement',
-		name: 'Custody & Settlement',
-		summary:
-			'Holds positions, matches and settles trades with counterparties, and reconciles what the custodian says we own.',
-		domain: 'Post-trade',
-		owner: 'Post-trade team',
-		contact: 'post-trade@example.org',
-		lifecycle: 'maintained',
-		version: '9.8.2',
-		registered: '2022-04-14',
-		repository: 'https://github.com/example/custody-settlement',
-		tags: ['settlement', 'reconciliation', 'corporate actions', 'swift'],
-		metrics: {
-			docsUpdatedDaysAgo: 34,
-			apiContracts: 7,
-			contractScore: 'C',
-			acceptancePassRate: 84,
-			openIncidents: 1,
-			roadmapItemsInFlight: 2,
-		},
-	},
-	{
-		slug: 'market-data',
-		name: 'Market Data',
-		summary:
-			'Ingests, normalises and republishes prices, reference rates and corporate action notices to everything downstream.',
-		domain: 'Data',
-		owner: 'Data platform team',
-		contact: 'data-platform@example.org',
-		lifecycle: 'active',
-		version: '5.2.7',
-		registered: '2023-03-30',
-		repository: 'https://github.com/example/market-data',
-		tags: ['prices', 'streaming', 'normalisation', 'vendors'],
-		metrics: {
-			docsUpdatedDaysAgo: 3,
-			apiContracts: 6,
-			contractScore: 'A',
-			acceptancePassRate: 95,
-			openIncidents: 0,
-			roadmapItemsInFlight: 3,
-		},
-	},
-	{
-		slug: 'reference-data',
-		name: 'Reference Data',
-		summary:
-			'The single source for instruments, counterparties, calendars and the codes every other product joins on.',
-		domain: 'Data',
-		owner: 'Data platform team',
-		contact: 'data-platform@example.org',
-		lifecycle: 'active',
-		version: '3.9.0',
-		registered: '2023-09-12',
-		repository: 'https://github.com/example/reference-data',
-		tags: ['golden source', 'instruments', 'mastering', 'lei'],
-		metrics: {
-			docsUpdatedDaysAgo: 8,
-			apiContracts: 8,
-			contractScore: 'B',
-			acceptancePassRate: 93,
-			openIncidents: 0,
-			roadmapItemsInFlight: 4,
-		},
-	},
-	{
-		slug: 'risk-scoring',
-		name: 'Risk Scoring',
-		summary:
-			'Scores clients, portfolios and transactions against the risk policy, and explains every score it returns.',
-		domain: 'Risk & compliance',
-		owner: 'Risk engineering',
-		contact: 'risk-engineering@example.org',
-		lifecycle: 'active',
-		version: '2.6.4',
-		registered: '2024-05-07',
-		repository: 'https://github.com/example/risk-scoring',
-		tags: ['scoring', 'policy', 'explainability', 'regulatory'],
-		metrics: {
-			docsUpdatedDaysAgo: 11,
-			apiContracts: 4,
-			contractScore: 'B',
-			acceptancePassRate: 88,
-			openIncidents: 1,
-			roadmapItemsInFlight: 7,
-		},
-	},
-	{
-		slug: 'billing-and-fees',
-		name: 'Billing & Fees',
-		summary:
-			'Calculates management, transaction and custody fees, applies the agreed conditions, and issues the invoice.',
-		domain: 'Revenue',
-		owner: 'Revenue squad',
-		contact: 'revenue@example.org',
-		lifecycle: 'active',
-		version: '4.0.9',
-		registered: '2023-11-02',
-		repository: 'https://github.com/example/billing-and-fees',
-		tags: ['pricing', 'invoicing', 'conditions', 'accruals'],
-		metrics: {
-			docsUpdatedDaysAgo: 19,
-			apiContracts: 5,
-			contractScore: 'C',
-			acceptancePassRate: 79,
-			openIncidents: 2,
-			roadmapItemsInFlight: 5,
-		},
-	},
-	{
-		slug: 'client-portal',
-		name: 'Client Portal',
-		summary:
-			'What the client sees: holdings, documents, messages and the actions they can start themselves.',
-		domain: 'Client experience',
-		owner: 'Digital channels team',
-		contact: 'digital-channels@example.org',
-		lifecycle: 'active',
-		version: '8.3.0',
-		registered: '2022-08-25',
-		repository: 'https://github.com/example/client-portal',
-		tags: ['web', 'mobile', 'accessibility', 'self-service'],
-		metrics: {
-			docsUpdatedDaysAgo: 5,
-			apiContracts: 10,
-			contractScore: 'A',
-			acceptancePassRate: 97,
-			openIncidents: 1,
-			roadmapItemsInFlight: 8,
-		},
-	},
-	{
-		slug: 'advisor-workbench',
-		name: 'Advisor Workbench',
-		summary:
-			'The relationship manager’s desk: client context, proposals, suitability checks and what to do next.',
-		domain: 'Advisory',
-		owner: 'Advisory squad',
-		contact: 'advisory@example.org',
-		lifecycle: 'active',
-		version: '3.1.2',
-		registered: '2024-01-15',
-		repository: 'https://github.com/example/advisor-workbench',
-		tags: ['proposals', 'suitability', 'crm', 'workflow'],
-		metrics: {
-			docsUpdatedDaysAgo: 7,
-			apiContracts: 6,
-			contractScore: 'B',
-			acceptancePassRate: 90,
-			openIncidents: 0,
-			roadmapItemsInFlight: 6,
-		},
-	},
-	{
-		slug: 'document-vault',
-		name: 'Document Vault',
-		summary:
-			'Stores, classifies and retains every client document, and answers who may read which one.',
-		domain: 'Content',
-		owner: 'Content services team',
-		contact: 'content-services@example.org',
-		lifecycle: 'maintained',
-		version: '2.4.6',
-		registered: '2022-10-03',
-		repository: 'https://github.com/example/document-vault',
-		tags: ['storage', 'retention', 'classification', 'entitlements'],
-		metrics: {
-			docsUpdatedDaysAgo: 61,
-			apiContracts: 3,
-			contractScore: 'C',
-			acceptancePassRate: 82,
-			openIncidents: 0,
-			roadmapItemsInFlight: 1,
-		},
-	},
-	{
-		slug: 'notification-hub',
-		name: 'Notification Hub',
-		summary:
-			'Delivers what the platform has to tell a person — mail, push, in-app — once, in their channel and language.',
-		domain: 'Platform',
-		owner: 'Platform services team',
-		contact: 'platform-services@example.org',
-		lifecycle: 'active',
-		version: '1.9.1',
-		registered: '2024-07-22',
-		repository: 'https://github.com/example/notification-hub',
-		tags: ['templates', 'channels', 'preferences', 'i18n'],
-		metrics: {
-			docsUpdatedDaysAgo: 13,
-			apiContracts: 4,
-			contractScore: 'B',
-			acceptancePassRate: 92,
-			openIncidents: 0,
-			roadmapItemsInFlight: 3,
-		},
-	},
-	{
-		slug: 'audit-trail',
-		name: 'Audit Trail',
-		summary:
-			'Records who did what, to which record, when — and makes the answer producible on request, years later.',
-		domain: 'Risk & compliance',
-		owner: 'Platform services team',
-		contact: 'platform-services@example.org',
-		lifecycle: 'maintained',
-		version: '2.0.4',
-		registered: '2023-04-18',
-		repository: 'https://github.com/example/audit-trail',
-		tags: ['immutability', 'retention', 'evidence', 'regulatory'],
-		metrics: {
-			docsUpdatedDaysAgo: 47,
-			apiContracts: 2,
-			contractScore: 'B',
-			acceptancePassRate: 86,
-			openIncidents: 0,
-			roadmapItemsInFlight: 1,
-		},
-	},
-	{
-		slug: 'esg-insights',
-		name: 'ESG Insights',
-		summary:
-			'Scores portfolios against sustainability criteria and explains the exposure behind each score.',
-		domain: 'Investment',
-		owner: 'Sustainable investing squad',
-		contact: 'sustainable-investing@example.org',
-		lifecycle: 'incubating',
-		version: '0.4.0',
-		registered: '2025-03-05',
-		repository: 'https://github.com/example/esg-insights',
-		tags: ['sustainability', 'scoring', 'disclosure', 'analytics'],
-		metrics: {
-			docsUpdatedDaysAgo: 9,
-			apiContracts: 2,
-			contractScore: 'C',
-			acceptancePassRate: 74,
-			openIncidents: 1,
-			roadmapItemsInFlight: 9,
-		},
-	},
-	{
-		slug: 'legacy-statements',
-		name: 'Legacy Statements',
-		summary:
-			'The statement generator being replaced by Portfolio Reporting. Documented because it is still producing documents.',
-		domain: 'Reporting',
-		owner: 'Reporting squad',
-		contact: 'reporting@example.org',
-		lifecycle: 'sunset',
-		version: '12.6.11',
-		registered: '2021-05-11',
-		repository: 'https://github.com/example/legacy-statements',
-		tags: ['decommissioning', 'statements', 'batch'],
-		metrics: {
-			docsUpdatedDaysAgo: 128,
-			apiContracts: 1,
-			contractScore: 'D',
-			acceptancePassRate: 68,
-			openIncidents: 4,
-			roadmapItemsInFlight: 0,
-		},
-	},
-] as const;
+/**
+ * How many entries to ask the registry for at once.
+ *
+ * One hundred because that is `maxLimit` in doc-registry/config/api.ts — ask
+ * for more and Strapi silently caps the page, which would look like a registry
+ * that lost its tail rather than a request that was too greedy. `fetchProducts`
+ * follows the pagination metadata past it.
+ */
+const REGISTRY_PAGE_SIZE = 100;
 
-export function findProduct(slug: string): Product | undefined {
+/**
+ * How long to wait for the registry before giving up.
+ *
+ * A page that hangs is worse than a page that says the registry is unreachable:
+ * the visitor cannot tell the difference between slow and broken, and neither
+ * can the ingress. Five seconds is far longer than a healthy in-cluster call
+ * and short enough to stay inside anyone's patience.
+ */
+const REGISTRY_TIMEOUT_MS = 5_000;
+
+/**
+ * The registry could not be read.
+ *
+ * Distinct from "no products matched" on purpose — the pages render the two
+ * very differently, and conflating them is how an outage comes to look like an
+ * empty catalog.
+ */
+export class RegistryError extends Error {
+	constructor(message: string, options?: { cause?: unknown }) {
+		super(message, options);
+		this.name = 'RegistryError';
+	}
+}
+
+/** One entry as Strapi 5 returns it: flat attributes, plus its own two ids. */
+interface RegistryEntry {
+	slug?: unknown;
+	name?: unknown;
+	summary?: unknown;
+	domain?: unknown;
+	owner?: unknown;
+	contact?: unknown;
+	lifecycle?: unknown;
+	version?: unknown;
+	registered?: unknown;
+	repository?: unknown;
+	tags?: unknown;
+	metrics?: Record<string, unknown> | null;
+}
+
+interface RegistryResponse {
+	data?: RegistryEntry[];
+	meta?: { pagination?: { page?: number; pageCount?: number; total?: number } };
+}
+
+function asString(value: unknown, fallback = ''): string {
+	return typeof value === 'string' ? value : fallback;
+}
+
+function asNumber(value: unknown, fallback = 0): number {
+	return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+}
+
+/**
+ * Turn one registry entry into a Product.
+ *
+ * Every field is coerced rather than trusted. The registry is a CMS with a
+ * schema, so the shape is nearly always right — but "nearly always" is exactly
+ * the case that renders `undefined` into a card, and a missing `metrics`
+ * component is a real state: an entry registered by hand, before any pipeline
+ * has reported anything about it. Zeroes are the honest answer there, and the
+ * indicators read them as "abandoned documentation, failing contracts", which
+ * is what an unmeasured product should look like.
+ */
+function toProduct(entry: RegistryEntry): Product {
+	const metrics = entry.metrics ?? {};
+	const grade = asString(metrics.contractScore, 'D');
+
+	return {
+		slug: asString(entry.slug),
+		name: asString(entry.name),
+		summary: asString(entry.summary),
+		domain: asString(entry.domain),
+		owner: asString(entry.owner),
+		contact: asString(entry.contact),
+		lifecycle: asString(entry.lifecycle, 'incubating') as Lifecycle,
+		version: asString(entry.version),
+		registered: asString(entry.registered),
+		repository: asString(entry.repository),
+		// `tags` is a json column, so the schema does not constrain it further.
+		tags: Array.isArray(entry.tags) ? entry.tags.filter((tag) => typeof tag === 'string') : [],
+		metrics: {
+			docsUpdatedDaysAgo: asNumber(metrics.docsUpdatedDaysAgo),
+			apiContracts: asNumber(metrics.apiContracts),
+			contractScore: (['A', 'B', 'C', 'D'].includes(grade) ? grade : 'D') as ProductMetrics['contractScore'],
+			acceptancePassRate: asNumber(metrics.acceptancePassRate),
+			openIncidents: asNumber(metrics.openIncidents),
+			roadmapItemsInFlight: asNumber(metrics.roadmapItemsInFlight),
+		},
+	};
+}
+
+/**
+ * Every registered product, in the order the catalog shows them.
+ *
+ * Sorted by the registry rather than here, so two pages of one result set
+ * cannot disagree about what comes first.
+ *
+ * Deliberately uncached. The catalog is a query whose answer changes the moment
+ * somebody edits an entry or a pipeline reports a metric, and a cache would
+ * make a hub about *how current your documentation is* the one page that shows
+ * you a stale copy of it. Reconsider when the registry is large or remote —
+ * against a Service one DNS hop away it is not worth the staleness.
+ *
+ * @throws {RegistryError} if the registry cannot be reached or does not answer
+ *   with what it promised. Never returns an empty array to mean "unreachable".
+ */
+export async function fetchProducts(): Promise<readonly Product[]> {
+	const base = registryApiUrl().replace(/\/+$/, '');
+	const products: Product[] = [];
+
+	// Paged rather than fetched in one go: `maxLimit` caps a page at 100, and a
+	// registry that outgrows one page should not quietly lose its tail.
+	for (let page = 1; ; page += 1) {
+		const url =
+			`${base}/api/products` +
+			`?populate=metrics&sort=name:asc` +
+			`&pagination[page]=${page}&pagination[pageSize]=${REGISTRY_PAGE_SIZE}`;
+
+		let response: Response;
+		try {
+			response = await fetch(url, {
+				headers: { accept: 'application/json' },
+				signal: AbortSignal.timeout(REGISTRY_TIMEOUT_MS),
+			});
+		} catch (cause) {
+			throw new RegistryError(`Could not reach the registry at ${base}.`, { cause });
+		}
+
+		if (!response.ok) {
+			// 403 is the one worth naming: it means the public role lost its
+			// find/findOne grant, which doc-registry's bootstrap makes and an
+			// administrator can revoke in the admin UI.
+			const hint =
+				response.status === 403
+					? ' The public role may no longer be allowed to read products.'
+					: '';
+			throw new RegistryError(
+				`The registry answered ${response.status} ${response.statusText}.${hint}`,
+			);
+		}
+
+		let payload: RegistryResponse;
+		try {
+			payload = (await response.json()) as RegistryResponse;
+		} catch (cause) {
+			throw new RegistryError('The registry did not answer with JSON.', { cause });
+		}
+
+		if (!Array.isArray(payload.data)) {
+			throw new RegistryError('The registry answered without a "data" array.');
+		}
+
+		products.push(...payload.data.map(toProduct));
+
+		const pageCount = payload.meta?.pagination?.pageCount ?? 1;
+		if (page >= pageCount) break;
+	}
+
+	return products;
+}
+
+export async function findProduct(slug: string): Promise<Product | undefined> {
+	const products = await fetchProducts();
 	return products.find((product) => product.slug === slug);
 }
 
@@ -429,7 +262,8 @@ export function findProduct(slug: string): Product | undefined {
  * An empty query returns everything: the catalog with no query is a browse, and
  * an empty result there would read as "there are no products".
  */
-export function searchProducts(query: string): readonly Product[] {
+export async function searchProducts(query: string): Promise<readonly Product[]> {
+	const products = await fetchProducts();
 	const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
 	if (terms.length === 0) return products;
 
@@ -464,6 +298,9 @@ export interface Page<T> {
  * The requested page is clamped rather than trusted: `?page=99` on a two-page
  * result is a stale link or a typed URL, and showing the last page beats an
  * empty list that looks like "nothing matched".
+ *
+ * Still synchronous: it takes a result set rather than fetching one, which is
+ * what kept it unchanged when the registry moved out of this file.
  */
 export function paginate<T>(items: readonly T[], page: number): Page<T> {
 	const total = items.length;

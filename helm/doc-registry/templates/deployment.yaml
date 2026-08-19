@@ -1,0 +1,131 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "doc-registry.fullname" . }}
+  labels:
+    {{- include "doc-registry.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  # Applied as-is. The registry holds nothing of its own — the state is in
+  # doc-registry-db — so a rolling update is safe and two pods overlapping is
+  # not a problem. Both talk to the same database, which is the one thing that
+  # is allowed to have a single writer.
+  strategy:
+    {{- toYaml .Values.strategy | nindent 4 }}
+  selector:
+    matchLabels:
+      {{- include "doc-registry.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        # Rolls the pods when the rendered configuration changes.
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "doc-registry.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "doc-registry.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: {{ .Chart.Name }}
+          image: {{ include "doc-registry.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.port }}
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: {{ include "doc-registry.fullname" . }}
+            - secretRef:
+                name: {{ include "doc-registry.secretName" . }}
+          env:
+            # Kept out of the Secret above because it belongs to the
+            # doc-registry-db release — this chart reads it, never copies it.
+            - name: DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ required "database.existingSecret is required: the password belongs to the database release, and this chart reads it rather than holding a copy." .Values.database.existingSecret }}
+                  key: {{ .Values.database.passwordKey }}
+            {{- with .Values.nodeOptions }}
+            - name: NODE_OPTIONS
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- if .Values.probes.startup.enabled }}
+          startupProbe:
+            httpGet:
+              path: {{ .Values.probes.path }}
+              port: http
+            initialDelaySeconds: {{ .Values.probes.startup.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.startup.periodSeconds }}
+            failureThreshold: {{ .Values.probes.startup.failureThreshold }}
+          {{- end }}
+          {{- if .Values.probes.liveness.enabled }}
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.probes.path }}
+              port: http
+            periodSeconds: {{ .Values.probes.liveness.periodSeconds }}
+            failureThreshold: {{ .Values.probes.liveness.failureThreshold }}
+          {{- end }}
+          {{- if .Values.probes.readiness.enabled }}
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.probes.path }}
+              port: http
+            periodSeconds: {{ .Values.probes.readiness.periodSeconds }}
+            failureThreshold: {{ .Values.probes.readiness.failureThreshold }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            # The default upload provider writes here, and readOnlyRootFilesystem
+            # would otherwise stop it. The admin panel bundle it is served
+            # alongside lives in /app/dist/build and is not shadowed.
+            #
+            # An emptyDir, so media does NOT survive the pod — see the note on
+            # `uploads` in values.yaml.
+            - name: uploads
+              mountPath: /app/public/uploads
+            # readOnlyRootFilesystem is on, but Node still needs a writable
+            # temp dir — Strapi buffers multipart uploads through it.
+            - name: tmp
+              mountPath: /tmp
+            # The CLI creates a config store under $HOME while loading its
+            # commands, and logs "Failed to load command" if it cannot.
+            - name: home
+              mountPath: /home/app
+      volumes:
+        - name: uploads
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+        - name: home
+          emptyDir: {}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

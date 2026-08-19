@@ -1,0 +1,48 @@
+{
+  "collectionName": "components_registry_metrics",
+  "info": {
+    "displayName": "Metrics",
+    "icon": "chartBubble",
+    "description": "What the automation reports about a product. Every field is written by a pipeline, not by hand."
+  },
+  "options": {},
+  "attributes": {
+    "docsUpdatedDaysAgo": {
+      "type": "integer",
+      "default": 0,
+      "min": 0,
+      "required": true
+    },
+    "apiContracts": {
+      "type": "integer",
+      "default": 0,
+      "min": 0,
+      "required": true
+    },
+    "contractScore": {
+      "type": "enumeration",
+      "enum": ["A", "B", "C", "D"],
+      "default": "C",
+      "required": true
+    },
+    "acceptancePassRate": {
+      "type": "integer",
+      "default": 0,
+      "min": 0,
+      "max": 100,
+      "required": true
+    },
+    "openIncidents": {
+      "type": "integer",
+      "default": 0,
+      "min": 0,
+      "required": true
+    },
+    "roadmapItemsInFlight": {
+      "type": "integer",
+      "default": 0,
+      "min": 0,
+      "required": true
+    }
+  }
+}

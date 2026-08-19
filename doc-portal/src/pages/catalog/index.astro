@@ -5,7 +5,8 @@ import SearchBar from '../../components/catalog/SearchBar.astro';
 import ProductCard from '../../components/catalog/ProductCard.astro';
 import Pagination from '../../components/catalog/Pagination.astro';
 import SiteFooter from '../../components/home/SiteFooter.astro';
-import { paginate, searchProducts } from '../../lib/products';
+import RegistryUnavailable from '../../components/catalog/RegistryUnavailable.astro';
+import { paginate, RegistryError, searchProducts, type Product } from '../../lib/products';
 
 /*
  * The catalog: a search box and its results, ten to a page.
@@ -18,7 +19,25 @@ import { paginate, searchProducts } from '../../lib/products';
  */
 const query = (Astro.url.searchParams.get('q') ?? '').trim();
 const requestedPage = Number.parseInt(Astro.url.searchParams.get('page') ?? '1', 10);
-const results = searchProducts(query);
+
+/*
+ * The results now come from doc-registry over HTTP, so this is the first place
+ * in the portal that can fail for a reason that is not the visitor's. An
+ * unreachable registry is rendered as an outage — a panel, and a 503 — rather
+ * than as an empty result: the two look identical to a reader and mean opposite
+ * things, and only one of them is worth waking somebody for.
+ */
+let results: readonly Product[] = [];
+let registryError: string | undefined;
+
+try {
+	results = await searchProducts(query);
+} catch (error) {
+	if (!(error instanceof RegistryError)) throw error;
+	registryError = error.message;
+	Astro.response.status = 503;
+}
+
 const page = paginate(results, Number.isNaN(requestedPage) ? 1 : requestedPage);
 ---
 
@@ -46,14 +65,18 @@ const page = paginate(results, Number.isNaN(requestedPage) ? 1 : requestedPage);
 
 			<h2 id="catalog-results" class="mt-12 text-lg font-semibold">
 				{
-					query
-						? `${page.total} ${page.total === 1 ? 'product' : 'products'} matching “${query}”`
-						: `${page.total} registered products`
+					registryError
+						? 'Catalog unavailable'
+						: query
+							? `${page.total} ${page.total === 1 ? 'product' : 'products'} matching “${query}”`
+							: `${page.total} registered products`
 				}
 			</h2>
 
 			{
-				page.total === 0 ? (
+				registryError ? (
+					<RegistryUnavailable detail={registryError} />
+				) : page.total === 0 ? (
 					<div class="mt-6 rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm dark:border-slate-700 dark:bg-night-raised">
 						<p class="text-lg font-semibold">Nothing matched “{query}”.</p>
 						<p class="mt-2 text-ink-muted dark:text-slate-400">

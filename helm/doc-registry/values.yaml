@@ -1,0 +1,223 @@
+# Default values for doc-registry.
+# Tuned for a local single-node cluster (Rancher Desktop / Docker Desktop).
+
+replicaCount: 1
+
+# Update strategy, applied as-is.
+#
+# maxSurge: 0 is not the usual default, and it is not about the volume this
+# release no longer has. **Strapi migrates the database schema at boot.** With
+# maxSurge: 1 the new pod boots while the old one is still running, so two
+# Strapi versions migrate the same database at the same time — which is how a
+# deploy ends in `duplicate key value violates unique constraint
+# pg_type_typname_nsp_index`, observed on the very first boot against an empty
+# database. Draining first costs a few seconds of downtime and removes the race.
+#
+# Raising replicaCount reintroduces it, because old and new pods still overlap
+# during the update. Anything above 1 needs a migration story first.
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxSurge: 0
+    maxUnavailable: 1
+
+image:
+  repository: doc-registry
+  # Defaults to .Chart.AppVersion when empty.
+  tag: ""
+  # IfNotPresent so a locally built image is used without a registry push.
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  # Defaults to the fullname template when empty.
+  name: ""
+
+podAnnotations: {}
+podLabels: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  # Must match the "app" user baked into doc-registry/Dockerfile. 1000 is
+  # deliberately avoided there — the node base image already uses it.
+  runAsUser: 10001
+  runAsGroup: 10001
+  fsGroup: 10001
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  # Strapi writes to public/uploads, /tmp and $HOME at run time. All three are
+  # mounted as emptyDir volumes, so the image itself stays read-only — and
+  # nothing that has to outlive the pod is written to any of them.
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+service:
+  type: ClusterIP
+  port: 1337
+
+# On by default, like doc-portal's: the admin panel is a browser application,
+# and a CMS nobody can open is not a useful default.
+ingress:
+  enabled: true
+  # Empty uses the cluster's default IngressClass. Rancher Desktop ships
+  # "traefik" as the default.
+  className: ""
+  annotations: {}
+  hosts:
+    - host: doc-registry.localhost
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 512Mi
+  limits:
+    # No CPU limit: Strapi is bursty while it boots and migrates the schema.
+    # 1Gi because the admin panel is served from a Node process that holds the
+    # whole bundle in memory.
+    memory: 1Gi
+
+# Strapi answers /_health with 204 once the HTTP server is up.
+probes:
+  path: /_health
+  startup:
+    enabled: true
+    initialDelaySeconds: 10
+    periodSeconds: 5
+    # Generous: the first boot migrates the full schema against an empty
+    # database and seeds it before the server starts listening.
+    failureThreshold: 60
+  liveness:
+    enabled: true
+    periodSeconds: 15
+    failureThreshold: 3
+  readiness:
+    enabled: true
+    periodSeconds: 10
+    failureThreshold: 3
+
+# ---------------------------------------------------------------------------
+# Database.
+#
+# Points at the doc-registry-db release. The password is never duplicated here:
+# it is read from the Secret that chart owns, through a secretKeyRef.
+#
+# The registry keeps its state there and nowhere else, which is what makes this
+# release stateless: no volume, a plain rolling update, and `replicaCount` free
+# to move. Install doc-registry-db first — Strapi migrates its schema on boot
+# and crash-loops until the database answers.
+#
+# sqlite is still in doc-registry/config/database.ts and is what `npm run
+# develop` uses locally. It is deliberately not reachable from this chart: a
+# SQLite file in a pod with no volume is a registry that silently empties
+# itself on every restart.
+# ---------------------------------------------------------------------------
+database:
+  client: postgres
+  host: doc-registry-db
+  port: 5432
+  name: strapi
+  username: strapi
+  # Secret holding the password, owned by the doc-registry-db release.
+  existingSecret: doc-registry-db
+  passwordKey: POSTGRES_PASSWORD
+  ssl: false
+  pool:
+    min: 2
+    max: 10
+  # Strapi migrates its own schema on boot; this is how long it waits for the
+  # database to accept a connection before giving up.
+  connectionTimeout: 60000
+
+# ---------------------------------------------------------------------------
+# Strapi application secrets.
+#
+# Generated on first install and preserved across upgrades by reading them back
+# from the live Secret. That is not cosmetic: rotating ENCRYPTION_KEY makes
+# already-stored encrypted fields unreadable, and rotating APP_KEYS or
+# ADMIN_JWT_SECRET signs every existing admin out.
+#
+# Set any of these to pin it, or point existingSecret at a Secret you manage.
+# ---------------------------------------------------------------------------
+strapi:
+  existingSecret: ""
+  appKeys: ""
+  apiTokenSalt: ""
+  adminJwtSecret: ""
+  transferTokenSalt: ""
+  jwtSecret: ""
+  encryptionKey: ""
+
+# ---------------------------------------------------------------------------
+# Application configuration, rendered into a ConfigMap and injected via envFrom.
+# ---------------------------------------------------------------------------
+app:
+  # Public origin as the browser sees it. Behind an ingress this differs from
+  # the in-cluster address, and Strapi needs it to build the absolute URLs it
+  # hands to the admin panel. Left empty the UI calls back to host:port, which
+  # does not resolve from a browser.
+  #
+  # Defaults to the first ingress host when ingress.enabled and this is empty.
+  url: ""
+
+  # src/index.ts loads the sixteen placeholder products copied from
+  # doc-portal/src/lib/products.ts into an *empty* collection on boot. It never
+  # touches a collection that already has rows, so this is safe to leave on —
+  # and turning it off after the first boot changes nothing.
+  seedProducts: true
+
+  # Grant the public role find/findOne on /api/products, so doc-portal can read
+  # the catalogue over HTTP without an API token. Additive and idempotent;
+  # false leaves the role exactly as an administrator left it.
+  publicRead: true
+
+  # Strapi phones home on boot unless this is set.
+  telemetryDisabled: true
+
+  # Arbitrary extra entries, merged verbatim into the same ConfigMap and so
+  # injected as env vars too:
+  #   extraConfig:
+  #     LOG_LEVEL: debug
+  extraConfig: {}
+
+# ---------------------------------------------------------------------------
+# Uploads.
+#
+# There is deliberately no volume in this release. The default upload provider
+# writes to /app/public/uploads, which is mounted as an emptyDir — so **media
+# uploaded through the admin UI does not survive the pod**, while the rows in
+# doc-registry-db that reference it do.
+#
+# That is the accepted cost of a stateless CMS, and it is a real one: the
+# registry's own content is text, and a product entry needs no attachment, but
+# anything a person drags into the Media Library is scratch space. Give the
+# upload plugin a remote provider (S3, Cloudinary) in
+# doc-registry/config/plugins.ts the day media has to last — that keeps the
+# release stateless, which re-adding a claim here would not.
+# ---------------------------------------------------------------------------
+
+# Flags passed to the Node process, e.g. "--max-old-space-size=768".
+nodeOptions: ""
+
+# Additional raw environment variables (full valueFrom syntax available), e.g.
+#   - name: SOME_SECRET
+#     valueFrom:
+#       secretKeyRef: { name: registry, key: token }
+extraEnv: []
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
