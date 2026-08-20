@@ -37,6 +37,7 @@ export function IconButton({
 	disabled = false,
 	tone = 'plain',
 	size = 'md',
+	tooltip = size === 'sm' ? 'native' : 'element',
 }: {
 	icon: IconName;
 	/** The accessible name, and the tooltip text. Always both. */
@@ -45,6 +46,22 @@ export function IconButton({
 	disabled?: boolean;
 	tone?: IconButtonTone;
 	size?: 'sm' | 'md';
+	/**
+	 * `element` draws the tooltip below the button; `native` falls back to a
+	 * `title` attribute.
+	 *
+	 * The distinction is about clipping, not taste. The band rail's controls live
+	 * inside the board's `overflow: auto` scroll container, and an absolutely
+	 * positioned tooltip is clipped at that container's edge — the same trap that
+	 * makes DragOverlay mandatory in StoryMapBoard. A native tooltip is drawn by
+	 * the browser outside the document, so it cannot be clipped.
+	 *
+	 * `title` is mouse-only, which is why it is not the default. It is acceptable
+	 * here because these particular controls are duplicated for keyboard users:
+	 * every band move and delete is also reachable from a card's menu, and the
+	 * `aria-label` below is the accessible name either way.
+	 */
+	tooltip?: 'element' | 'native';
 }) {
 	const box = size === 'sm' ? 'h-7 w-7' : 'h-9 w-9';
 
@@ -55,6 +72,7 @@ export function IconButton({
 				onClick={onClick}
 				disabled={disabled}
 				aria-label={label}
+				title={tooltip === 'native' ? label : undefined}
 				className={`inline-flex ${box} items-center justify-center rounded-full transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:cursor-not-allowed disabled:opacity-40 motion-reduce:transition-none ${TONES[tone]}`}
 			>
 				<Icon name={icon} className={size === 'sm' ? 'h-4 w-4' : 'h-[1.125rem] w-[1.125rem]'} />
@@ -63,12 +81,14 @@ export function IconButton({
 			{/* No `role="tooltip"`: the accessible name already carries these words,
 			    and a tooltip role on a hidden element only invites a second reading
 			    of the same string. This element is here for eyes. */}
+			{tooltip === 'element' && (
 			<span
 				aria-hidden="true"
 				className="pointer-events-none absolute top-full left-1/2 z-50 mt-1.5 -translate-x-1/2 rounded-md bg-ink px-2 py-1 text-xs whitespace-nowrap text-white opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 motion-reduce:transition-none dark:bg-slate-200 dark:text-ink"
 			>
 				{label}
 			</span>
+			)}
 		</span>
 	);
 }

@@ -12,6 +12,7 @@
  * nothing: the ids never leave the tab.
  */
 
+import { parse } from '../storymap/parser.ts';
 import type {
 	ActivityNode,
 	StepNode,
@@ -107,6 +108,32 @@ export function toBoard(document: StoryMapDocument): BoardState {
 		stories,
 		cells,
 	};
+}
+
+/**
+ * Rebuild a board from text the visitor edited, keeping the current product.
+ *
+ * The whole board is replaced except for one field, and the exception is the
+ * point. The product is owned by the picker, which chose it from the registry;
+ * text typed into a box is validated against nothing, so letting it win would
+ * put an unregistered or misspelled shortname into a file with nothing to catch
+ * it. The `product` line still round-trips through the text like everything
+ * else — it is read, and then ignored.
+ *
+ * A `.storymap` file *on disk* is a different case and is treated differently:
+ * there the product comes from the file, because naming its product is how the
+ * shortname travels between people at all. See the import path in
+ * StoryMapBoard.tsx.
+ *
+ * @throws {StoryMapParseError} when the text does not parse; the caller shows
+ *         the problems and leaves the board alone.
+ */
+export function applyText(source: string, current: BoardState): BoardState {
+	const parsed = parse(source);
+	// Ids are per-document and never leave the tab, so restarting the counter
+	// keeps them short and keeps this a deterministic function of its inputs.
+	resetIds();
+	return { ...toBoard(parsed), product: current.product };
 }
 
 export function toDocument(board: BoardState): StoryMapDocument {

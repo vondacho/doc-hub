@@ -12,7 +12,16 @@
 
 import type { Problem } from '../../lib/storymap/problems.ts';
 
-export function ProblemList({ problems, onDismiss }: { problems: readonly Problem[]; onDismiss: () => void }) {
+export function ProblemList({
+	problems,
+	onDismiss,
+	subject = 'That file',
+}: {
+	problems: readonly Problem[];
+	onDismiss: () => void;
+	/** What was wrong — a picked file, or text edited in the preview. */
+	subject?: string;
+}) {
 	if (problems.length === 0) return null;
 
 	return (
@@ -22,7 +31,7 @@ export function ProblemList({ problems, onDismiss }: { problems: readonly Proble
 		>
 			<div className="flex items-start justify-between gap-4">
 				<h2 className="font-semibold">
-					{problems.length === 1 ? 'That file has a problem' : `That file has ${problems.length} problems`}
+					{problems.length === 1 ? `${subject} has a problem` : `${subject} has ${problems.length} problems`}
 				</h2>
 				<button
 					type="button"

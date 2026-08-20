@@ -82,6 +82,23 @@ html {
 }
 
 /*
+ * A closed <dialog> is hidden — restated here, as an author rule.
+ *
+ * Browsers already do this in their user-agent stylesheet, but *any* author rule
+ * beats a UA rule regardless of specificity, so a single utility class that sets
+ * `display` on a <dialog> silently pins it open: it renders inline in the page
+ * flow, with no backdrop, visible before it is ever opened and still visible
+ * after close() — which reads as a dialog that cannot be dismissed.
+ *
+ * That is exactly what one `flex` class on the preview dialog did. This rule has
+ * specificity (0,1,1) against a utility's (0,1,0), so it wins and the bug cannot
+ * come back. Lay dialogs out with an inner element.
+ */
+dialog:not([open]) {
+  display: none;
+}
+
+/*
  * The board is the one place in doc-hub with a horizontal scroll region, and
  * `position: sticky` inside it only works if no ancestor between the sticky
  * element and the scroll container has `overflow` set to anything but visible.

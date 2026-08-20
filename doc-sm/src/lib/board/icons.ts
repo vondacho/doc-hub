@@ -52,6 +52,9 @@ export const icons = {
 	/** Confirmation, shown briefly in place of the copy glyph. */
 	check: 'm4 12 5 5L20 6',
 
+	/** Arrow coming down onto a surface — put this text into the board. */
+	apply: 'M12 3v12m0 0 4-4m-4 4-4-4M4 19h16',
+
 	close: 'M6 6l12 12M18 6 6 18',
 	plus: 'M12 5v14M5 12h14',
 	up: 'm18 15-6-6-6 6',

@@ -31,6 +31,18 @@ import { nextId } from './convert.ts';
 
 export type BoardAction =
 	| { type: 'import'; board: BoardState }
+	/**
+	 * Replace the whole board from text the visitor edited in the preview.
+	 *
+	 * Distinct from `import` in exactly one way, and it is the way that matters:
+	 * this does **not** clear the undo history. Importing a file opens a
+	 * different document, so undoing back into the one it replaced would be a
+	 * surprise rather than a rescue. Editing the text of the map you already have
+	 * is an edit of that map — arguably the largest single edit the tool offers —
+	 * and being unable to undo it would make the preview dangerous to experiment
+	 * in, which is most of what it is for.
+	 */
+	| { type: 'applyText'; board: BoardState }
 	| { type: 'reset' }
 	| { type: 'setMapTitle'; title: string }
 	| { type: 'setProduct'; product: string | null }
@@ -55,6 +67,7 @@ export function resetsHistory(action: BoardAction): boolean {
 export function reduce(board: BoardState, action: BoardAction): BoardState {
 	switch (action.type) {
 		case 'import':
+		case 'applyText':
 			return action.board;
 
 		case 'reset':

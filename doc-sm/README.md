@@ -63,6 +63,63 @@ So React is here for exactly one component, `<StoryMapBoard client:only>`. Every
 other page is server-rendered HTML with no script attached. The day a second
 island appears is the day to ask whether this is still a documentation site.
 
+## The toolbar
+
+The actions are icon buttons: undo and redo, then add-activity / add-release /
+load-the-example, then import, preview and export, with a rule between the
+groups. Eight labelled pills wrapped onto two lines on a laptop and pushed the
+board below the fold, which on a tool whose point is seeing a wall of cards at
+once is a real cost.
+
+An icon is never the only signal, for the same reason colour is never the only
+signal on a card. Every button carries its words in an `aria-label`, and a
+tooltip that appears on hover **and on keyboard focus** — a `title` attribute
+alone is mouse-only, and the person who cannot see a pointer resting on a button
+is exactly the person who needs the label. The small in-board controls (the band
+rail's move and delete) do use `title`, because they sit inside the board's
+scroll container where an absolutely positioned tooltip would be clipped, and
+because every one of them is also reachable from a card's menu.
+
+**Preview** (the eye) opens the `.storymap` file this board would export, in a
+dialog, with copy and apply buttons. It is a native `<dialog>` — focus trap,
+inert background and Escape come with it rather than being hand-written.
+
+The text is **editable**, and applying it replaces the board. For some changes
+that is plainly the better tool: renaming six stories, or reordering a whole
+activity, is a find-and-replace there and twelve drags out here. The draft is
+seeded when the dialog opens and belongs to you from then on — closing without
+applying discards it, which the footer says.
+
+Applying is **undoable**. It uses `applyText` rather than `import` precisely so
+the history survives (see the action's comment in `src/lib/board/reducer.ts`):
+rewriting a board by hand is the largest single edit the tool offers and should
+be the easiest to take back. A parse failure changes nothing — the problems
+appear above the text, with line and column, and the board is untouched.
+
+### The product line is ignored on apply
+
+`product "…"` round-trips through the preview text like everything else, and
+editing it there does nothing. The product is owned by the picker, which chose
+it from the registry; text typed into a box is validated against nothing, and
+letting it win would put an unregistered or misspelled shortname into a file
+with nothing to catch it. The dialog says so up front rather than leaving it to
+be discovered by an edit that appears to have been ignored — because it has.
+
+The asymmetry with **file import** is deliberate: a `.storymap` file on disk
+*does* set the product, because naming its product is how the shortname travels
+between people at all. `applyText` in `src/lib/board/convert.ts` is the one
+place that difference lives.
+
+Copying tries `navigator.clipboard` and falls back to `execCommand`, because the
+modern API needs a secure context and doc-sm is served over plain HTTP through
+the ingress. That works on a local cluster — browsers trust `*.localhost` — and
+would quietly stop working the first time this is deployed somewhere real
+without TLS. If both fail the text is selected and the dialog says which keys to
+press, rather than leaving a button that silently did nothing.
+
+The two buttons on the empty board keep their words. They are the onboarding
+path, and two unexplained circles on an otherwise blank page would be a riddle.
+
 ## The DSL
 
 Full reference at `/dsl`; the grammar lives in `src/lib/storymap/`.

@@ -41,7 +41,7 @@ import {
 import { sortableKeyboardCoordinates } from '@dnd-kit/sortable';
 import { useCallback, useEffect, useMemo, useReducer, useState } from 'react';
 import { clearFileInput, downloadText, filenameFor, readTextFile } from '../../lib/files.ts';
-import { resetIds, toBoard, toDocument } from '../../lib/board/convert.ts';
+import { applyText, resetIds, toBoard, toDocument } from '../../lib/board/convert.ts';
 import {
 	canRedo,
 	canUndo,
@@ -135,15 +135,51 @@ export default function StoryMapBoard({ products, productsUnavailable, registryU
 	}, []);
 
 	/**
-	 * Serialising is cheap, but not free on a large board, and it would otherwise
-	 * run on every keystroke of every card edit. Gated on the dialog being open so
-	 * the cost is paid only while somebody is looking — and while they are, it
-	 * tracks the board live, which is what makes the preview a way to learn the
-	 * format rather than a snapshot.
+	 * The text the dialog opens with.
+	 *
+	 * Gated on the dialog being open so a large board is not re-serialised on
+	 * every keystroke of every card edit. It is a snapshot and not a live view —
+	 * the dialog is modal, so the board behind it cannot change while it is up,
+	 * and the draft belongs to the visitor from the moment it opens.
 	 */
 	const preview = useMemo(
 		() => (previewing ? serialize(toDocument(board)) : ''),
 		[previewing, board],
+	);
+
+	/**
+	 * Put edited preview text back onto the board.
+	 *
+	 * Two things separate this from importing a file, and both are deliberate.
+	 *
+	 * **The product is not taken from the text.** It is carried over from the
+	 * board, which got it from the picker, which got it from the registry. A
+	 * `.storymap` file on disk is entitled to name its own product — that is how
+	 * the shortname travels — but text somebody just typed into a box is not
+	 * validated against anything, and letting it win would put an unregistered or
+	 * misspelled shortname into a file with nothing to catch it. So the line
+	 * round-trips and is then ignored, which is what the dialog says it does.
+	 *
+	 * **It is undoable.** `applyText` rather than `import`, so the history
+	 * survives — see the comment on the action in reducer.ts. Rewriting a board
+	 * by hand is the largest single edit the tool offers, and it should be the
+	 * easiest to take back.
+	 */
+	const applyPreview = useCallback(
+		(source: string): readonly Problem[] => {
+			let next;
+			try {
+				next = applyText(source, board);
+			} catch (error) {
+				if (!(error instanceof StoryMapParseError)) throw error;
+				return error.problems;
+			}
+
+			send({ type: 'applyText', board: next });
+			setDirty(true);
+			return [];
+		},
+		[board],
 	);
 
 	const exportFile = useCallback(() => {
@@ -343,6 +379,7 @@ export default function StoryMapBoard({ products, productsUnavailable, registryU
 				open={previewing}
 				filename={filenameFor(board.title)}
 				text={preview}
+				onApply={applyPreview}
 				onClose={() => setPreviewing(false)}
 			/>
 
