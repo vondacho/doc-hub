@@ -17,6 +17,7 @@ import { useDroppable } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import type { CSSProperties, ReactNode } from 'react';
 import type { CellKey } from '../../lib/board/state.ts';
+import { Icon } from './Icon.tsx';
 
 export function Cell({
 	cell,
@@ -52,13 +53,15 @@ export function Cell({
 				</SortableContext>
 			</ul>
 
+			{/* Kept wordless but not label-less: what it adds is unambiguous from
+			    where it sits, and the accessible name names the cell it adds to. */}
 			<button
 				type="button"
 				onClick={onAdd}
 				aria-label={`Add a story to ${label}`}
-				className="mt-1.5 w-full rounded-md border border-transparent px-2 py-1 text-xs text-ink-muted opacity-0 transition hover:border-slate-300 hover:text-brand focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand group-hover/cell:opacity-100 motion-reduce:transition-none dark:text-slate-400 dark:hover:border-slate-600 dark:hover:text-sky-400"
+				className="mt-1.5 flex w-full items-center justify-center rounded-md border border-transparent px-2 py-1 text-ink-muted opacity-0 transition hover:border-slate-300 hover:text-brand focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand group-hover/cell:opacity-100 motion-reduce:transition-none dark:text-slate-400 dark:hover:border-slate-600 dark:hover:text-sky-400"
 			>
-				+ Story
+				<Icon name="plus" className="h-4 w-4" />
 			</button>
 		</div>
 	);

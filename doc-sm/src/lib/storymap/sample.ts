@@ -6,6 +6,9 @@
  * as "load the example" so that a first-time visitor sees a populated board
  * instead of an empty grid and a file picker.
  *
+ * Its `product` names a product from doc-registry's seed, so the picker shows it
+ * selected rather than flagged as unknown on a stock local cluster.
+ *
  * Two of its cards are carrying a point. `story "Saved searches"` has no `@` and
  * is therefore below the line — known, not committed to. `step "Open a product"`
  * has no body at all: a step that has been identified and has no stories yet.
@@ -20,6 +23,8 @@ export const SAMPLE_SOURCE = `// Story map exported by doc-sm.
 // is the source, this file is a render of it.
 
 storymap "Doc-Hub Onboarding" {
+  product "client-onboarding"
+
   release "MVP"
   release "R2"
   release "Later"

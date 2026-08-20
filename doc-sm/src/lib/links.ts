@@ -10,10 +10,12 @@
  * server reading a local .env, then a default that matches what the chart ships
  * — so an unset value and the default look identical, and neither looks broken.
  *
- * doc-sm reads no registry and calls no API, so the only entries here are links
- * out. The file exists at two entries rather than being deferred because the
- * alternative is hard-coding a hostname in a template, which is how the next
- * environment gets a link that 404s.
+ * Two of these are browser-facing links and one is not, and the distinction is
+ * load-bearing — it is the same split doc-portal draws between REGISTRY_URL and
+ * REGISTRY_API_URL. A link is resolved by the visitor's browser and must be an
+ * address the browser can reach; a call is made by this server and must not be,
+ * because leaving the cluster to come back in to a Service one DNS name away
+ * breaks the moment the ingress is disabled.
  */
 
 function fromEnv(name: string, fallback: string): string {
@@ -26,11 +28,23 @@ export function docPortalUrl(): string {
 }
 
 /**
- * The registry's admin UI, as the *browser* sees it.
+ * The registry's admin UI, as the *browser* sees it — a link, not a call.
  *
- * A link, not a call: doc-sm never fetches from it. A story map is a file, and
- * the registry holds product identity — the two do not meet, by design.
+ * Where somebody goes to register a product that is missing from the picker.
  */
 export function registryUrl(): string {
   return fromEnv('REGISTRY_URL', 'http://doc-registry.localhost');
+}
+
+/**
+ * The same registry, as *this server* sees it — the one entry here that is an
+ * in-cluster call rather than a browser-facing link.
+ *
+ * Read once per render of the board page, to fill the product picker. It is the
+ * only request doc-sm makes, and it must not be an ingress host: doc-registry is
+ * a release in the same namespace, so the Service name is enough.
+ * Cross-namespace would need doc-registry.<namespace>.svc.
+ */
+export function registryApiUrl(): string {
+  return fromEnv('REGISTRY_API_URL', 'http://localhost:1337');
 }

@@ -84,6 +84,16 @@ export interface Story {
 
 export interface BoardState {
 	readonly title: string;
+	/**
+	 * The registered product's shortname (doc-registry's `slug`), or null.
+	 *
+	 * Only the shortname is held. The display name is looked up from the product
+	 * list for rendering and is never stored on the board, because the name is
+	 * editable in the CMS while the slug is the identity — keeping a copy of the
+	 * name would mean the board could disagree with the registry about what a
+	 * product is called, and it is the file that would be wrong.
+	 */
+	readonly product: string | null;
 	readonly notes: readonly string[];
 	/** Band order, top to bottom. UNASSIGNED is implicit and always last. */
 	readonly releaseOrder: readonly Id[];
@@ -98,6 +108,7 @@ export interface BoardState {
 export function emptyBoard(title = 'Untitled story map'): BoardState {
 	return {
 		title,
+		product: null,
 		notes: [],
 		releaseOrder: [],
 		releases: {},

@@ -5,16 +5,22 @@ metadata:
   labels:
     {{- include "doc-sm.labels" . | nindent 4 }}
 data:
-  # Both are read by src/lib/links.ts through process.env at call time, and both
-  # are **browser-facing links**: the visitor's browser resolves them, so an
-  # in-cluster address like http://doc-registry:1337 would be wrong here.
-  #
-  # doc-portal's ConfigMap carries a REGISTRY_API_URL alongside these because it
-  # fetches the catalog while rendering. doc-sm has no such entry, and that
-  # absence is the point: a story map is a file the visitor picked, so this
-  # component calls nothing at all.
+  # Read by src/lib/links.ts through process.env at call time. The first two are
+  # **browser-facing links** — the visitor's browser resolves them, so an
+  # in-cluster address would be wrong.
   DOC_PORTAL_URL: {{ .Values.app.docPortalUrl | quote }}
   REGISTRY_URL: {{ .Values.app.registryUrl | quote }}
+
+  # The one address here the *server* resolves rather than the visitor's
+  # browser: the board page reads the registered products from it on every
+  # request, to fill the product picker. An ingress host here would leave the
+  # cluster and come back in to reach a Service one DNS name away — and would
+  # break entirely the moment the ingress is disabled, which the in-cluster name
+  # does not care about.
+  #
+  # This is the only request doc-sm makes. If it fails, the picker degrades to a
+  # text box and the board still works; see src/lib/products.ts.
+  REGISTRY_API_URL: {{ .Values.app.registryApiUrl | quote }}
   {{- range $key, $value := .Values.app.extraConfig }}
   {{ $key }}: {{ $value | quote }}
   {{- end }}

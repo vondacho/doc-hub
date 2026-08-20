@@ -72,6 +72,20 @@ export interface StoryNode {
  */
 export interface StoryMapDocument {
 	readonly title: string;
+	/**
+	 * The registered product this map is about, held as its **shortname** — the
+	 * `slug` doc-registry assigns, not the display name.
+	 *
+	 * The slug and not the name because the name is editable in the CMS and the
+	 * slug is the identity: a map that recorded "Client Onboarding" would stop
+	 * matching its product the day somebody fixed the capitalisation. It is also
+	 * what a later reader would join on.
+	 *
+	 * `null` for a map that is not about a registered product — a spike, a
+	 * workshop, a product that has not been registered yet. That is an ordinary
+	 * state and not a missing value to be filled in.
+	 */
+	readonly product: string | null;
 	readonly notes: readonly string[];
 	readonly releases: readonly ReleaseNode[];
 	readonly activities: readonly ActivityNode[];
@@ -79,5 +93,5 @@ export interface StoryMapDocument {
 
 /** The empty document a fresh board starts from. */
 export function emptyDocument(title = 'Untitled story map'): StoryMapDocument {
-	return { title, notes: [], releases: [], activities: [] };
+	return { title, product: null, notes: [], releases: [], activities: [] };
 }

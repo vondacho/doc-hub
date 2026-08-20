@@ -36,6 +36,7 @@ import {
 } from '../../lib/board/state.ts';
 import { kindLabel } from '../../lib/board/kinds.ts';
 import { BandRail } from './BandRail.tsx';
+import { Icon } from './Icon.tsx';
 import { Card } from './Card.tsx';
 import type { CardMenuAction } from './CardMenu.tsx';
 import { Cell } from './Cell.tsx';
@@ -154,10 +155,11 @@ export function BoardGrid({
 							key={`empty-${activityId}`}
 							type="button"
 							onClick={() => dispatch({ type: 'addStep', activityId, index: 0 })}
+							aria-label={`Add the first step to ${activity.title}`}
 							style={{ gridColumn: span.start + 2, gridRow: STEP_ROW }}
-							className="rounded-lg border border-dashed border-slate-300 px-2 py-2 text-xs text-ink-muted hover:border-brand hover:text-brand focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand dark:border-slate-600 dark:text-slate-400 dark:hover:border-sky-400 dark:hover:text-sky-400"
+							className="flex items-center justify-center rounded-lg border border-dashed border-slate-300 px-2 py-2 text-ink-muted hover:border-brand hover:text-brand focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand dark:border-slate-600 dark:text-slate-400 dark:hover:border-sky-400 dark:hover:text-sky-400"
 						>
-							+ Step
+							<Icon name="plus" className="h-4 w-4" />
 						</button>
 					);
 				})}

@@ -49,6 +49,7 @@ export interface Token {
 /** The words that are keywords rather than identifiers in a `.storymap` file. */
 export const STORYMAP_KEYWORDS: ReadonlySet<string> = new Set([
 	'storymap',
+	'product',
 	'release',
 	'activity',
 	'step',

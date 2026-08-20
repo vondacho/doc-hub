@@ -31,13 +31,17 @@ ingress:
           pathType: Prefix
 
 # doc-portal and doc-registry are separate releases in this same namespace.
-# These are the ingress hosts their own values-local.yaml files enable on this
-# cluster, so both are reachable from the browser — and dead links when those
-# releases are not installed, which doc-sm does not care about: it never calls
-# either one.
+# The first two are the ingress hosts their own values-local.yaml files enable on
+# this cluster, so both are reachable from the host browser.
+#
+# The third is not an ingress host and must not be: it is the in-cluster Service
+# the board page reads the product list from. Install doc-registry before
+# doc-sm and the picker is populated; install it after, or not at all, and the
+# picker falls back to a text box — the board does not wait for it.
 app:
   docPortalUrl: http://doc-portal.localhost
   registryUrl: http://doc-registry.localhost
+  registryApiUrl: http://doc-registry:1337
 
 resources:
   requests:

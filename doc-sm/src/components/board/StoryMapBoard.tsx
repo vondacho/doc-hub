@@ -61,11 +61,13 @@ import {
 	type BoardState,
 	type Id,
 } from '../../lib/board/state.ts';
+import type { Product } from '../../lib/products.ts';
 import { parse } from '../../lib/storymap/parser.ts';
 import { StoryMapParseError, type Problem } from '../../lib/storymap/problems.ts';
 import { SAMPLE_SOURCE } from '../../lib/storymap/sample.ts';
 import { serialize } from '../../lib/storymap/serialize.ts';
 import { BoardGrid } from './BoardGrid.tsx';
+import { PreviewDialog } from './PreviewDialog.tsx';
 import { ProblemList } from './ProblemList.tsx';
 import { Toolbar } from './Toolbar.tsx';
 
@@ -77,7 +79,24 @@ const step = undoable<BoardState, BoardAction>(reduce, {
 	resets: resetsHistory,
 });
 
-export default function StoryMapBoard() {
+/**
+ * The product list and the registry's address are passed in from the Astro page
+ * rather than fetched here.
+ *
+ * The island could fetch them itself, and that would keep the board page
+ * prerendered — but it would make doc-registry a *browser-facing* address and
+ * lean on its CORS defaults, which are Strapi's out-of-the-box `origin: '*'` and
+ * which nobody in this repo has consciously decided. Reading it server-side
+ * keeps the call inside the cluster, where the existing REGISTRY_API_URL
+ * convention already applies.
+ */
+export interface StoryMapBoardProps {
+	readonly products: readonly Product[];
+	readonly productsUnavailable: string | null;
+	readonly registryUrl: string;
+}
+
+export default function StoryMapBoard({ products, productsUnavailable, registryUrl }: StoryMapBoardProps) {
 	const [history, send] = useReducer(
 		step as (state: History<BoardState>, action: BoardAction | HistoryAction) => History<BoardState>,
 		undefined,
@@ -89,6 +108,7 @@ export default function StoryMapBoard() {
 	const [dragging, setDragging] = useState<{ id: Id; title: string; kind: 'activity' | 'step' | 'story' } | null>(null);
 	// "Changed since the last import or export." The only state doc-sm can lose.
 	const [dirty, setDirty] = useState(false);
+	const [previewing, setPreviewing] = useState(false);
 
 	const dispatch = useCallback((action: BoardAction) => {
 		send(action);
@@ -113,6 +133,18 @@ export default function StoryMapBoard() {
 			setProblems(error.problems);
 		}
 	}, []);
+
+	/**
+	 * Serialising is cheap, but not free on a large board, and it would otherwise
+	 * run on every keystroke of every card edit. Gated on the dialog being open so
+	 * the cost is paid only while somebody is looking — and while they are, it
+	 * tracks the board live, which is what makes the preview a way to learn the
+	 * format rather than a snapshot.
+	 */
+	const preview = useMemo(
+		() => (previewing ? serialize(toDocument(board)) : ''),
+		[previewing, board],
+	);
 
 	const exportFile = useCallback(() => {
 		downloadText(filenameFor(board.title), serialize(toDocument(board)));
@@ -280,6 +312,11 @@ export default function StoryMapBoard() {
 		<div className="flex flex-col gap-4">
 			<Toolbar
 				title={board.title}
+				product={board.product}
+				products={products}
+				productsUnavailable={productsUnavailable}
+				registryUrl={registryUrl}
+				onProduct={(product) => dispatch({ type: 'setProduct', product })}
 				dirty={dirty}
 				canUndo={canUndo(history)}
 				canRedo={canRedo(history)}
@@ -292,6 +329,7 @@ export default function StoryMapBoard() {
 					load(text);
 				}}
 				onExport={exportFile}
+				onPreview={() => setPreviewing(true)}
 				onLoadSample={() => load(SAMPLE_SOURCE)}
 				onAddActivity={() => dispatch({ type: 'addActivity', index: board.activityOrder.length })}
 				onAddRelease={() => dispatch({ type: 'addRelease', index: board.releaseOrder.length })}
@@ -300,6 +338,13 @@ export default function StoryMapBoard() {
 			/>
 
 			<ProblemList problems={problems} onDismiss={() => setProblems([])} />
+
+			<PreviewDialog
+				open={previewing}
+				filename={filenameFor(board.title)}
+				text={preview}
+				onClose={() => setPreviewing(false)}
+			/>
 
 			{empty ? (
 				<EmptyBoard onLoadSample={() => load(SAMPLE_SOURCE)} onAddActivity={() => dispatch({ type: 'addActivity', index: 0 })} />

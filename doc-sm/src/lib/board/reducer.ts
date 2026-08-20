@@ -33,6 +33,7 @@ export type BoardAction =
 	| { type: 'import'; board: BoardState }
 	| { type: 'reset' }
 	| { type: 'setMapTitle'; title: string }
+	| { type: 'setProduct'; product: string | null }
 	| { type: 'retitle'; kind: CardKind | 'release'; id: Id; title: string }
 	| { type: 'addActivity'; index: number }
 	| { type: 'addStep'; activityId: Id; index: number }
@@ -57,10 +58,13 @@ export function reduce(board: BoardState, action: BoardAction): BoardState {
 			return action.board;
 
 		case 'reset':
-			return { ...board, notes: [], releaseOrder: [], releases: {}, activityOrder: [], activities: {}, steps: {}, stories: {}, cells: {} };
+			return { ...board, product: null, notes: [], releaseOrder: [], releases: {}, activityOrder: [], activities: {}, steps: {}, stories: {}, cells: {} };
 
 		case 'setMapTitle':
 			return action.title === board.title ? board : { ...board, title: action.title };
+
+		case 'setProduct':
+			return action.product === board.product ? board : { ...board, product: action.product };
 
 		case 'retitle':
 			return retitle(board, action.kind, action.id, action.title);

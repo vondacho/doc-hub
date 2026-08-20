@@ -61,7 +61,7 @@ and only the first arrow is a hard one.
 ./helm/doc-registry-db/deploy.sh    # first: the registry crash-loops without it
 ./helm/doc-registry/deploy.sh
 ./helm/doc-portal/deploy.sh         # reads the registry, but starts without it
-./helm/doc-sm/deploy.sh             # depends on nothing; deploy it whenever
+./helm/doc-sm/deploy.sh             # reads the registry for its product picker, but opens without it
 ```
 
 That is the whole thing, and all four scripts are the same script: each builds
@@ -373,12 +373,23 @@ build`. This machine currently reports `moby`.
 `doc-sm` is the story mapping board: activities, steps and stories on one board,
 read from and written to a `.storymap` file.
 
-**It is the only release here that depends on nothing.** No database, no volume,
-no registry call, no Secret — and so no install order. Deploy it before or after
-anything else; nothing waits for it and it waits for nothing. Its ConfigMap
-carries two entries against `doc-portal`'s eight, and both are browser-facing
-links rather than in-cluster calls, because this component makes no requests at
-all.
+**It has no data of its own, and one soft dependency.** No database, no volume
+and no Secret. It reads `/api/products` from `doc-registry` once per render of
+the board page, to fill the picker that says which product a map is about — and
+that is the only request it makes.
+
+The dependency is soft in a way `doc-portal`'s is not, and the difference is
+worth stating because it changes the install order. The portal answers **503**
+when its catalog fetch fails: a catalog it cannot read *is* the page, and "I
+could not find out whether this product exists" is a different claim from "it
+does not exist". doc-sm's page is a board, and the registry only fills one
+control — so a failure there degrades the picker to a plain text box for the
+shortname and the board opens, imports, edits and exports exactly as usual.
+
+So there is still no hard install order. Install `doc-registry` first and the
+picker is populated; install it later, or never, and nothing breaks. Its
+ConfigMap carries three entries against `doc-portal`'s eight: two browser-facing
+links and one in-cluster call.
 
 **Nothing it holds can be lost by deleting a pod**, because it holds nothing. A
 story map lives in the file the visitor exports; work that has not been exported

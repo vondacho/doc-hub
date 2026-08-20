@@ -8,14 +8,15 @@
  *
  * ## What survives a round trip
  *
- * | Preserved                                  | Not preserved                       |
- * | ------------------------------------------ | ----------------------------------- |
- * | Map title                                  | Comments — every one of them        |
- * | Release set, and band order                | Blank lines                         |
- * | Activity / step / story structure and order | Indentation width and style        |
- * | Priority order within a cell               | `@"Bare"` vs `@Bare` (normalised)   |
- * | Release assignment, and unassignment       | `{ }` on an empty card (omitted)    |
- * | Notes, and their order                     | `release` interleaved with activities (hoisted) |
+ * | Preserved                                   | Not preserved                        |
+ * | ------------------------------------------- | ------------------------------------ |
+ * | Map title                                   | Comments — every one of them         |
+ * | The product shortname                       | Blank lines                          |
+ * | Release set, and band order                 | Indentation width and style          |
+ * | Activity / step / story structure and order | `@"Bare"` vs `@Bare` (normalised)    |
+ * | Priority order within a cell                | `{ }` on an empty card (omitted)     |
+ * | Release assignment, and unassignment        | `release` interleaved with activities |
+ * | Notes, and their order                      | (both are hoisted to the top)        |
  *
  * The comment loss is the one that will surprise someone, so it is stated in the
  * README and in the banner this file emits, rather than left to be discovered
@@ -53,13 +54,18 @@ export function serialize(document: StoryMapDocument): string {
 	const out: string[] = [BANNER];
 
 	out.push(`storymap ${quote(document.title)} {`);
+
+	// The product first, above everything else, because it is what the map is
+	// *about* — the same order the board puts it in, above the title.
+	if (document.product !== null) out.push(`${INDENT}product ${quote(document.product)}`);
+
 	for (const note of document.notes) out.push(`${INDENT}note ${quote(note)}`);
 
 	// Releases are hoisted above the activities regardless of where they were
 	// written. Band order is declaration order, so this is also the one place
 	// the vertical axis of the board is spelled out in the file.
 	if (document.releases.length > 0) {
-		if (document.notes.length > 0) out.push('');
+		if (document.product !== null || document.notes.length > 0) out.push('');
 		for (const release of document.releases) {
 			if (release.notes.length === 0) {
 				out.push(`${INDENT}release ${quote(release.title)}`);

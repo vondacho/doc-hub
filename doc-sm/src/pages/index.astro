@@ -2,21 +2,28 @@
 import Layout from '../layouts/Layout.astro';
 import StoryMapBoard from '../components/board/StoryMapBoard.tsx';
 import { swatchClass, kindLabel, kindDescription, KIND_ORDER } from '../lib/board/kinds';
-import { docPortalUrl } from '../lib/links';
+import { docPortalUrl, registryApiUrl, registryUrl } from '../lib/links';
+import { fetchProducts } from '../lib/products';
 
-// Prerendered, and this is the one place doc-sm departs from doc-portal's
-// all-server posture.
+// Server-rendered, like every other page in doc-hub.
 //
-// This page asks the server for nothing. No configuration is read, no registry
-// is called, and the response is byte-identical for every visitor — the map
-// comes from a file the visitor picks, in their browser, after the page has
-// loaded. Prerendering makes that fact structural instead of a claim in a
-// comment. /healthz stays a server route.
+// This page *was* prerendered, on the argument that it asked the server for
+// nothing: the map comes from a file the visitor picks in their own browser. The
+// product picker ended that. The list of registered products is read from
+// doc-registry on every request, so the response is no longer identical for
+// every visitor, and baking it at build time would hand out a catalogue that is
+// stale the first time somebody registers a product.
 //
-// Drop this the day the board can load a map from a URL.
-export const prerender = true;
+// Deliberately uncached, for the reason doc-portal gives about its own catalogue
+// fetch: a hub about how current your documentation is should not be the one
+// page showing you a stale copy of it.
+//
+// fetchProducts never throws. An unreachable registry costs the picker, not the
+// board — see the note at the top of src/lib/products.ts.
+const { products, unavailable } = await fetchProducts(registryApiUrl());
 
 const portal = docPortalUrl();
+const registry = registryUrl();
 ---
 
 <Layout
@@ -30,9 +37,9 @@ const portal = docPortalUrl();
 			</p>
 			<h1 class="mt-2 text-3xl font-bold sm:text-4xl">Map the work before you plan it</h1>
 			<p class="mt-3 max-w-prose text-ink-muted dark:text-slate-400">
-				Activities across the top, the steps people take underneath them left to right, and the stories
-				stacked into the release that will carry them. Everything below the last release band is known
-				and not committed to.
+				Pick the product, then map it: activities across the top, the steps people take underneath
+				them left to right, and the stories stacked into the release that will carry them. Everything
+				below the last release band is known and not committed to.
 			</p>
 		</header>
 
@@ -67,7 +74,12 @@ const portal = docPortalUrl();
 			invite hydration-mismatch warnings from the ids dnd-kit generates for its
 			announcement region, for markup with no value.
 		-->
-		<StoryMapBoard client:only="react" />
+		<StoryMapBoard
+			client:only="react"
+			products={products}
+			productsUnavailable={unavailable}
+			registryUrl={registry}
+		/>
 
 		<noscript>
 			<div class="rounded-2xl border border-slate-200 p-6 dark:border-slate-700">

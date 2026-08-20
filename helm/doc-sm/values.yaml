@@ -101,16 +101,17 @@ probes:
 # Application configuration.
 # Rendered into a ConfigMap and injected wholesale via envFrom.
 #
-# Both entries are **browser-facing links, not in-cluster calls**: the visitor's
-# browser resolves them, so an address like http://doc-registry:1337 would be
-# wrong even though this component is server-rendered.
+# Two browser-facing links and one in-cluster call, and the distinction is the
+# same one doc-portal draws: a link is resolved by the visitor's browser and must
+# be an address the browser can reach; a call is made by this server and must
+# not be.
 #
-# doc-portal's equivalent block has eight entries and one of them —
-# REGISTRY_API_URL — is an in-cluster call, because the portal fetches the
-# catalog while rendering. doc-sm has no such entry. It reads no registry, holds
-# no database and calls no API: a story map is a file the visitor picked, parsed
-# in their browser. That is why this is the shortest app block in the repo, and
-# why the chart has no Secret.
+# The call is new. doc-sm held nothing and asked nothing of anyone until the
+# board grew a product picker, and a picker needs a list of products. What it
+# does *not* mean is that the map itself goes anywhere: a story map is still a
+# file the visitor picked, edited in their browser and exported back out. The
+# registry supplies one dropdown, and the chart still has no Secret and no
+# volume.
 #
 # src/lib/links.ts reads each one through process.env at call time and falls back
 # to the same default the chart ships, so an unset value and the default look
@@ -121,8 +122,23 @@ app:
   # Linked from the board's footer.
   docPortalUrl: http://doc-portal.localhost
 
-  # The registry's admin UI, as the browser sees it. A link, never a call.
+  # The registry's admin UI, as the browser sees it — where somebody goes to
+  # register a product that is missing from the picker.
   registryUrl: http://doc-registry.localhost
+
+  # The same registry, as *this server* sees it. Read once per render of the
+  # board page to fill the product picker, and the only request doc-sm makes.
+  #
+  # The default is the dev-server address; the chart's own value below is what
+  # the cluster uses. doc-registry is a release in this same namespace, so the
+  # Service name is enough — cross-namespace would need
+  # doc-registry.<namespace>.svc.
+  #
+  # An unreachable registry is not an outage here. doc-portal answers 503 when
+  # its catalog fetch fails, because a catalog it cannot read is the page. This
+  # page is a board, and the registry only fills one control, so a failure
+  # degrades to a text box for the shortname and the board opens as usual.
+  registryApiUrl: http://doc-registry:1337
 
   # Arbitrary extra entries, merged verbatim into the same ConfigMap and so
   # injected as env vars too:

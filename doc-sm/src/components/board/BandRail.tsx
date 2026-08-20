@@ -18,6 +18,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { useEffect, useRef, useState } from 'react';
 import type { BoardAction } from '../../lib/board/reducer.ts';
 import type { BoardState, Id } from '../../lib/board/state.ts';
+import { IconButton } from './IconButton.tsx';
 
 export function BandRail({
 	board,
@@ -128,34 +129,31 @@ function BandLabel({
 				</button>
 			)}
 
-			<div className="mt-1 flex gap-2 text-xs opacity-0 transition group-hover:opacity-100 focus-within:opacity-100 motion-reduce:transition-none">
-				<button
-					type="button"
+			<div className="mt-1 flex gap-0.5 opacity-0 transition group-hover:opacity-100 focus-within:opacity-100 motion-reduce:transition-none">
+				<IconButton
+					icon="up"
+					label={`Move ${release.title} up`}
+					size="sm"
 					disabled={index === 0}
 					onClick={() => dispatch({ type: 'moveRelease', releaseId, index: index - 1 })}
-					className="text-ink-muted hover:text-brand focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand disabled:opacity-40 dark:text-slate-400 dark:hover:text-sky-400"
-				>
-					Up
-				</button>
-				<button
-					type="button"
+				/>
+				<IconButton
+					icon="down"
+					label={`Move ${release.title} down`}
+					size="sm"
 					disabled={index === board.releaseOrder.length - 1}
 					onClick={() => dispatch({ type: 'moveRelease', releaseId, index: index + 1 })}
-					className="text-ink-muted hover:text-brand focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand disabled:opacity-40 dark:text-slate-400 dark:hover:text-sky-400"
-				>
-					Down
-				</button>
+				/>
 				{/* Deleting a band never deletes work — its stories drop below the
-				    line. Said here, on the control, because that is where somebody
-				    hesitates. */}
-				<button
-					type="button"
+				    line. The label says so, because that is where somebody
+				    hesitates, and it is the tooltip as well as the accessible name. */}
+				<IconButton
+					icon="trash"
+					label="Delete release — its stories move below the line"
+					size="sm"
+					tone="danger"
 					onClick={() => dispatch({ type: 'removeRelease', id: releaseId })}
-					title="Its stories move below the line"
-					className="text-ink-muted hover:text-critical focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand dark:text-slate-400"
-				>
-					Delete
-				</button>
+				/>
 			</div>
 		</div>
 	);

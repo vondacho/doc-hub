@@ -7,6 +7,10 @@ Outbound links (browser-facing, resolved per request):
   Documentation hub  -> {{ .Values.app.docPortalUrl }}
   Product registry   -> {{ .Values.app.registryUrl }}
 
+Read by this server (in-cluster), to fill the board's product picker:
+  Product registry   -> {{ .Values.app.registryApiUrl }}
+  If it cannot be reached the picker becomes a text box; the board still works.
+
 Browse the board:
 {{- if .Values.ingress.enabled }}
 {{- range $host := .Values.ingress.hosts }}
@@ -24,9 +28,9 @@ Verify the release:
   helm test {{ .Release.Name }} --namespace {{ .Release.Namespace }}
 
 This release stores nothing. A story map lives in the .storymap file the visitor
-exports, and nothing about it reaches this pod — there is no database, no volume
-and no registry call, so a pod can be deleted at any moment without losing work
-that was already exported. Work that was *not* exported lives only in the
+exports, and nothing about it reaches this pod — there is no database and no
+volume, and the one registry call it makes is a read of the product list. A pod
+can be deleted at any moment without losing work that was already exported. Work that was *not* exported lives only in the
 visitor's tab, which is what the board's unload warning is for.
 
 Reminder: image.tag is pinned with pullPolicy: Never in values-local.yaml, so a

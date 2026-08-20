@@ -245,6 +245,34 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 		return true;
 	}
 
+	/**
+	 * `product "client-onboarding"` — at most one per map.
+	 *
+	 * A second one is an error rather than a last-one-wins overwrite: a map is
+	 * about one product, and two declarations mean a bad merge, which is exactly
+	 * the thing worth surfacing rather than silently resolving.
+	 */
+	function parseProduct(state: { value: string | null; token: Token | null }): boolean {
+		if (!at('keyword', 'product')) return false;
+		const keyword = advance();
+		const shortname = expectString('product', 'A product is its shortname, quoted: product "client-onboarding"');
+		if (shortname === undefined) {
+			synchronize();
+			return true;
+		}
+		if (state.token !== null) {
+			problemAt(
+				keyword,
+				'The product is declared twice.',
+				`Already declared on line ${state.token.line}. A story map is about one product.`,
+			);
+			return true;
+		}
+		state.value = shortname;
+		state.token = keyword;
+		return true;
+	}
+
 	function parseRelease(releases: RawRelease[]): boolean {
 		if (!at('keyword', 'release')) return false;
 		const keyword = advance();
@@ -286,10 +314,11 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 					hint: 'A story map starts with: storymap "Its title" { … }',
 				});
 			}
-			return { title: 'Untitled story map', notes: [], releases: [], activities: [] };
+			return { title: 'Untitled story map', product: null, notes: [], releases: [], activities: [] };
 		}
 
 		let title = 'Untitled story map';
+		const product: { value: string | null; token: Token | null } = { value: null, token: null };
 		let notes: string[] = [];
 		let releases: RawRelease[] = [];
 		let activities: RawActivity[] = [];
@@ -303,7 +332,11 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 			activities = [];
 			parseBody(
 				'storymap',
-				() => parseRelease(releases) || parseActivity(activities) || parseNote(notes),
+				() =>
+					parseProduct(product) ||
+					parseRelease(releases) ||
+					parseActivity(activities) ||
+					parseNote(notes),
 			);
 		}
 
@@ -323,7 +356,7 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 			if (!at('eof') && !at('keyword', 'storymap')) advance();
 		}
 
-		return resolve(title, notes, releases, activities, problems);
+		return resolve(title, product.value, notes, releases, activities, problems);
 	}
 
 	return { parseFile };
@@ -334,6 +367,7 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
  */
 function resolve(
 	title: string,
+	product: string | null,
 	notes: readonly string[],
 	rawReleases: readonly RawRelease[],
 	rawActivities: readonly RawActivity[],
@@ -378,7 +412,7 @@ function resolve(
 		})),
 	}));
 
-	return { title, notes: [...notes], releases, activities };
+	return { title, product, notes: [...notes], releases, activities };
 
 	/*
 	 * An `@` naming a release that was never declared is a hard error, not a

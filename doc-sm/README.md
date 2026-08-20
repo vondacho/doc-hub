@@ -16,10 +16,16 @@ to extract them.
 
 ## The board keeps nothing
 
-There is no database, no volume, no registry call and no autosave. A story map
-is a `.storymap` file: you import one, edit it, and export it again. The file
-belongs in the repository of the product it describes, where it diffs, reviews
-and merges like everything else there.
+There is no database, no volume and no autosave. A story map is a `.storymap`
+file: you import one, edit it, and export it again. The file belongs in the
+repository of the product it describes, where it diffs, reviews and merges like
+everything else there.
+
+doc-sm makes exactly one request, and the map is not in it: the board reads the
+registered products from `doc-registry` to fill the picker that says which
+product a map is about. Nothing about the map itself is ever sent anywhere. If
+that read fails the picker becomes a plain text box and everything else works —
+the registry fills one control, it is not what the page is about.
 
 That is not a limitation, it is the same position `doc-portal` takes about C4 and
 events, in its `src/lib/product-sections.ts`:
@@ -38,7 +44,7 @@ steps, but neither survives the tab.
 
 | Route | What it is |
 |---|---|
-| `/` | The board. Prerendered shell; the board itself is a React island |
+| `/` | The board. Server-rendered shell with the product list; the board itself is a React island |
 | `/dsl` | The `.storymap` format — a worked example, the rules, the grammar |
 | `/healthz` | `{"status":"UP"}` for the chart's probes |
 | `/404` | Two links, because doc-sm has two pages |
@@ -63,6 +69,8 @@ Full reference at `/dsl`; the grammar lives in `src/lib/storymap/`.
 
 ```
 storymap "Doc-Hub Onboarding" {
+  product "client-onboarding"
+
   release "MVP"
   release "R2"
 
@@ -79,8 +87,12 @@ storymap "Doc-Hub Onboarding" {
 }
 ```
 
-Six decisions the format makes, each argued where it is implemented:
+Seven decisions the format makes, each argued where it is implemented:
 
+- **One product, by shortname.** A map names its product with doc-registry's
+  `slug`, not the display name — the name is editable in the CMS, the slug is
+  the identity, so the slug is what survives a rename. Declaring it twice is an
+  error, because two declarations mean a bad merge.
 - **Braces, not indentation.** Whitespace is never syntax, so a file that has
   been through a chat window or a different editor still parses.
 - **Release order is band order.** No ordinal to drift out of step with the file.
@@ -96,11 +108,12 @@ Six decisions the format makes, each argued where it is implemented:
 | Preserved | Not preserved |
 |---|---|
 | Map title | Comments — every one of them |
-| Release set and band order | Blank lines |
-| Structure and order of every card | Indentation width and style |
-| Priority order within a cell | `@"Bare"` vs `@Bare` (normalised) |
-| Release assignment, and unassignment | `{ }` on an empty card (omitted) |
-| Notes, and their order | `release` interleaved with activities (hoisted) |
+| The product shortname | Blank lines |
+| Release set and band order | Indentation width and style |
+| Structure and order of every card | `@"Bare"` vs `@Bare` (normalised) |
+| Priority order within a cell | `{ }` on an empty card (omitted) |
+| Release assignment, and unassignment | `release` interleaved with activities |
+| Notes, and their order | (`product` and `release` are hoisted to the top) |
 
 The contract the serializer holds to is stronger than "text round-trips":
 
@@ -121,13 +134,16 @@ untouched.
 
 ## Configuration
 
-Both values are browser-facing links. doc-sm calls nothing, so there is no
-in-cluster address here — unlike `doc-portal`, which needs one for the registry.
+Two browser-facing links and one in-cluster call. The split is the one
+`doc-portal` already draws: a link is resolved by the visitor's browser and must
+be an address the browser can reach; a call is made by this server and must not
+be, or it leaves the cluster to come back in to a Service one DNS name away.
 
 | Variable | Default | Used by |
 |---|---|---|
 | `DOC_PORTAL_URL` | `http://doc-portal.localhost` | the board's footer |
-| `REGISTRY_URL` | `http://doc-registry.localhost` | the board's footer |
+| `REGISTRY_URL` | `http://doc-registry.localhost` | the footer, and the picker's "register one" link |
+| `REGISTRY_API_URL` | `http://localhost:1337` | **in-cluster**: the product picker's list |
 | `HOST` / `PORT` | `0.0.0.0` / `4322` | the standalone `@astrojs/node` server |
 | `NODE_ENV`, `NODE_OPTIONS` | `production`, unset | Dockerfile / chart |
 
@@ -181,9 +197,14 @@ build-only ones — the built server entry imports the React renderer even thoug
   `links.ts`, a `/go/<target>` key, and an `app.*` value in its chart. Not a
   per-product deep link — the board has no notion of a product, and a link that
   404s the day it deploys is worse than no link.
-- **No persistence, by design.** If boards ever need to be shared rather than
-  committed, that is a conversation about where the file lives, not a reason to
-  put a story map in Strapi.
+- **No persistence, by design.** The registry supplies the product list and
+  nothing else; a story map is never written to it. If boards ever need to be
+  shared rather than committed, that is a conversation about where the file
+  lives, not a reason to put a story map in Strapi.
+- **Nothing is written back to the registry.** Choosing a product records its
+  shortname in the file; it does not tell doc-registry anything. The metric that
+  would close that loop (`metrics.roadmapItemsInFlight`) is written by pipelines,
+  not by a browser.
 - **No card ids in the file.** Identity is position and title. The lexer already
   reserves `#`, and the parser rejects it with a message saying so, so adding
   ids later is a parser change and not a format break. The trigger is the

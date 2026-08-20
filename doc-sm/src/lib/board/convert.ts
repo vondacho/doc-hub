@@ -97,6 +97,7 @@ export function toBoard(document: StoryMapDocument): BoardState {
 
 	return {
 		...emptyBoard(document.title),
+		product: document.product,
 		notes: [...document.notes],
 		releaseOrder,
 		releases,
@@ -111,6 +112,7 @@ export function toBoard(document: StoryMapDocument): BoardState {
 export function toDocument(board: BoardState): StoryMapDocument {
 	return {
 		title: board.title,
+		product: board.product,
 		notes: [...board.notes],
 		releases: board.releaseOrder.flatMap((id) => {
 			const release = board.releases[id];
