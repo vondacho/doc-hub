@@ -252,8 +252,12 @@ cheap, for horizontal space, which is not. **Notes are never clamped**: a note
 that runs to five lines runs to five lines. Truncating it would hide the one
 sentence somebody wrote down to be remembered.
 
-**Zoom**, on a fixed ladder from 60% to 160%; the percentage is a button that
-resets to 100%. It is implemented by scaling the board's font size, with every
+**Zoom**, on a fixed ladder from 100% to 160%; the percentage is a button that
+resets to 100%. The range only goes up: it used to start at 60%, on the theory
+that shrinking is how a wide board fits on a screen, but the board has since
+grown two better answers to that — narrow columns, and detail that stays
+collapsed until asked for. Neither costs any legibility, and shrinking below a
+readable size costs nothing else. It is implemented by scaling the board's font size, with every
 width, gap and padding measured in `em` against it — *not* by `transform:
 scale()`. A transformed ancestor breaks `position: sticky`, which the header rows
 and the band rail depend on, and confuses dnd-kit's hit-testing, which every drag

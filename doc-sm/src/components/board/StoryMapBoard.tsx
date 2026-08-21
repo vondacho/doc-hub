@@ -70,6 +70,7 @@ import { StoryMapParseError, type Problem } from '../../lib/storymap/problems.ts
 import { SAMPLE_SOURCE } from '../../lib/storymap/sample.ts';
 import { serialize } from '../../lib/storymap/serialize.ts';
 import { BoardGrid } from './BoardGrid.tsx';
+import { BASE_FONT } from './BoardGrid.tsx';
 import { PreviewDialog } from './PreviewDialog.tsx';
 import { PublishDialog, type PublishProgress } from './PublishDialog.tsx';
 import { ProblemList } from './ProblemList.tsx';
@@ -83,11 +84,16 @@ const HISTORY_LIMIT = 100;
  *
  * A fixed ladder rather than a continuous slider: the useful question is "show
  * me more of the board" or "let me read this", and a handful of stops answers it
- * without anyone fiddling to find a round number. 0.6 fits roughly twice the
- * columns of 1.2 across the same screen.
+ * without anyone fiddling to find a round number.
+ *
+ * The range starts at 100% and only goes up. It used to run from 60%, on the
+ * theory that shrinking is how you fit a wide board on a screen — but the board
+ * has since grown two better answers to that, in the narrow columns and in
+ * detail that stays collapsed until asked for. Neither of those costs any
+ * legibility, and shrinking below a readable size costs nothing else.
  */
-const ZOOM_STOPS = [0.6, 0.7, 0.85, 1, 1.15, 1.35, 1.6] as const;
-const DEFAULT_ZOOM_INDEX = 3;
+const ZOOM_STOPS = [1, 1.15, 1.3, 1.45, 1.6] as const;
+const DEFAULT_ZOOM_INDEX = 0;
 
 const step = undoable<BoardState, BoardAction>(reduce, {
 	limit: HISTORY_LIMIT,
@@ -692,7 +698,9 @@ export default function StoryMapBoard({
 						<DragOverlay dropAnimation={null}>
 							{dragging && (
 								<div
-									style={{ fontSize: `${13 * zoom}px` }}
+									// Same base as the board, so the card being dragged is the
+									// size of the cards it is being dragged between.
+									style={{ fontSize: `${BASE_FONT * zoom}px` }}
 									className={`rounded-[0.4em] border px-[0.55em] py-[0.4em] text-[1em] shadow-lg ${cardClass[dragging.kind]}`}
 								>
 									{dragging.title}

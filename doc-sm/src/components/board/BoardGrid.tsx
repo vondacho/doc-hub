@@ -59,8 +59,19 @@ import { Cell } from './Cell.tsx';
  */
 const RAIL = '8.5em';
 const COLUMN = '10em';
-/** Font-size at 100%, in px. Everything on the board is `em` against this. */
-const BASE_FONT = 13;
+/**
+ * Font-size at 100%, in px. Everything on the board is `em` against this.
+ *
+ * 20.8 rather than 13, which is where this started: the old scale ran 60%-160%
+ * around a 13px base, and 100% of it was too small to read comfortably. What
+ * used to be its top stop is now the bottom of the range and the default, so
+ * "100%" means the size the board is actually usable at.
+ *
+ * Exported because the DragOverlay in StoryMapBoard has to size the card it
+ * draws to match the board underneath it. It used to repeat the number, which
+ * worked only for as long as nobody changed one of them.
+ */
+export const BASE_FONT = 20.8;
 
 /** Grid rows 1 and 2 are the two header rows; bands start at 3. */
 const ACTIVITY_ROW = 1;
