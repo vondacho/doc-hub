@@ -162,12 +162,18 @@ export function serialize(document: StoryMapDocument): string {
 		for (const note of activity.notes) emitNote(out, INDENT.repeat(2), note);
 
 		for (const step of activity.steps) {
+			// Same two annotations a story carries, and written the same way: an
+			// unlinked step has no `#`, and the default status is left unwritten.
+			const stepTicket = step.ticket === null ? '' : ` #${quoteIfNeeded(step.ticket)}`;
+			const stepStatus = step.status === DEFAULT_STORY_STATUS ? '' : ` ~${step.status}`;
+			const stepHead = `${INDENT.repeat(2)}step ${quote(step.title)}${stepTicket}${stepStatus}`;
+
 			const stepHasBody = step.notes.length > 0 || step.stories.length > 0;
 			if (!stepHasBody) {
-				out.push(`${INDENT.repeat(2)}step ${quote(step.title)}`);
+				out.push(stepHead);
 				continue;
 			}
-			out.push(`${INDENT.repeat(2)}step ${quote(step.title)} {`);
+			out.push(`${stepHead} {`);
 			for (const note of step.notes) emitNote(out, INDENT.repeat(3), note);
 
 			for (const story of step.stories) {

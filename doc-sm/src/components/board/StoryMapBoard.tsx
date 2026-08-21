@@ -137,6 +137,9 @@ export default function StoryMapBoard({
 		() => initialHistory(emptyBoard()),
 	);
 	const board = history.present;
+	// Where tickets are raised. Needed by both the per-card actions and the
+	// publisher, so it is computed once beside the board rather than in each.
+	const space = effectiveSpace(board);
 
 	const [problems, setProblems] = useState<readonly Problem[]>([]);
 	const [dragging, setDragging] = useState<{ id: Id; title: string; kind: 'activity' | 'step' | 'story' } | null>(null);
@@ -251,19 +254,19 @@ export default function StoryMapBoard({
 	 * field the day linking is something people do dozens of times a session.
 	 */
 	const linkTicket = useCallback(
-		(storyId: Id) => {
-			const story = board.stories[storyId];
-			if (!story) return;
+		(kind: 'step' | 'story', id: Id) => {
+			const card = kind === 'step' ? board.steps[id] : board.stories[id];
+			if (!card) return;
 			const entered = window.prompt(
-				'Ticket id, exactly as the ticketing system spells it.\nLeave it empty to unlink.',
-				story.ticket ?? '',
+				`${kind === 'step' ? 'Epic' : 'Ticket'} id, exactly as the ticketing system spells it.\nLeave it empty to unlink.`,
+				card.ticket ?? '',
 			);
 			// Cancel is null and means "leave it alone"; an empty string is a
 			// deliberate unlink. They are different answers and are treated so.
 			if (entered === null) return;
-			dispatch({ type: 'setTicket', id: storyId, ticket: entered });
+			dispatch({ type: 'setTicket', kind, id, ticket: entered });
 		},
-		[board.stories, dispatch],
+		[board.steps, board.stories, dispatch],
 	);
 
 	/**
@@ -275,9 +278,9 @@ export default function StoryMapBoard({
 	 * would not be.
 	 */
 	const createTicket = useCallback(
-		async (storyId: Id) => {
-			const story = board.stories[storyId];
-			if (!story) return;
+		async (kind: 'step' | 'story', id: Id) => {
+			const card = kind === 'step' ? board.steps[id] : board.stories[id];
+			if (!card) return;
 			setTicketError(null);
 
 			let payload: { id?: string; status?: StoryStatus; error?: string };
@@ -285,7 +288,13 @@ export default function StoryMapBoard({
 				const response = await fetch('/api/ticket', {
 					method: 'POST',
 					headers: { 'content-type': 'application/json' },
-					body: JSON.stringify({ product: board.product, title: story.title }),
+					// A step raises an epic; the adapter cannot guess the issue type.
+					body: JSON.stringify({
+						kind: kind === 'step' ? 'epic' : 'story',
+						space,
+						product: board.product,
+						title: card.title,
+					}),
 				});
 				payload = await response.json();
 			} catch {
@@ -298,10 +307,10 @@ export default function StoryMapBoard({
 				return;
 			}
 
-			dispatch({ type: 'setTicket', id: storyId, ticket: payload.id });
-			dispatch({ type: 'setStatus', id: storyId, status: payload.status });
+			dispatch({ type: 'setTicket', kind, id, ticket: payload.id });
+			dispatch({ type: 'setStatus', kind, id, status: payload.status });
 		},
-		[board.stories, board.product, dispatch],
+		[board.steps, board.stories, board.product, space, dispatch],
 	);
 
 	/* ---- detail ------------------------------------------------------------ */
@@ -367,7 +376,6 @@ export default function StoryMapBoard({
 
 	/* ---- publishing -------------------------------------------------------- */
 
-	const space = effectiveSpace(board);
 	const unbound = useMemo(() => unboundStories(board), [board]);
 
 	/**
@@ -405,8 +413,8 @@ export default function StoryMapBoard({
 			}
 
 			if (payload.id && payload.status) {
-				dispatch({ type: 'setTicket', id: story.id, ticket: payload.id });
-				dispatch({ type: 'setStatus', id: story.id, status: payload.status });
+				dispatch({ type: 'setTicket', kind: 'story', id: story.id, ticket: payload.id });
+				dispatch({ type: 'setStatus', kind: 'story', id: story.id, status: payload.status });
 			} else {
 				failures.push({ title: story.title, error: payload.error ?? 'The ticket could not be created.' });
 			}

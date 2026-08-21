@@ -70,7 +70,13 @@ export function toBoard(document: StoryMapDocument): BoardState {
 
 		for (const step of activity.steps as readonly StepNode[]) {
 			const stepId = nextId('p');
-			steps[stepId] = { id: stepId, title: step.title, notes: [...step.notes] };
+			steps[stepId] = {
+				id: stepId,
+				title: step.title,
+				notes: [...step.notes],
+				ticket: step.ticket,
+				status: step.status,
+			};
 			stepOrder.push(stepId);
 
 			for (const story of step.stories as readonly StoryNode[]) {
@@ -170,6 +176,8 @@ export function toDocument(board: BoardState): StoryMapDocument {
 					return [{
 						title: step.title,
 						notes: [...step.notes],
+						ticket: step.ticket,
+						status: step.status,
 						// Walk the bands in order so priority within a step reads
 						// top band first — the same order the board shows.
 						stories: [...board.releaseOrder, UNASSIGNED].flatMap((band) =>

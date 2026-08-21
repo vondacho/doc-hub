@@ -79,6 +79,8 @@ interface RawStory {
 interface RawStep {
 	readonly title: string;
 	readonly notes: string[];
+	readonly ticket: string | null;
+	readonly status: StoryStatus;
 	readonly stories: RawStory[];
 }
 
@@ -232,27 +234,22 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 		return value.replace(/\s+/g, ' ').trim();
 	}
 
-	function parseStory(stories: RawStory[]): boolean {
-		if (!at('keyword', 'story')) return false;
-		advance();
-		const title = expectString('story', 'A story is quoted: story "Full-text search" @MVP');
-		if (title === undefined) {
-			synchronize();
-			return true;
-		}
-
-		/*
-		 * Three optional annotations follow the title, and any order is accepted:
-		 *
-		 *   @Release   the band it sits in
-		 *   #ticket    the ticket it is linked to, as the ticketing system spells it
-		 *   ~status    where that ticket is in the workflow
-		 *
-		 * Order is not enforced because there is no reading in which one order is
-		 * more correct, and rejecting `#42 @MVP` would be pedantry. Each may appear
-		 * at most once; a repeat is an error rather than a last-one-wins, because a
-		 * repeat means a bad merge.
-		 */
+	/**
+	 * The `@release`, `#ticket` and `~status` that may follow a card's title.
+	 *
+	 * Shared by stories and steps, because a step is an epic and carries the same
+	 * ticket and status a story does. Only a story takes a release: a step spans
+	 * every band, so the question of *when* is settled one level down.
+	 *
+	 * Any order is accepted — there is no reading in which one order is more
+	 * correct — and each may appear once. A repeat is an error rather than a
+	 * last-one-wins, because a repeat means a bad merge.
+	 */
+	function parseAnnotations(allowRelease: boolean): {
+		ref: RawRef | null;
+		ticket: string | null;
+		status: StoryStatus;
+	} {
 		let ref: RawRef | null = null;
 		let ticket: string | null = null;
 		let status: StoryStatus | null = null;
@@ -261,6 +258,15 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 			const sigil = advance();
 
 			if (sigil.kind === 'at') {
+				if (!allowRelease) {
+					problemAt(
+						sigil,
+						'A step is not in a release.',
+						'A step spans every band; put the `@release` on its stories.',
+					);
+					if (at('ident') || at('string')) advance();
+					continue;
+				}
 				if (!at('ident') && !at('string')) {
 					problemAt(
 						sigil,
@@ -271,7 +277,7 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 				}
 				const name = advance();
 				if (ref !== null) {
-					problemAt(sigil, 'This story names two releases.', 'A story sits in one band.');
+					problemAt(sigil, 'This card names two releases.', 'A story sits in one band.');
 					continue;
 				}
 				ref = { name: name.value, line: sigil.line, column: sigil.column, length: sigil.length + name.length };
@@ -283,43 +289,57 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 					problemAt(
 						sigil,
 						`Expected a ticket id after \`#\`, found ${describe(peek())}.`,
-						'Write the id the ticketing system issued: #client-onboarding-42',
+						'Write the id the ticketing system issued: #CLONB-42',
 					);
 					continue;
 				}
 				const value = advance().value;
 				if (ticket !== null) {
-					problemAt(sigil, 'This story names two tickets.', 'A story links to one ticket.');
+					problemAt(sigil, 'This card names two tickets.', 'A card links to one ticket.');
 					continue;
 				}
 				ticket = value;
 				continue;
 			}
 
-			// tilde
 			if (!at('ident')) {
 				problemAt(
 					sigil,
 					`Expected a status after \`~\`, found ${describe(peek())}.`,
-					`One of: ${STORY_STATUSES.map((s) => `~${s}`).join(', ')}`,
+					`One of: ${STORY_STATUSES.map((x) => `~${x}`).join(', ')}`,
 				);
 				continue;
 			}
 			const word = advance();
 			if (status !== null) {
-				problemAt(sigil, 'This story names two statuses.', 'A story is in one state.');
+				problemAt(sigil, 'This card names two statuses.', 'A card is in one state.');
 				continue;
 			}
 			if (!isStoryStatus(word.value)) {
 				problemAt(
 					word,
 					`\`${word.value}\` is not a status.`,
-					`One of: ${STORY_STATUSES.map((s) => `~${s}`).join(', ')}`,
+					`One of: ${STORY_STATUSES.map((x) => `~${x}`).join(', ')}`,
 				);
 				continue;
 			}
 			status = word.value;
 		}
+
+		// Unlinked, and nothing said about it yet.
+		return { ref, ticket, status: status ?? DEFAULT_STORY_STATUS };
+	}
+
+	function parseStory(stories: RawStory[]): boolean {
+		if (!at('keyword', 'story')) return false;
+		advance();
+		const title = expectString('story', 'A story is quoted: story "Full-text search" @MVP');
+		if (title === undefined) {
+			synchronize();
+			return true;
+		}
+
+		const { ref, ticket, status } = parseAnnotations(true);
 
 		const notes: string[] = [];
 		// An unlinked story reads as open: nothing has been said about it yet.
@@ -328,7 +348,7 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 			notes,
 			ref,
 			ticket,
-			status: status ?? DEFAULT_STORY_STATUS,
+			status,
 			persona: null,
 			want: null,
 			soThat: null,
@@ -388,9 +408,11 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 			return true;
 		}
 
+		const { ticket, status } = parseAnnotations(false);
+
 		const notes: string[] = [];
 		const stories: RawStory[] = [];
-		steps.push({ title, notes, stories });
+		steps.push({ title, notes, ticket, status, stories });
 		parseBody('step', () => parseStory(stories) || parseNote(notes));
 		return true;
 	}
@@ -607,6 +629,8 @@ function resolve(
 		steps: activity.steps.map((step): StepNode => ({
 			title: step.title,
 			notes: [...step.notes],
+			ticket: step.ticket,
+			status: step.status,
 			stories: step.stories.map((story): StoryNode => ({
 				title: story.title,
 				notes: [...story.notes],

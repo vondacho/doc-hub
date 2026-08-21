@@ -38,6 +38,15 @@ export type CardKind = 'activity' | 'step' | 'story';
  */
 export type StoryStatus = 'open' | 'analysing' | 'ready' | 'in-progress' | 'done' | 'closed';
 
+/**
+ * What kind of ticket a card becomes.
+ *
+ * A step is an epic and a story is a story. The adapter needs to be told which,
+ * because the two are different issue types in every tracker there is, and
+ * guessing from the title would be absurd.
+ */
+export type TicketKind = 'epic' | 'story';
+
 /** In workflow order. The slug is what the DSL writes after `~`. */
 export const STORY_STATUSES: readonly StoryStatus[] = [
 	'open',
@@ -98,10 +107,22 @@ export interface ActivityNode {
 	readonly steps: readonly StepNode[];
 }
 
-/** A user step — one column of the board, in narrative order left to right. */
+/**
+ * A user step — one column of the board, in narrative order left to right.
+ *
+ * A step is the natural shape of an **epic**: a thing people do, made of the
+ * stories underneath it. So it carries the same two fields a story does, and
+ * they mean the same thing — the ticketing system issues the id, doc-sm never
+ * does, and the status is a cache of what that system last said.
+ *
+ * What a step does *not* have is a release. A step spans every band; the
+ * decision about when work happens is made one level down, on the stories.
+ */
 export interface StepNode {
 	readonly title: string;
 	readonly notes: readonly string[];
+	readonly ticket: string | null;
+	readonly status: StoryStatus;
 	readonly stories: readonly StoryNode[];
 }
 

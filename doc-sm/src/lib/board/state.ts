@@ -76,6 +76,9 @@ export interface Step {
 	readonly id: Id;
 	readonly title: string;
 	readonly notes: readonly string[];
+	/** A step is an epic: same ticket and status a story carries. */
+	readonly ticket: string | null;
+	readonly status: StoryStatus;
 }
 
 export interface Story {

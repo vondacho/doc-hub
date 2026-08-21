@@ -15,6 +15,11 @@
  * always do — and would hide the fact that ticket ids come from the space, not
  * from the product.
  *
+ * **Every step carries an epic**, numbered CLONB-10..15 against the stories'
+ * CLONB-42 and up. Trackers hand epics out early and low, and an example where
+ * the two ranges overlapped would suggest the numbers mean nothing. Each epic's
+ * status is consistent with the stories underneath it, for the same reason.
+ *
  * Its stories carry the two states worth showing side by side: some are linked
  * to a ticket and some are not. `story "Saved searches"` has no `#` and no `~`,
  * which is what every story looks like before the ticketing system has heard of
@@ -71,7 +76,7 @@ storymap "Doc-Hub Onboarding" {
     persona "Business analyst"
     persona "Product manager"
     persona "Support engineer"
-    step "Search the catalog" {
+    step "Search the catalog" #CLONB-10 ~in-progress {
       story "Full-text search" @MVP #CLONB-42 ~in-progress {
         as "Business analyst"
         want "to search every product at once"
@@ -90,13 +95,13 @@ storymap "Doc-Hub Onboarding" {
         so "I stop retyping the same query"
       }
     }
-    step "Open a product"
+    step "Open a product" #CLONB-11 ~analysing
   }
 
   activity "Judge what I am reading" {
     persona "Support engineer"
     persona "Documentation owner"
-    step "Check how current it is" {
+    step "Check how current it is" #CLONB-12 ~in-progress {
       story "Show the age of the docs" @MVP #CLONB-51 ~done {
         as "Support engineer"
         want "to see when a page was last updated"
@@ -108,7 +113,7 @@ storymap "Doc-Hub Onboarding" {
         so "I fix them before somebody is misled"
       }
     }
-    step "Check who owns it" {
+    step "Check who owns it" #CLONB-13 ~ready {
       story "Name the owning squad" @MVP {
         as "Support engineer"
         want "to see which squad owns a product"
@@ -125,7 +130,7 @@ storymap "Doc-Hub Onboarding" {
   activity "Register a new product" {
     persona "Registrar"
     persona "Product owner"
-    step "Fill the registration form" {
+    step "Fill the registration form" #CLONB-14 ~ready {
       story "Validate the repository URL" @MVP {
         as "Registrar"
         want "a bad repository link refused at entry"
@@ -137,7 +142,7 @@ storymap "Doc-Hub Onboarding" {
         so "two products can never share an address"
       }
     }
-    step "Confirm it landed" {
+    step "Confirm it landed" #CLONB-15 ~analysing {
       story "Show the entry in the catalog" @R2 {
         as "Product owner"
         want "to see my product listed straight after registering"

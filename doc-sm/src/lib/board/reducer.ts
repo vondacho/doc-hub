@@ -78,7 +78,7 @@ export type BoardAction =
 	 * that *generates* one: the ticketing system issues ticket ids, and a board
 	 * that minted its own would hand out names that collide with real ones.
 	 */
-	| { type: 'setTicket'; id: Id; ticket: string | null }
+	| { type: 'setTicket'; kind: 'step' | 'story'; id: Id; ticket: string | null }
 	/**
 	 * Record a status against a story.
 	 *
@@ -86,7 +86,7 @@ export type BoardAction =
 	 * a cache of what the ticketing system last said, and setting it by hand
 	 * changes the board's copy, not the ticket.
 	 */
-	| { type: 'setStatus'; id: Id; status: StoryStatus }
+	| { type: 'setStatus'; kind: 'step' | 'story'; id: Id; status: StoryStatus }
 	/**
 	 * Write a story for one of the map's declared personas, or for nobody.
 	 *
@@ -168,7 +168,11 @@ export function reduce(board: BoardState, action: BoardAction): BoardState {
 			const id = nextId('p');
 			return {
 				...board,
-				steps: { ...board.steps, [id]: { id, title: 'New step', notes: [] } },
+				steps: {
+					...board.steps,
+					// Unlinked and open, exactly as a new story is: doc-sm issues no ids.
+					[id]: { id, title: 'New step', notes: [], ticket: null, status: DEFAULT_STORY_STATUS },
+				},
 				activities: {
 					...board.activities,
 					[activity.id]: { ...activity, stepOrder: insertAt(activity.stepOrder, action.index, id) },
@@ -227,10 +231,15 @@ export function reduce(board: BoardState, action: BoardAction): BoardState {
 			return changeKind(board, action.kind, action.id, action.to);
 
 		case 'setTicket': {
-			const story = board.stories[action.id];
 			// An empty string and "no ticket" are the same state, so they normalise
 			// to one of them rather than both being representable.
 			const ticket = action.ticket === null || action.ticket.trim() === '' ? null : action.ticket.trim();
+			if (action.kind === 'step') {
+				const step = board.steps[action.id];
+				if (!step || step.ticket === ticket) return board;
+				return { ...board, steps: { ...board.steps, [action.id]: { ...step, ticket } } };
+			}
+			const story = board.stories[action.id];
 			if (!story || story.ticket === ticket) return board;
 			return { ...board, stories: { ...board.stories, [action.id]: { ...story, ticket } } };
 		}
@@ -275,6 +284,11 @@ export function reduce(board: BoardState, action: BoardAction): BoardState {
 		}
 
 		case 'setStatus': {
+			if (action.kind === 'step') {
+				const step = board.steps[action.id];
+				if (!step || step.status === action.status) return board;
+				return { ...board, steps: { ...board.steps, [action.id]: { ...step, status: action.status } } };
+			}
 			const story = board.stories[action.id];
 			if (!story || story.status === action.status) return board;
 			return { ...board, stories: { ...board.stories, [action.id]: { ...story, status: action.status } } };
@@ -526,7 +540,7 @@ function changeKind(board: BoardState, kind: CardKind, id: Id, to: CardKind): Bo
 		const after = removeCard(board, 'story', id);
 		return {
 			...after,
-			steps: { ...after.steps, [stepId]: { id: stepId, title: story.title, notes: [...story.notes] } },
+			steps: { ...after.steps, [stepId]: { id: stepId, title: story.title, notes: [...story.notes], ticket: null, status: DEFAULT_STORY_STATUS } },
 			activities: {
 				...after.activities,
 				[activity.id]: {
@@ -603,7 +617,7 @@ function changeKind(board: BoardState, kind: CardKind, id: Id, to: CardKind): Bo
 		delete activities[id];
 		return {
 			...board,
-			steps: { ...board.steps, [stepId]: { id: stepId, title: activity.title, notes: [...activity.notes] } },
+			steps: { ...board.steps, [stepId]: { id: stepId, title: activity.title, notes: [...activity.notes], ticket: null, status: DEFAULT_STORY_STATUS } },
 			activities: { ...activities, [previous.id]: { ...previous, stepOrder: [...previous.stepOrder, stepId] } },
 			activityOrder: board.activityOrder.filter((other) => other !== id),
 		};

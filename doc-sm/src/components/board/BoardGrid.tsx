@@ -92,9 +92,9 @@ export function BoardGrid({
 	board: BoardState;
 	dispatch: (action: BoardAction) => void;
 	/** Prompt for a ticket id and link it, or clear the link. */
-	onLinkTicket: (storyId: Id) => void;
-	/** Ask the ticketing system for a new ticket. */
-	onCreateTicket: (storyId: Id) => void;
+	onLinkTicket: (kind: 'step' | 'story', id: Id) => void;
+	/** Ask the ticketing system for a new ticket — an epic for a step. */
+	onCreateTicket: (kind: 'step' | 'story', id: Id) => void;
 	ticketingConfigured: boolean;
 	/** 1 is 100%. Scales the whole board; see the note on RAIL above. */
 	zoom: number;
@@ -161,7 +161,11 @@ export function BoardGrid({
 								}`}
 								data={{ type: 'activity' }}
 								onRetitle={(title) => dispatch({ type: 'retitle', kind: 'activity', id: activityId, title })}
-								menu={cardMenu(board, dispatch, 'activity', activityId, index)}
+								menu={cardMenu(board, dispatch, 'activity', activityId, index, undefined, {
+									onLinkTicket,
+									onCreateTicket,
+									ticketingConfigured,
+								})}
 								className="sticky top-0 z-10"
 								style={{ gridColumn: `${span.start + 2} / span ${span.width}`, gridRow: ACTIVITY_ROW }}
 							/>
@@ -192,13 +196,24 @@ export function BoardGrid({
 										derived={stepDerived(step)}
 									notes={step.notes}
 									onNotes={(text) => dispatch({ type: 'setNotes', kind: 'step', id: stepId, text })}
+									meta={
+										<StoryMeta
+											ticket={step.ticket}
+											status={step.status}
+											onEditTicket={() => onLinkTicket('step', stepId)}
+										/>
+									}
 									detailOpen={expanded.has(stepId)}
 									onToggleDetail={() => onToggleDetail(stepId)}
 									detailLabel="notes"
 										position={`step ${index + 1} of ${activity.stepOrder.length} in ${activity.title}`}
 										data={{ type: 'step', activityId }}
 										onRetitle={(title) => dispatch({ type: 'retitle', kind: 'step', id: stepId, title })}
-										menu={cardMenu(board, dispatch, 'step', stepId, index, activityId)}
+										menu={cardMenu(board, dispatch, 'step', stepId, index, activityId, {
+										onLinkTicket,
+										onCreateTicket,
+										ticketingConfigured,
+									})}
 										className="sticky top-[2.6em] z-10"
 										style={{ gridColumn: column + 2, gridRow: STEP_ROW }}
 									/>
@@ -282,7 +297,7 @@ export function BoardGrid({
 														<StoryMeta
 															ticket={story.ticket}
 															status={story.status}
-															onEditTicket={() => onLinkTicket(storyId)}
+															onEditTicket={() => onLinkTicket('story', storyId)}
 														/>
 													}
 													menu={storyMenu(board, dispatch, storyId, key, index, ids.length, {
@@ -316,6 +331,59 @@ export function BoardGrid({
  * the way in, and it seeds a placeholder the same way a new card does, which
  * makes the caret appear and the text clickable.
  */
+/**
+ * Setting a status by hand is offered, and it is also not the truth.
+ *
+ * While a card is unlinked this is the only record there is; once a ticket
+ * exists the ticketing system owns the answer and this changes only the board's
+ * copy — which the label says, so nobody believes they have moved a ticket.
+ */
+function statusActions(
+	dispatch: (action: BoardAction) => void,
+	kind: 'step' | 'story',
+	id: Id,
+	current: StoryStatus | undefined,
+	linked: boolean,
+): CardMenuAction[] {
+	return STORY_STATUSES.filter((candidate) => candidate !== current).map((candidate, position) => ({
+		label: linked ? `Mark ${storyStatusLabel[candidate]} here only` : `Mark ${storyStatusLabel[candidate]}`,
+		separated: position === 0,
+		run: () => dispatch({ type: 'setStatus', kind, id, status: candidate }),
+	}));
+}
+
+/** A step raises an epic and a story raises a story; the wording follows. */
+function ticketActions(
+	dispatch: (action: BoardAction) => void,
+	kind: 'step' | 'story',
+	id: Id,
+	ticket: string | null,
+	ticketing: {
+		onLinkTicket: (kind: 'step' | 'story', id: Id) => void;
+		onCreateTicket: (kind: 'step' | 'story', id: Id) => void;
+		ticketingConfigured: boolean;
+	},
+): CardMenuAction[] {
+	const noun = kind === 'step' ? 'epic' : 'ticket';
+	if (ticket !== null) {
+		return [
+			{ label: `Change the ${noun} id…`, separated: true, run: () => ticketing.onLinkTicket(kind, id) },
+			{ label: `Unlink from its ${noun}`, run: () => dispatch({ type: 'setTicket', kind, id, ticket: null }) },
+		];
+	}
+	return [
+		{
+			label: `Create ${kind === 'step' ? 'an epic' : 'a ticket'}`,
+			separated: true,
+			run: ticketing.ticketingConfigured ? () => ticketing.onCreateTicket(kind, id) : undefined,
+			disabledReason: ticketing.ticketingConfigured
+				? undefined
+				: 'No ticketing system is configured for doc-sm.',
+		},
+		{ label: `Link an existing ${noun}…`, run: () => ticketing.onLinkTicket(kind, id) },
+	];
+}
+
 function addNoteAction(
 	dispatch: (action: BoardAction) => void,
 	kind: CardKind,
@@ -360,7 +428,12 @@ function cardMenu(
 	kind: 'activity' | 'step',
 	id: Id,
 	index: number,
-	activityId?: Id,
+	activityId: Id | undefined,
+	ticketing: {
+		onLinkTicket: (kind: 'step' | 'story', id: Id) => void;
+		onCreateTicket: (kind: 'step' | 'story', id: Id) => void;
+		ticketingConfigured: boolean;
+	},
 ): CardMenuAction[] {
 	const siblings =
 		kind === 'activity' ? board.activityOrder : (activityId ? board.activities[activityId]?.stepOrder ?? [] : []);
@@ -376,11 +449,14 @@ function cardMenu(
 	const right = move(index + 1);
 
 	const notes = (kind === 'activity' ? board.activities[id]?.notes : board.steps[id]?.notes) ?? [];
+	const step = kind === 'step' ? board.steps[id] : undefined;
 
 	return [
 		{ label: 'Move left', run: left, disabledReason: left ? undefined : 'It is already first.' },
 		{ label: 'Move right', run: right, disabledReason: right ? undefined : 'It is already last.' },
 		addNoteAction(dispatch, kind, id, notes),
+		...(step ? statusActions(dispatch, 'step', id, step.status, step.ticket !== null) : []),
+		...(step ? ticketActions(dispatch, 'step', id, step.ticket, ticketing) : []),
 		...kindChangeActions(board, dispatch, kind, id),
 		{
 			label: kind === 'activity' ? 'Delete activity and its steps' : 'Delete step and its stories',
@@ -398,8 +474,8 @@ function storyMenu(
 	index: number,
 	total: number,
 	ticketing: {
-		onLinkTicket: (storyId: Id) => void;
-		onCreateTicket: (storyId: Id) => void;
+		onLinkTicket: (kind: 'step' | 'story', id: Id) => void;
+		onCreateTicket: (kind: 'step' | 'story', id: Id) => void;
 		ticketingConfigured: boolean;
 	},
 ): CardMenuAction[] {
@@ -432,38 +508,8 @@ function storyMenu(
 	const story = board.stories[storyId];
 	const linked = story?.ticket != null;
 
-	/*
-	 * Setting a status by hand is offered, and it is also not the truth. While a
-	 * story is unlinked it is the only record there is; once a ticket exists the
-	 * ticketing system owns the answer and this only changes the board's copy —
-	 * which the label says, so nobody believes they have moved a ticket.
-	 */
-	const statusMoves: CardMenuAction[] = STORY_STATUSES.filter(
-		(candidate) => candidate !== story?.status,
-	).map((candidate: StoryStatus, position) => ({
-		label: linked
-			? `Mark ${storyStatusLabel[candidate]} here only`
-			: `Mark ${storyStatusLabel[candidate]}`,
-		separated: position === 0,
-		run: () => dispatch({ type: 'setStatus', id: storyId, status: candidate }),
-	}));
-
-	const ticketMoves: CardMenuAction[] = linked
-		? [
-				{ label: 'Change the ticket id…', separated: true, run: () => ticketing.onLinkTicket(storyId) },
-				{ label: 'Unlink from its ticket', run: () => dispatch({ type: 'setTicket', id: storyId, ticket: null }) },
-			]
-		: [
-				{
-					label: 'Create a ticket',
-					separated: true,
-					run: ticketing.ticketingConfigured ? () => ticketing.onCreateTicket(storyId) : undefined,
-					disabledReason: ticketing.ticketingConfigured
-						? undefined
-						: 'No ticketing system is configured for doc-sm.',
-				},
-				{ label: 'Link an existing ticket…', run: () => ticketing.onLinkTicket(storyId) },
-			];
+	const statusMoves = statusActions(dispatch, 'story', storyId, story?.status, linked);
+	const ticketMoves = ticketActions(dispatch, 'story', storyId, story?.ticket ?? null, ticketing);
 
 	return [
 		{ label: 'Move up', run: up, disabledReason: up ? undefined : 'It is already at the top.' },
