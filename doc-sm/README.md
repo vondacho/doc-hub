@@ -128,10 +128,10 @@ instead of the story's persona being cleared, because that is what actually
 happened — work for a business analyst now lives under this activity, so this
 activity serves business analysts.
 
-One detail with a reason: `want` and `so` continuation lines join with a
-**space**, where a `note`'s join with a line break. A note may genuinely be
-several lines; these two are one clause of one sentence, and the breaks in the
-file are only there because the measure put them there.
+One detail with a reason: a `note` may genuinely be several lines and carries
+its breaks as escapes, while `want` and `so` are collapsed to a single line
+whatever they contain. The board composes the three clauses into one sentence,
+and a stray newline inside one would show up in the middle of it.
 
 ### Reading a wide board
 
@@ -146,17 +146,27 @@ the card show the same thing. Wrapping is idempotent, a deliberate paragraph
 break survives, and a single word longer than the measure is left to overflow
 rather than cut in half; a URL broken in two is worse than a long line.
 
-In the DSL, a bare quoted string under a `note` continues it:
+In the DSL a **trailing backslash carries the string onto the next line**, and
+that split is the break:
 
 ```
-note "Domain comes from the registry entry, not a"
-     "free-text field that anyone can mistype."
+note "Domain comes from the registry entry, not a\
+     free-text field that anyone can mistype."
 ```
 
-This is unambiguous with one token of lookahead — every item inside a body starts
-with a keyword or closes it, so a bare string there can only be a continuation.
-A `\n` escape inside a note still works for anything writing these files by
-machine, and becomes a real line break the first time the board writes it back.
+One pair of quotes for the whole note, however many lines it runs to — so there
+is only one place to leave a quote off — and the file stays inside the same
+50-column measure the text does. Continuation lines are indented to sit under
+the opening quote; the lexer drops that indentation, so it is presentation and
+nothing else.
+
+The safety rule is untouched: a **bare** newline still ends an unterminated
+string, so one missing quote cannot swallow the rest of the file. Only an
+explicit backslash carries a string on. A `\n` escape is still read too, for
+anything writing these files by machine, and is written back as a splice.
+
+`want` and `so` are never wrapped at all. Each is one clause of one sentence,
+so there is nothing in them to break, and a long clause is simply a long line.
 
 **Detail is collapsed by default.** A card shows its title; its cast, its need
 and its notes are behind a toggle, and every card starts closed. That is what
@@ -457,8 +467,8 @@ Ten decisions the format makes, each argued where it is implemented:
   a persona its own activity lists and no other.
 - **Every story states its need** — `as` / `want` / `so`, the formal story
   language modelled in three fields rather than written as prose.
-- **Notes wrap at 50 characters**, on the card and in the file alike. A bare
-  quoted string under a `note` continues it, joined with a line break.
+- **Notes wrap at 50 characters**, and a trailing `\` carries the string onto
+  the next line — one pair of quotes for the whole note.
 - **Comments do not survive the board.** Import, export, and they are gone.
 
 ### What round-trips

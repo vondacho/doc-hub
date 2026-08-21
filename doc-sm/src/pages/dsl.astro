@@ -53,7 +53,7 @@ const rules: { title: string; body: string }[] = [
 	},
 	{
 		title: 'Notes wrap at 50 characters',
-		body: 'A note is prose, so it is broken into lines of at most 50 characters when it is read and when it is written. A bare quoted string under a note continues it — the two are joined with a line break — so a long note reads as a block rather than as one very long line.',
+		body: 'A note is prose, so its text is broken into lines of at most 50 characters. A trailing backslash carries the string onto the next line, and that split is the break — one pair of quotes for the whole note, and the file stays inside the same measure the text does.',
 	},
 	{
 		title: 'Comments do not survive the board',
@@ -117,13 +117,15 @@ Step        = 'step'     , String , [ '{' , { Story | Note } , '}' ] ;
 Story       = 'story'    , String , { ReleaseRef | TicketRef | StatusRef } ,
                            [ '{' , { As | Want | So | Note } , '}' ] ;
 As          = 'as'       , String ;   (* a persona this activity lists *)
-Want        = 'want'     , String , { String } ;   (* continuations join with a space *)
-So          = 'so'       , String , { String } ;
-Note        = 'note'     , String , { String } ;   (* each extra String is a new line *)
+Want        = 'want'     , String ;   (* one clause, one line, however long *)
+So          = 'so'       , String ;
+Note        = 'note'     , String ;
 ReleaseRef  = '@' , ( Ident | String ) ;   (* at most one, any order *)
 TicketRef   = '#' , ( Ident | String ) ;   (* at most one *)
 StatusRef   = '~' , Ident ;                (* at most one *)
-String      = '"' , { Char | '\\' , ( '"' | '\\' | 'n' | 't' ) } , '"' ;
+String      = '"' , { Char | Escape | Splice } , '"' ;
+Escape      = '\\' , ( '"' | '\\' | 'n' | 't' ) ;
+Splice      = '\\' , newline , { space } ;   (* carries the string on; is a break *)
 Ident       = ( Letter | '_' ) , { Letter | Digit | '_' | '-' } ;
 Comment     = '//' , { Char } ;   (* discarded *)`}</code></pre>
 			</div>

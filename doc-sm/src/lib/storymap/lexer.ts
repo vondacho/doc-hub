@@ -246,6 +246,33 @@ export function tokenize(
 
 			if (char === '\\') {
 				const escape = text[index + 1];
+
+				/*
+				 * A backslash at end of line splices the string onto the next one,
+				 * and the split *is* a line break in the value:
+				 *
+				 *     note "Domain comes from the registry entry, not a\
+				 *          free-text field that anyone can mistype."
+				 *
+				 * So a long note is one string, spelled across as many lines as it
+				 * needs, and the file stays inside the same measure the text does.
+				 *
+				 * The safety rule is untouched: a *bare* newline still ends an
+				 * unterminated string, so one missing quote cannot swallow the rest
+				 * of the file. Only an explicit backslash carries a string on.
+				 *
+				 * Leading whitespace on the continuation is dropped, so the second
+				 * line can be indented to sit under the first without that
+				 * indentation leaking into the note.
+				 */
+				if (escape === '\n' || escape === '\r') {
+					index += 1;
+					newline();
+					while (index < text.length && (text[index] === ' ' || text[index] === '\t')) index += 1;
+					value += '\n';
+					continue;
+				}
+
 				if (escape === '"' || escape === '\\') {
 					value += escape;
 					index += 2;

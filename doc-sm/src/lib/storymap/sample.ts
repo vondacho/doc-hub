@@ -33,9 +33,11 @@
  * is what a real board looks like — and it is the thing a map of titles alone
  * can never show you.
  *
- * The clauses are prose, so the 50-column measure breaks the longer ones across
- * two lines, which is also what makes this example show the continuation form
- * rather than describing it.
+ * The clauses are one line each, however long: `want` and `so` hold one clause of
+ * one sentence, so there is nothing in them to break. A note is one string spelled
+ * across as many lines as its text needs, carried on by a trailing backslash — one
+ * pair of quotes for the whole note, and the file inside the same 50-column measure
+ * as the text.
  *
  * Two of its cards are carrying a point. `story "Saved searches"` has no `@` and
  * is therefore below the line — known, not committed to. `step "Open a product"`
@@ -45,6 +47,13 @@
  */
 
 export const SAMPLE_FILENAME = 'doc-hub-onboarding.storymap';
+
+/*
+ * Note the doubled backslashes below. This is a template literal, and JavaScript
+ * splices a line ending in a single backslash exactly as the DSL does — so `\\`
+ * here is the one backslash a `.storymap` file contains, and a single one would
+ * be eaten before the parser ever saw it.
+ */
 
 export const SAMPLE_SOURCE = `// Story map exported by doc-sm.
 // Comments and blank lines in an imported file are not preserved: the board
@@ -66,15 +75,14 @@ storymap "Doc-Hub Onboarding" {
       story "Full-text search" @MVP #CLONB-42 ~in-progress {
         as "Business analyst"
         want "to search every product at once"
-        so "I can answer a question without knowing which"
-           "product owns it"
+        so "I can answer a question without knowing which product owns it"
       }
       story "Filter by domain" @R2 #CLONB-43 ~ready {
         as "Product manager"
         want "to narrow the catalogue to one domain"
         so "I review only the products my portfolio covers"
-        note "Domain comes from the registry entry, not a"
-             "free-text field that anyone can mistype."
+        note "Domain comes from the registry entry, not a\\
+             free-text field that anyone can mistype."
       }
       story "Saved searches" {
         as "Support engineer"
@@ -132,8 +140,7 @@ storymap "Doc-Hub Onboarding" {
     step "Confirm it landed" {
       story "Show the entry in the catalog" @R2 {
         as "Product owner"
-        want "to see my product listed straight after"
-             "registering"
+        want "to see my product listed straight after registering"
         so "I know the registration actually took"
       }
       story "Mail the owner a receipt" @Later {

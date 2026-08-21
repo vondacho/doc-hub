@@ -18,7 +18,8 @@
  * | Release assignment, and unassignment        | `release` interleaved with activities |
  * | Ticket ids, and being unlinked              | `~open`, the default, which is        |
  * | Story statuses                              | written back out as nothing           |
- * | Notes, and their order                      | (both are hoisted to the top)        |
+ * | Notes, their order and their breaks         | (both are hoisted to the top)        |
+ * |   (as `\n` escapes inside the string)       |                                      |
  *
  * The comment loss is the one that will surprise someone, so it is stated in the
  * README and in the banner this file emits, rather than left to be discovered
@@ -56,27 +57,62 @@ const INDENT = '  ';
  * note that came from a file is unchanged, and a note that arrived some other
  * way still obeys the measure.
  */
-function emitProse(out: string[], indent: string, keyword: string, text: string): void {
-	const [first, ...rest] = wrapNote(text).split('\n');
-	out.push(`${indent}${keyword} ${quote(first ?? '')}`);
-	// Continuation lines sit under the opening quote, whatever the keyword.
-	const pad = ' '.repeat(keyword.length + 1);
-	for (const line of rest) out.push(`${indent}${pad}${quote(line)}`);
-}
-
-function emitNote(out: string[], indent: string, text: string): void {
-	const [first, ...rest] = wrapNote(text).split('\n');
-	out.push(`${indent}note ${quote(first ?? '')}`);
-	// Five spaces: the width of `note ` , so the strings line up.
-	for (const line of rest) out.push(`${indent}     ${quote(line)}`);
-}
-
 const BANNER = [
 	'// Story map exported by doc-sm.',
 	'// Comments and blank lines in an imported file are not preserved: the board',
 	'// is the source, this file is a render of it.',
 	'',
 ].join('\n');
+
+/**
+ * `want "…"` / `so "…"` — one string, however long.
+ *
+ * No wrapping: these hold one clause of one sentence and never contain a break,
+ * so there is nothing to wrap and a long line is simply a long clause.
+ */
+function emitProse(out: string[], indent: string, keyword: string, text: string): void {
+	out.push(`${indent}${keyword} ${quote(text)}`);
+}
+
+/**
+ * `note "…"` — one string, spelled across as many lines as its text needs.
+ *
+ * A trailing backslash carries the string onto the next line, and that split is
+ * the line break:
+ *
+ *     note "Domain comes from the registry entry, not a\
+ *          free-text field that anyone can mistype."
+ *
+ * One pair of quotes for the whole note, so there is only one place to leave a
+ * quote off — but the file still stays inside the same 50-column measure the
+ * text does, which the single long escaped line did not.
+ *
+ * Continuation lines are indented to sit under the opening quote. The lexer
+ * drops that indentation, so it is presentation and nothing else.
+ */
+function emitNote(out: string[], indent: string, text: string): void {
+	const lines = wrapNote(text).split('\n').map(escapeSegment);
+	// Five spaces: the width of `note `, so the text lines up under itself.
+	const pad = `${indent}     `;
+
+	if (lines.length === 1) {
+		out.push(`${indent}note "${lines[0]}"`);
+		return;
+	}
+	out.push(`${indent}note "${lines[0]}\\`);
+	for (const line of lines.slice(1, -1)) out.push(`${pad}${line}\\`);
+	out.push(`${pad}${lines[lines.length - 1]}"`);
+}
+
+/**
+ * Escape one line of a note's text.
+ *
+ * Unlike quote(), a newline is *not* escaped here — the breaks are carried by
+ * the continuations, so this only ever sees text that has none.
+ */
+function escapeSegment(line: string): string {
+	return line.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\t/g, '\\t').replace(/\r/g, '');
+}
 
 export function serialize(document: StoryMapDocument): string {
 	const out: string[] = [BANNER];
@@ -111,7 +147,9 @@ export function serialize(document: StoryMapDocument): string {
 	}
 
 	for (const activity of document.activities) {
-		out.push('');
+		// A blank line between blocks, but never one directly under the opening
+		// brace of a map with no header and no releases.
+		if (out.length > 1 && out[out.length - 1] !== `storymap ${quote(document.title)} {`) out.push('');
 		const hasBody =
 			activity.notes.length > 0 || activity.personas.length > 0 || activity.steps.length > 0;
 		if (!hasBody) {

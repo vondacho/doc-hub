@@ -189,62 +189,47 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 	}
 
 	/**
-	 * `note "…"`, optionally continued on the lines below.
+	 * `note "…"` — one string, with `\n` where the breaks are.
 	 *
-	 * A note is prose, and prose does not fit on one line. Rather than making
-	 * people write `\n` escapes into a single very long string, a bare quoted
-	 * string following a note is a continuation, and the two are joined with a
-	 * line break:
+	 *     note "Domain comes from the registry entry,\nnot a free-text field."
 	 *
-	 *     note "Domain comes from the registry entry,"
-	 *          "not a free-text field."
+	 * A note is prose and prose does not fit on one line, but the break belongs
+	 * *inside* the string rather than being spread across several quoted ones.
+	 * One string has one pair of quotes to keep balanced; a note continued across
+	 * four lines has four pairs, and every one of them is a chance to leave a
+	 * quote off and strand the rest of the file.
 	 *
-	 * Unambiguous with one token of lookahead: every item inside a body starts
-	 * with a keyword or closes it, so a bare string in that position can only be
-	 * a continuation of the note before it. (`\n` inside a string still works,
-	 * for anything that produces these files by machine.)
-	 *
-	 * The joined text is wrapped to NOTE_WRAP_COLUMNS, so the model always holds
-	 * the same breaks the file will be written with.
+	 * The text is wrapped to NOTE_WRAP_COLUMNS, so the model holds the same breaks
+	 * the file will be written with, and the card shows them.
 	 */
 	function parseNote(notes: string[]): boolean {
 		if (!at('keyword', 'note')) return false;
 		advance();
-		const first = expectString('note', 'A note is quoted: note "Ranking is out of scope"');
-		if (first === undefined) {
+		const text = expectString('note', 'A note is quoted: note "Ranking is out of scope"');
+		if (text === undefined) {
 			synchronize();
 			return true;
 		}
-
-		const lines = [first];
-		while (at('string')) lines.push(advance().value);
-		notes.push(wrapNote(lines.join('\n')));
+		notes.push(wrapNote(text));
 		return true;
 	}
 
 	/**
-	 * `want "…"` / `so "…"`, continued on the lines below.
+	 * `want "…"` / `so "…"` — one string.
 	 *
-	 * Continuations join with a **space**, not a line break — the opposite of a
-	 * note, and deliberately. A note may genuinely be several lines; these two are
-	 * one clause of one sentence, and the breaks in the file are only there
-	 * because the measure put them there. Storing them would put a hard break in
-	 * the middle of the sentence the board composes.
-	 *
-	 * So the model holds the clause as written and the serializer re-wraps it.
-	 * Unwrapping and re-wrapping round-trips exactly, because wrapping collapses
-	 * runs of whitespace either way.
+	 * Collapsed to a single line whatever it contains. These two are one clause of
+	 * one sentence, so a break inside one would be a break in the middle of it —
+	 * the board composes the three clauses into a sentence, and a stray newline
+	 * would show up in the middle of that sentence.
 	 */
 	function parseProse(word: 'want' | 'so', hint: string): string | undefined {
 		advance();
-		const first = expectString(word, hint);
-		if (first === undefined) {
+		const value = expectString(word, hint);
+		if (value === undefined) {
 			synchronize();
 			return undefined;
 		}
-		const parts = [first];
-		while (at('string')) parts.push(advance().value);
-		return parts.join(' ').replace(/\s+/g, ' ').trim();
+		return value.replace(/\s+/g, ' ').trim();
 	}
 
 	function parseStory(stories: RawStory[]): boolean {
