@@ -102,20 +102,51 @@ export function Card({
 					onCancel={() => setEditing(false)}
 				/>
 			) : (
-				<button
-					type="button"
-					// The drag listeners live on the same element that opens the
-					// editor. PointerSensor's 6px activation constraint is what
-					// keeps the two apart — without it every click starts a drag
-					// and the title never opens.
-					{...attributes}
-					{...listeners}
-					onClick={() => setEditing(true)}
-					aria-label={label}
-					className="block w-full cursor-grab text-left leading-snug break-words hyphens-auto focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand active:cursor-grabbing"
-				>
-					{title}
-				</button>
+				/*
+				 * Title, caret and menu on one row.
+				 *
+				 * The caret sits immediately right of the title because that is
+				 * where a disclosure belongs — beside the thing it discloses, not
+				 * below it, where it reads as the first line of the content it is
+				 * meant to be hiding.
+				 *
+				 * The menu is in this row rather than absolutely positioned in the
+				 * corner, which is where it used to be: two controls cannot share
+				 * one corner. Keeping it in the flow also means it reserves its
+				 * space, so revealing it on hover no longer nudges the title.
+				 */
+				<div className="flex items-start gap-[0.15em]">
+					<button
+						type="button"
+						// The drag listeners live on the same element that opens the
+						// editor. PointerSensor's 6px activation constraint is what
+						// keeps the two apart — without it every click starts a drag
+						// and the title never opens.
+						{...attributes}
+						{...listeners}
+						onClick={() => setEditing(true)}
+						aria-label={label}
+						// min-w-0 so a long word wraps instead of forcing the row
+						// wider than the column.
+						className="min-w-0 flex-1 cursor-grab text-left leading-snug break-words hyphens-auto focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand active:cursor-grabbing"
+					>
+						{title}
+					</button>
+
+					{notes.length > 0 && (
+						<button
+							type="button"
+							onClick={onToggleDetail}
+							aria-expanded={detailOpen}
+							aria-label={`${detailOpen ? 'Hide' : 'Show'} the ${detailLabel} of ${title}`}
+							className="shrink-0 rounded-sm text-ink-muted transition hover:text-brand focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand motion-reduce:transition-none dark:text-slate-400 dark:hover:text-sky-400"
+						>
+							<Icon name={detailOpen ? 'up' : 'down'} className="h-[1.05em] w-[1.05em]" />
+						</button>
+					)}
+
+					<CardMenu label={label} actions={menu} />
+				</div>
 			)}
 
 			{/*
@@ -134,29 +165,14 @@ export function Card({
 			    columns — which the card usually is — wraps again on top, which is
 			    why `break-words` stays.
 			*/}
-			{notes.length > 0 && !editing && (
-				<>
-					<button
-						type="button"
-						onClick={onToggleDetail}
-						aria-expanded={detailOpen}
-						aria-label={`${detailOpen ? 'Hide' : 'Show'} the ${detailLabel} of ${title}`}
-						className="mt-[0.2em] flex items-center gap-[0.2em] rounded-sm text-[0.7em] text-ink-muted transition hover:text-brand focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand motion-reduce:transition-none dark:text-slate-400 dark:hover:text-sky-400"
-					>
-						<Icon name={detailOpen ? 'up' : 'down'} className="h-[1em] w-[1em]" />
-						{detailLabel}
-					</button>
-					{detailOpen && (
-						<p className="mt-[0.25em] text-[0.8em] leading-snug break-words hyphens-auto whitespace-pre-line text-ink-muted dark:text-slate-400">
-							{notes.join('\n')}
-						</p>
-					)}
-				</>
+			{notes.length > 0 && !editing && detailOpen && (
+				<p className="mt-[0.25em] text-[0.8em] leading-snug break-words hyphens-auto whitespace-pre-line text-ink-muted dark:text-slate-400">
+					{notes.join('\n')}
+				</p>
 			)}
 
 			{meta}
 
-			{!editing && <CardMenu label={label} actions={menu} />}
 		</div>
 	);
 }

@@ -47,7 +47,9 @@ export function CardMenu({ label, actions }: { label: string; actions: readonly 
 	}, [open]);
 
 	return (
-		<div ref={container} className="absolute top-1 right-1">
+		// Positioned by the title row now, not pinned to the card's corner — the
+		// caret lives there. `relative` so the dropdown below still anchors here.
+		<div ref={container} className="relative shrink-0">
 			<button
 				type="button"
 				aria-haspopup="menu"
@@ -57,7 +59,7 @@ export function CardMenu({ label, actions }: { label: string; actions: readonly 
 				onClick={() => setOpen((was) => !was)}
 				// Always reachable by keyboard; only revealed on hover for pointers,
 				// so a dense board is not a field of dots.
-				className="rounded-sm px-1 text-xs leading-none opacity-0 transition group-hover:opacity-70 hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand motion-reduce:transition-none"
+				className="rounded-sm px-[0.15em] leading-none opacity-0 transition group-hover:opacity-70 hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand motion-reduce:transition-none"
 			>
 				<span aria-hidden="true">&#8942;</span>
 			</button>

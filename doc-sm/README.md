@@ -163,11 +163,20 @@ and its notes are behind a toggle, and every card starts closed. That is what
 keeps a board of eighty stories the size of eighty titles — the thing the
 narrow columns and the zoom were both reaching for.
 
-The toggle is **always visible** when a card has something to show, never
-hover-only. It is the only sign that a card is hiding anything, and a card whose
-contents can only be found by accident is a card whose contents are lost. It
-names what it hides, too — *cast* on an activity, *need* on a story, *notes*
-elsewhere.
+The toggle is a **caret immediately right of the title** — pointing down when
+closed, up when open. Beside the thing it discloses rather than below it, where
+it would read as the first line of the content it is meant to be hiding.
+
+It is **always visible** when a card has something to show, never hover-only: it
+is the only sign that a card is hiding anything, and a card whose contents can
+only be found by accident is a card whose contents are lost. It carries no
+words, but its accessible name says what it hides — *cast* on an activity,
+*need* on a story, *notes* elsewhere — along with `aria-expanded`.
+
+Putting it there moved the card's action menu out of the top-right corner and
+into the same row: two controls cannot share one corner. The menu now reserves
+its space instead of being absolutely positioned, so revealing it on hover no
+longer nudges the title.
 
 One button in the toolbar opens or closes them all. It reads the board rather
 than remembering a mode: if anything is open it closes everything, otherwise it
