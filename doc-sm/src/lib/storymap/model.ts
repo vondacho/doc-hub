@@ -220,6 +220,30 @@ export interface StoryMapDocument {
 export const NOTE_WRAP_COLUMNS = 50;
 
 /**
+ * One editable block of text, split back into separate notes.
+ *
+ * A blank line ends a note. That is the whole rule, and it is the only one that
+ * survives a round trip: notes render joined by a blank line, so what somebody
+ * sees in the editor is exactly what splitting will read back. A single newline
+ * stays inside its note, which is what makes a list — or a wrapped sentence —
+ * one note rather than four.
+ *
+ * Each note is wrapped to the measure on the way in, so text typed into a card
+ * obeys the same rule as text read from a file.
+ */
+export function splitNotes(text: string): readonly string[] {
+	return text
+		.split(/\n[ \t]*\n+/)
+		.map((note) => wrapNote(note.trim()))
+		.filter((note) => note !== '');
+}
+
+/** The inverse: notes as one block, ready to edit. */
+export function joinNotes(notes: readonly string[]): string {
+	return notes.join('\n\n');
+}
+
+/**
  * Break a note's text into lines of at most NOTE_WRAP_COLUMNS characters.
  *
  * **Idempotent**, which is what allows it to be applied in two places without
@@ -284,6 +308,47 @@ export function composeNeed(story: {
 	if (story.soThat !== null) clauses.push(`so that ${story.soThat}`);
 	if (clauses.length === 0) return null;
 	return `${clauses.join(', ')}.`;
+}
+
+/**
+ * The three clauses, as the board draws them: one line each.
+ *
+ * A line per clause rather than one composed sentence, because the DSL models
+ * them as three fields and the card should show what the file holds. It is also
+ * what makes them individually editable — a sentence can only be replaced whole,
+ * where three lines can each be corrected on their own.
+ *
+ * Each line wraps on its own. `prefix` is fixed prose the reader never edits;
+ * `value` is the part that is theirs.
+ */
+export type NeedField = 'persona' | 'want' | 'soThat';
+
+export interface NeedLine {
+	readonly field: NeedField;
+	readonly prefix: string;
+	readonly value: string | null;
+	/** Shown, muted, when the clause has not been written yet. */
+	readonly placeholder: string;
+	/** Trailing punctuation, so the three read as one sentence when all are there. */
+	readonly suffix: string;
+}
+
+export function needLines(story: {
+	persona: string | null;
+	want: string | null;
+	soThat: string | null;
+}): readonly NeedLine[] {
+	return [
+		{
+			field: 'persona',
+			prefix: `As ${article(story.persona ?? 'a')} `,
+			value: story.persona,
+			placeholder: 'somebody',
+			suffix: ',',
+		},
+		{ field: 'want', prefix: 'I want ', value: story.want, placeholder: 'something', suffix: ',' },
+		{ field: 'soThat', prefix: 'so that ', value: story.soThat, placeholder: 'some outcome', suffix: '.' },
+	];
 }
 
 /** "a" or "an". Small, and its absence is the kind of thing that reads as sloppy. */

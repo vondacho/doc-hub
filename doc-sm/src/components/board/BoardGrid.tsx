@@ -23,7 +23,7 @@
 
 import { SortableContext, horizontalListSortingStrategy } from '@dnd-kit/sortable';
 import { useMemo } from 'react';
-import { canChangeKind, type BoardAction } from '../../lib/board/reducer.ts';
+import { canChangeKind, personasFor, type BoardAction } from '../../lib/board/reducer.ts';
 import {
 	bandOrder,
 	cellKey,
@@ -32,11 +32,13 @@ import {
 	UNASSIGNED,
 	type BandId,
 	type BoardState,
+	type CardKind,
 	type Id,
 } from '../../lib/board/state.ts';
 import { kindLabel } from '../../lib/board/kinds.ts';
 import { STORY_STATUSES, storyStatusLabel, type StoryStatus } from '../../lib/storymap/model.ts';
-import { activityDetail, stepDetail, storyDetail } from '../../lib/board/detail.ts';
+import { activityDerived, stepDerived } from '../../lib/board/detail.ts';
+import { StoryNeed } from './StoryNeed.tsx';
 import { BandRail } from './BandRail.tsx';
 import { StoryMeta } from './StoryMeta.tsx';
 import { Icon } from './Icon.tsx';
@@ -137,7 +139,9 @@ export function BoardGrid({
 								id={activityId}
 								kind="activity"
 								title={activity.title}
-								notes={activityDetail(activity)}
+								derived={activityDerived(activity)}
+								notes={activity.notes}
+								onNotes={(text) => dispatch({ type: 'setNotes', kind: 'activity', id: activityId, text })}
 								detailOpen={expanded.has(activityId)}
 								onToggleDetail={() => onToggleDetail(activityId)}
 								detailLabel="cast"
@@ -174,7 +178,9 @@ export function BoardGrid({
 										id={stepId}
 										kind="step"
 										title={step.title}
-										notes={stepDetail(step)}
+										derived={stepDerived(step)}
+									notes={step.notes}
+									onNotes={(text) => dispatch({ type: 'setNotes', kind: 'step', id: stepId, text })}
 									detailOpen={expanded.has(stepId)}
 									onToggleDetail={() => onToggleDetail(stepId)}
 									detailLabel="notes"
@@ -244,7 +250,17 @@ export function BoardGrid({
 													id={storyId}
 													kind="story"
 													title={story.title}
-													notes={storyDetail(story)}
+													derived={[]}
+											detailContent={
+												<StoryNeed
+													story={story}
+													personas={personasFor(board, storyId)}
+													onPersona={(persona) => dispatch({ type: 'setPersona', id: storyId, persona })}
+													onClause={(field, text) => dispatch({ type: 'setNeed', id: storyId, field, text })}
+												/>
+											}
+											notes={story.notes}
+											onNotes={(text) => dispatch({ type: 'setNotes', kind: 'story', id: storyId, text })}
 											detailOpen={expanded.has(storyId)}
 											onToggleDetail={() => onToggleDetail(storyId)}
 											detailLabel="need"
@@ -280,6 +296,33 @@ export function BoardGrid({
 /* -------------------------------------------------------------------------- */
 /* Menus — the keyboard path                                                   */
 /* -------------------------------------------------------------------------- */
+
+/**
+ * "Add a note", for a card that has none.
+ *
+ * A card with nothing written shows no caret — the caret means "there is more
+ * here", and one on an empty card would be a promise of nothing. So the menu is
+ * the way in, and it seeds a placeholder the same way a new card does, which
+ * makes the caret appear and the text clickable.
+ */
+function addNoteAction(
+	dispatch: (action: BoardAction) => void,
+	kind: CardKind,
+	id: Id,
+	notes: readonly string[],
+): CardMenuAction {
+	return {
+		label: 'Add a note',
+		separated: true,
+		run: () =>
+			dispatch({
+				type: 'setNotes',
+				kind,
+				id,
+				text: notes.length > 0 ? `${notes.join('\n\n')}\n\nNew note` : 'New note',
+			}),
+	};
+}
 
 function kindChangeActions(
 	board: BoardState,
@@ -321,9 +364,12 @@ function cardMenu(
 	const left = move(index - 1);
 	const right = move(index + 1);
 
+	const notes = (kind === 'activity' ? board.activities[id]?.notes : board.steps[id]?.notes) ?? [];
+
 	return [
 		{ label: 'Move left', run: left, disabledReason: left ? undefined : 'It is already first.' },
 		{ label: 'Move right', run: right, disabledReason: right ? undefined : 'It is already last.' },
+		addNoteAction(dispatch, kind, id, notes),
 		...kindChangeActions(board, dispatch, kind, id),
 		{
 			label: kind === 'activity' ? 'Delete activity and its steps' : 'Delete step and its stories',
@@ -414,6 +460,7 @@ function storyMenu(
 		...bandMoves,
 		...statusMoves,
 		...ticketMoves,
+		addNoteAction(dispatch, 'story', storyId, story?.notes ?? []),
 		...kindChangeActions(board, dispatch, 'story', storyId),
 		{ label: 'Delete story', separated: true, run: () => dispatch({ type: 'removeCard', kind: 'story', id: storyId }) },
 	];

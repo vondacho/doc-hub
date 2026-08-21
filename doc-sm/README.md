@@ -183,9 +183,67 @@ than remembering a mode: if anything is open it closes everything, otherwise it
 opens everything, so its meaning is always the opposite of what you can see. It
 is disabled — with the reason — on a board where nothing has been written yet.
 
-None of this is board state. Expanding a note is not an edit: it is not
-undoable, it never reaches the exported file, and two people reading the same
-map may reasonably have different things open.
+Opening a card is not an edit: it is not undoable, it never reaches the exported
+file, and two people reading the same map may reasonably have different things
+open.
+
+### Editing notes
+
+The free notes on any card are editable in place, the way titles are — click the
+text, type, click away. One difference, and it is the point: **Enter inserts a
+line break**. A title is one line and Enter means "done"; notes are prose, and a
+prose box where Return commits is a box you cannot write a list in. Committing
+moves to blur and to Cmd/Ctrl+Enter, and Escape still abandons without
+dispatching.
+
+**A blank line separates one note from the next.** That is the whole rule. A
+single newline stays inside its note, which is what makes a wrapped sentence —
+or a list — one note rather than four. The renderer joins by the same rule that
+the parser splits by, so the block you type is the block you see, and each note
+is wrapped to the 50-column measure on the way in exactly as if it had been read
+from a file.
+
+A card with nothing written shows no caret — a caret means "there is more here",
+and one on an empty card is a promise of nothing — so **Add a note** lives in the
+card's menu. It seeds a placeholder the way a new card does, which makes the
+caret appear and the text clickable.
+
+### Editing the need
+
+A story's need is drawn as **three lines, one per clause**, each wrapping on its
+own:
+
+```
+As a Business analyst,
+I want to search every product at once,
+so that I can answer a question without knowing which product owns it.
+```
+
+A line per clause rather than one composed sentence, because that is how the DSL
+models them — and because a sentence can only be replaced whole, where three
+lines can each be corrected on their own. Unwritten clauses show a muted
+placeholder, so a story with nothing written is still an invitation rather than
+a blank.
+
+`want` and `so` edit in place, and here **Enter commits** — the opposite of the
+notes editor, for the opposite reason. Each is one clause of one sentence, never
+several lines; a break inside one would be a break in the middle of it. The file
+still wraps them to the measure, because that wrapping belongs to the file.
+
+The persona is a **`select`, not a text box**, over exactly the personas its
+activity lists. Free text there would let a story be written for somebody the
+activity never mentioned — a file that then fails to re-import, which is the one
+failure the whole persona design exists to prevent. An activity with no cast
+gets a disabled control saying so, rather than an empty dropdown that would read
+as "there are no personas" instead of "none have been listed here".
+
+Every story card is expandable for this reason, whether or not anything is
+written yet: a story exists to answer *who wants this, and why*, so the way in
+belongs on the card.
+
+**Still not editable on the card**: an activity's cast, which is a list of
+declared names its stories resolve against. Change it in the DSL — the preview is
+editable and applies straight back to the board.
 
 **Narrow cards.** A story map is read *across*: the useful question is how many
 steps fit on screen, and every rem of card width costs one. So the column is

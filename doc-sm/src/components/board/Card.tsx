@@ -23,6 +23,7 @@ import {
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { cardClass, kindLabel } from '../../lib/board/kinds.ts';
+import { joinNotes } from '../../lib/storymap/model.ts';
 import type { CardKind, Id } from '../../lib/board/state.ts';
 import { CardMenu, type CardMenuAction } from './CardMenu.tsx';
 import { Icon } from './Icon.tsx';
@@ -31,7 +32,19 @@ export interface CardProps {
 	readonly id: Id;
 	readonly kind: CardKind;
 	readonly title: string;
+	/** Composed from modelled fields — an activity's cast. Shown, never edited. */
+	readonly derived: readonly string[];
+	/**
+	 * Rendered at the top of the open detail, above the notes.
+	 *
+	 * Where a card's structured content goes when it is more than lines of text:
+	 * a story's need is three separately editable clauses, so it arrives as a
+	 * component rather than as strings.
+	 */
+	readonly detailContent?: ReactNode;
+	/** Free prose. This is the part somebody can type into. */
 	readonly notes: readonly string[];
+	readonly onNotes: (text: string) => void;
 	/** Extra text after the kind in the accessible name — "in MVP, 2 of 5". */
 	readonly position?: string;
 	readonly menu: readonly CardMenuAction[];
@@ -53,7 +66,10 @@ export function Card({
 	id,
 	kind,
 	title,
+	derived,
+	detailContent,
 	notes,
+	onNotes,
 	position,
 	menu,
 	meta,
@@ -67,6 +83,7 @@ export function Card({
 }: CardProps) {
 	const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id, data });
 	const [editing, setEditing] = useState(false);
+	const [editingNotes, setEditingNotes] = useState(false);
 
 	// The accessible name says the kind out loud. Colour is kind here, and colour
 	// is never allowed to be the only signal.
@@ -133,7 +150,7 @@ export function Card({
 						{title}
 					</button>
 
-					{notes.length > 0 && (
+					{(derived.length > 0 || notes.length > 0 || detailContent !== undefined) && (
 						<button
 							type="button"
 							onClick={onToggleDetail}
@@ -165,10 +182,43 @@ export function Card({
 			    columns — which the card usually is — wraps again on top, which is
 			    why `break-words` stays.
 			*/}
-			{notes.length > 0 && !editing && detailOpen && (
-				<p className="mt-[0.25em] text-[0.8em] leading-snug break-words hyphens-auto whitespace-pre-line text-ink-muted dark:text-slate-400">
-					{notes.join('\n')}
-				</p>
+			{detailOpen && !editing && (
+				<div className="mt-[0.25em] text-[0.8em] leading-snug text-ink-muted dark:text-slate-400">
+					{detailContent}
+					{derived.map((block, index) => (
+						<p
+							key={index}
+							className="break-words hyphens-auto whitespace-pre-line"
+						>
+							{block}
+						</p>
+					))}
+
+					{editingNotes ? (
+						<NoteEditor
+							value={joinNotes(notes)}
+							label={`Notes on ${title}`}
+							onCommit={(next) => {
+								setEditingNotes(false);
+								onNotes(next);
+							}}
+							onCancel={() => setEditingNotes(false)}
+						/>
+					) : (
+						notes.length > 0 && (
+							<button
+								type="button"
+								onClick={() => setEditingNotes(true)}
+								aria-label={`Edit the notes on ${title}`}
+								className={`block w-full text-left break-words hyphens-auto whitespace-pre-line focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand ${
+									derived.length > 0 ? 'mt-[0.35em]' : ''
+								}`}
+							>
+								{joinNotes(notes)}
+							</button>
+						)
+					)}
+				</div>
 			)}
 
 			{meta}
@@ -222,6 +272,70 @@ function TitleEditor({
 			onKeyDown={keys}
 			onBlur={() => onCommit(draft)}
 			className="w-full resize-none rounded-sm bg-white/70 px-[0.2em] py-[0.1em] text-[1em] text-ink focus-visible:outline-2 focus-visible:outline-brand dark:bg-black/30 dark:text-slate-100"
+		/>
+	);
+}
+
+/**
+ * The notes editor.
+ *
+ * One difference from the title editor, and it is the reason this is a separate
+ * component: **Enter inserts a line break**. A title is one line and Enter means
+ * "done"; notes are prose, and a prose box where Return commits is a box you
+ * cannot write a list in.
+ *
+ * So committing moves to blur and to Cmd/Ctrl+Enter, and Escape still abandons
+ * without dispatching — the same contract the title editor has, minus the key
+ * that now belongs to the text.
+ *
+ * A blank line separates one note from the next. splitNotes reads it back that
+ * way, and the renderer joins by the same rule, so the block somebody types is
+ * the block they see.
+ */
+function NoteEditor({
+	value,
+	label,
+	onCommit,
+	onCancel,
+}: {
+	value: string;
+	label: string;
+	onCommit: (next: string) => void;
+	onCancel: () => void;
+}) {
+	const [draft, setDraft] = useState(value);
+	const ref = useRef<HTMLTextAreaElement>(null);
+
+	useEffect(() => {
+		ref.current?.focus();
+		// Caret at the end rather than a full selection: notes are usually being
+		// added to, where a title is usually being replaced.
+		const end = ref.current?.value.length ?? 0;
+		ref.current?.setSelectionRange(end, end);
+	}, []);
+
+	return (
+		<textarea
+			ref={ref}
+			rows={Math.min(12, Math.max(3, draft.split('\n').length + 1))}
+			value={draft}
+			aria-label={label}
+			placeholder="A note. A blank line starts another."
+			onChange={(event) => setDraft(event.target.value)}
+			onKeyDown={(event) => {
+				if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+					event.preventDefault();
+					onCommit(draft);
+					return;
+				}
+				if (event.key === 'Escape') {
+					event.preventDefault();
+					onCancel();
+				}
+				// Enter falls through: in prose it is a line break, not a verdict.
+			}}
+			onBlur={() => onCommit(draft)}
+			className="mt-[0.25em] w-full resize-none rounded-sm bg-white/70 px-[0.2em] py-[0.1em] text-[1em] leading-snug text-ink focus-visible:outline-2 focus-visible:outline-brand dark:bg-black/30 dark:text-slate-100"
 		/>
 	);
 }

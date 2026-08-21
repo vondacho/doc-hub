@@ -28,7 +28,7 @@ import {
 	type Id,
 	type StoryStatus,
 } from './state.ts';
-import { DEFAULT_STORY_STATUS } from '../storymap/model.ts';
+import { DEFAULT_STORY_STATUS, splitNotes } from '../storymap/model.ts';
 import { nextId } from './convert.ts';
 
 export type BoardAction =
@@ -95,7 +95,29 @@ export type BoardAction =
 	 * real answer: a story nobody has decided the audience for is an ordinary
 	 * state on a board mid-workshop.
 	 */
-	| { type: 'setPersona'; id: Id; persona: string | null };
+	| { type: 'setPersona'; id: Id; persona: string | null }
+	/**
+	 * Replace a card's free notes with one edited block of text.
+	 *
+	 * The whole block, not one note: the card presents its notes as a single text
+	 * area, so the edit that comes back is a single text. A blank line separates
+	 * one note from the next — see splitNotes, which is the same rule the renderer
+	 * joins by, so what somebody typed is what is read back.
+	 *
+	 * Only *free* notes. A story's need and an activity's cast are composed from
+	 * modelled fields and are not text anyone edits here; editing a rendering is
+	 * how a board comes to disagree with the file behind it.
+	 */
+	| { type: 'setNotes'; kind: CardKind; id: Id; text: string }
+	/**
+	 * Write one clause of a story's need.
+	 *
+	 * One field at a time, because that is how they are read and corrected. The
+	 * text is collapsed to a single line: `want` and `so` are one clause of one
+	 * sentence, and a break inside one would be a break in the middle of it. The
+	 * file wraps them to the measure; the model does not.
+	 */
+	| { type: 'setNeed'; id: Id; field: 'want' | 'soThat'; text: string };
 
 /** Actions that replace the document rather than edit it; history.ts clears on these. */
 export function resetsHistory(action: BoardAction): boolean {
@@ -221,6 +243,35 @@ export function reduce(board: BoardState, action: BoardAction): BoardState {
 			// cast belongs to the activity — see resolvePersona in the parser.
 			if (action.persona !== null && !personasFor(board, action.id).includes(action.persona)) return board;
 			return { ...board, stories: { ...board.stories, [action.id]: { ...story, persona: action.persona } } };
+		}
+
+		case 'setNeed': {
+			const story = board.stories[action.id];
+			if (!story) return board;
+			const collapsed = action.text.replace(/\s+/g, ' ').trim();
+			const value = collapsed === '' ? null : collapsed;
+			if (story[action.field] === value) return board;
+			return { ...board, stories: { ...board.stories, [action.id]: { ...story, [action.field]: value } } };
+		}
+
+		case 'setNotes': {
+			const notes = splitNotes(action.text);
+			const same = (existing: readonly string[]) =>
+				existing.length === notes.length && existing.every((note, i) => note === notes[i]);
+
+			if (action.kind === 'activity') {
+				const activity = board.activities[action.id];
+				if (!activity || same(activity.notes)) return board;
+				return { ...board, activities: { ...board.activities, [action.id]: { ...activity, notes } } };
+			}
+			if (action.kind === 'step') {
+				const step = board.steps[action.id];
+				if (!step || same(step.notes)) return board;
+				return { ...board, steps: { ...board.steps, [action.id]: { ...step, notes } } };
+			}
+			const story = board.stories[action.id];
+			if (!story || same(story.notes)) return board;
+			return { ...board, stories: { ...board.stories, [action.id]: { ...story, notes } } };
 		}
 
 		case 'setStatus': {
