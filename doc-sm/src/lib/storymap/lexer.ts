@@ -28,6 +28,7 @@ export type TokenKind =
 	| 'ident'
 	| 'at'
 	| 'hash'
+	| 'tilde'
 	| 'lbrace'
 	| 'rbrace'
 	| 'eof';
@@ -50,6 +51,11 @@ export interface Token {
 export const STORYMAP_KEYWORDS: ReadonlySet<string> = new Set([
 	'storymap',
 	'product',
+	'space',
+	'persona',
+	'as',
+	'want',
+	'so',
 	'release',
 	'activity',
 	'step',
@@ -65,7 +71,9 @@ export const STORYMAP_KEYWORDS: ReadonlySet<string> = new Set([
  */
 export const MAX_SOURCE_BYTES = 2 * 1024 * 1024;
 
-const IDENT_START = /[A-Za-z_]/;
+// Digits included: a ticket id may be numeric (`#42`) as well as a project-keyed
+// string (`#client-onboarding-42`), and both arrive after `#` as one token.
+const IDENT_START = /[A-Za-z0-9_]/;
 const IDENT_PART = /[A-Za-z0-9_-]/;
 
 /**
@@ -162,10 +170,10 @@ export function tokenize(
 			continue;
 		}
 
-		if (char === '@' || char === '#') {
+		if (char === '@' || char === '#' || char === '~') {
 			index += 1;
 			tokens.push({
-				kind: char === '@' ? 'at' : 'hash',
+				kind: char === '@' ? 'at' : char === '#' ? 'hash' : 'tilde',
 				value: char,
 				line,
 				column: startColumn,

@@ -55,6 +55,21 @@ export const icons = {
 	/** Arrow coming down onto a surface — put this text into the board. */
 	apply: 'M12 3v12m0 0 4-4m-4 4-4-4M4 19h16',
 
+	/** Paper aeroplane — send these out of doc-sm, into the tracker. */
+	publish: 'M21 3 3 10.5l7 3 3 7L21 3ZM10 14l4-4',
+
+	/** Chevrons apart — open everything. */
+	expandAll: 'M8 9.5 12 5.5l4 4M8 14.5l4 4 4-4',
+	/** Chevrons together — close everything. */
+	collapseAll: 'M8 5.5l4 4 4-4M8 18.5l4-4 4 4',
+
+	zoomIn: 'M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14ZM20.5 20.5 16 16M11 8.5v5M8.5 11h5',
+	zoomOut: 'M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14ZM20.5 20.5 16 16M8.5 11h5',
+	/** Four corners pushing out. */
+	fullscreen: 'M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5',
+	/** The same four pulling back in. */
+	fullscreenExit: 'M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5',
+
 	close: 'M6 6l12 12M18 6 6 18',
 	plus: 'M12 5v14M5 12h14',
 	up: 'm18 15-6-6-6 6',

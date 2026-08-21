@@ -140,6 +140,23 @@ app:
   # degrades to a text box for the shortname and the board opens as usual.
   registryApiUrl: http://doc-registry:1337
 
+  # The ticketing system, as this server sees it. Global configuration, and the
+  # second and last in-cluster call doc-sm makes.
+  #
+  # **Empty by default, and that is a working state.** doc-sm does not issue
+  # ticket ids or decide statuses — the ticketing system does — so with nothing
+  # configured every story is unlinked, reads Open, and the "create a ticket"
+  # control is disabled with the reason on it. A guessed default would turn "not
+  # configured" into "configured wrongly", which is far harder to diagnose.
+  #
+  # This must name an **adapter**, not a tracker's own API. doc-sm speaks two
+  # calls — POST /tickets and GET /tickets/{id}, described at the top of
+  # src/lib/ticketing.ts — and Jira, GitHub and Azure DevOps each spell issue
+  # creation differently and each want credentials. Keeping an adapter in front
+  # keeps a vendor SDK, a Secret and an opinion about which tracker a team uses
+  # out of this component, which is why this chart still has no Secret.
+  ticketingApiUrl: ""
+
   # Arbitrary extra entries, merged verbatim into the same ConfigMap and so
   # injected as env vars too:
   #   extraConfig:

@@ -75,7 +75,16 @@ export function toBoard(document: StoryMapDocument): BoardState {
 
 			for (const story of step.stories as readonly StoryNode[]) {
 				const storyId = nextId('y');
-				stories[storyId] = { id: storyId, title: story.title, notes: [...story.notes] };
+				stories[storyId] = {
+					id: storyId,
+					title: story.title,
+					notes: [...story.notes],
+					ticket: story.ticket,
+					status: story.status,
+					persona: story.persona,
+					want: story.want,
+					soThat: story.soThat,
+				};
 
 				// An unresolvable title cannot happen — the parser rejects a
 				// reference to an undeclared release — so an unknown one here
@@ -91,6 +100,7 @@ export function toBoard(document: StoryMapDocument): BoardState {
 			id: activityId,
 			title: activity.title,
 			notes: [...activity.notes],
+			personas: [...activity.personas],
 			stepOrder,
 		};
 		activityOrder.push(activityId);
@@ -99,6 +109,7 @@ export function toBoard(document: StoryMapDocument): BoardState {
 	return {
 		...emptyBoard(document.title),
 		product: document.product,
+		space: document.space,
 		notes: [...document.notes],
 		releaseOrder,
 		releases,
@@ -140,6 +151,7 @@ export function toDocument(board: BoardState): StoryMapDocument {
 	return {
 		title: board.title,
 		product: board.product,
+		space: board.space,
 		notes: [...board.notes],
 		releases: board.releaseOrder.flatMap((id) => {
 			const release = board.releases[id];
@@ -151,6 +163,7 @@ export function toDocument(board: BoardState): StoryMapDocument {
 			return [{
 				title: activity.title,
 				notes: [...activity.notes],
+				personas: [...activity.personas],
 				steps: activity.stepOrder.flatMap((stepId) => {
 					const step = board.steps[stepId];
 					if (!step) return [];
@@ -164,7 +177,18 @@ export function toDocument(board: BoardState): StoryMapDocument {
 								const story = board.stories[storyId];
 								if (!story) return [];
 								const release = band === UNASSIGNED ? null : board.releases[band]?.title ?? null;
-								return [{ title: story.title, notes: [...story.notes], release }];
+								return [
+									{
+										title: story.title,
+										notes: [...story.notes],
+										release,
+										ticket: story.ticket,
+										status: story.status,
+										persona: story.persona,
+										want: story.want,
+										soThat: story.soThat,
+									},
+								];
 							}),
 						),
 					}];

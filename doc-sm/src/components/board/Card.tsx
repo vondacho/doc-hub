@@ -12,12 +12,20 @@
  * src/lib/board/history.ts needs no action-coalescing machinery at all.
  */
 
-import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
+import {
+	useEffect,
+	useRef,
+	useState,
+	type CSSProperties,
+	type KeyboardEvent,
+	type ReactNode,
+} from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { cardClass, kindLabel } from '../../lib/board/kinds.ts';
 import type { CardKind, Id } from '../../lib/board/state.ts';
 import { CardMenu, type CardMenuAction } from './CardMenu.tsx';
+import { Icon } from './Icon.tsx';
 
 export interface CardProps {
 	readonly id: Id;
@@ -27,6 +35,13 @@ export interface CardProps {
 	/** Extra text after the kind in the accessible name — "in MVP, 2 of 5". */
 	readonly position?: string;
 	readonly menu: readonly CardMenuAction[];
+	/** Whether this card's detail is open. Hidden is the default, everywhere. */
+	readonly detailOpen: boolean;
+	readonly onToggleDetail: () => void;
+	/** What the detail is called on this kind of card — "cast", "need", "notes". */
+	readonly detailLabel: string;
+	/** Story-only: the ticket and status line, rendered under the title. */
+	readonly meta?: ReactNode;
 	readonly onRetitle: (title: string) => void;
 	readonly style?: CSSProperties;
 	readonly className?: string;
@@ -41,6 +56,10 @@ export function Card({
 	notes,
 	position,
 	menu,
+	meta,
+	detailOpen,
+	onToggleDetail,
+	detailLabel,
 	onRetitle,
 	style,
 	className = '',
@@ -65,7 +84,12 @@ export function Card({
 				// make every other card jump.
 				opacity: isDragging ? 0.35 : undefined,
 			}}
-			className={`group relative rounded-lg border px-2.5 py-2 text-sm shadow-sm motion-reduce:transition-none ${cardClass[kind]} ${className}`}
+			// Sized in `em`, not `rem`. The scroll container in BoardGrid sets one
+			// font-size from the zoom level and everything here follows from it —
+			// which is what makes zoom a real layout change rather than a
+			// transform, and transforms are what break sticky headers and dnd-kit's
+			// hit-testing.
+			className={`group relative rounded-[0.4em] border px-[0.55em] py-[0.4em] text-[1em] shadow-sm motion-reduce:transition-none ${cardClass[kind]} ${className}`}
 		>
 			{editing ? (
 				<TitleEditor
@@ -88,15 +112,49 @@ export function Card({
 					{...listeners}
 					onClick={() => setEditing(true)}
 					aria-label={label}
-					className="block w-full cursor-grab text-left break-words focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand active:cursor-grabbing"
+					className="block w-full cursor-grab text-left leading-snug break-words hyphens-auto focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand active:cursor-grabbing"
 				>
 					{title}
 				</button>
 			)}
 
+			{/*
+			    Detail is collapsed by default, so a board opens at the size of its
+			    titles. The toggle is **always visible** when there is anything to
+			    show, and never hover-only: it is the only sign that a card is
+			    hiding something, and a card whose contents can only be discovered
+			    by chance is a card whose contents are lost.
+
+			    When open: notes wrap and are never clamped. The column is narrow on
+			    purpose — a story map is read across, and wide cards cost columns on
+			    screen — so the width is constrained and the height is not.
+			    `whitespace-pre-line` shows the breaks the text actually carries;
+			    separate notes join with a break rather than a space, so two notes
+			    read as two lines rather than one run-on. Anything narrower than 50
+			    columns — which the card usually is — wraps again on top, which is
+			    why `break-words` stays.
+			*/}
 			{notes.length > 0 && !editing && (
-				<p className="mt-1 text-xs text-ink-muted dark:text-slate-400">{notes.join(' ')}</p>
+				<>
+					<button
+						type="button"
+						onClick={onToggleDetail}
+						aria-expanded={detailOpen}
+						aria-label={`${detailOpen ? 'Hide' : 'Show'} the ${detailLabel} of ${title}`}
+						className="mt-[0.2em] flex items-center gap-[0.2em] rounded-sm text-[0.7em] text-ink-muted transition hover:text-brand focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand motion-reduce:transition-none dark:text-slate-400 dark:hover:text-sky-400"
+					>
+						<Icon name={detailOpen ? 'up' : 'down'} className="h-[1em] w-[1em]" />
+						{detailLabel}
+					</button>
+					{detailOpen && (
+						<p className="mt-[0.25em] text-[0.8em] leading-snug break-words hyphens-auto whitespace-pre-line text-ink-muted dark:text-slate-400">
+							{notes.join('\n')}
+						</p>
+					)}
+				</>
 			)}
+
+			{meta}
 
 			{!editing && <CardMenu label={label} actions={menu} />}
 		</div>
@@ -147,7 +205,7 @@ function TitleEditor({
 			onChange={(event) => setDraft(event.target.value)}
 			onKeyDown={keys}
 			onBlur={() => onCommit(draft)}
-			className="w-full resize-none rounded-sm bg-white/70 px-1 py-0.5 text-sm text-ink focus-visible:outline-2 focus-visible:outline-brand dark:bg-black/30 dark:text-slate-100"
+			className="w-full resize-none rounded-sm bg-white/70 px-[0.2em] py-[0.1em] text-[1em] text-ink focus-visible:outline-2 focus-visible:outline-brand dark:bg-black/30 dark:text-slate-100"
 		/>
 	);
 }

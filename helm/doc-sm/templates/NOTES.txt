@@ -11,6 +11,15 @@ Read by this server (in-cluster), to fill the board's product picker:
   Product registry   -> {{ .Values.app.registryApiUrl }}
   If it cannot be reached the picker becomes a text box; the board still works.
 
+Ticketing:
+{{- if .Values.app.ticketingApiUrl }}
+  Ticketing adapter  -> {{ .Values.app.ticketingApiUrl }}
+{{- else }}
+  Not configured. Stories stay unlinked and read Open; "create a ticket" is
+  disabled with the reason on it. Set app.ticketingApiUrl to an adapter that
+  serves POST /tickets and GET /tickets/{id} — see doc-sm/src/lib/ticketing.ts.
+{{- end }}
+
 Browse the board:
 {{- if .Values.ingress.enabled }}
 {{- range $host := .Values.ingress.hosts }}

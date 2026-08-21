@@ -21,6 +21,14 @@ data:
   # This is the only request doc-sm makes. If it fails, the picker degrades to a
   # text box and the board still works; see src/lib/products.ts.
   REGISTRY_API_URL: {{ .Values.app.registryApiUrl | quote }}
+
+  # The ticketing system doc-sm raises tickets against, also in-cluster.
+  #
+  # Empty by default, and empty is a working state: with no ticketing system
+  # attached every story is simply unlinked and reads Open, and the control that
+  # would raise a ticket says why it cannot. Rendered unconditionally so that
+  # clearing it is a value change rather than a template change.
+  TICKETING_API_URL: {{ .Values.app.ticketingApiUrl | quote }}
   {{- range $key, $value := .Values.app.extraConfig }}
   {{ $key }}: {{ $value | quote }}
   {{- end }}

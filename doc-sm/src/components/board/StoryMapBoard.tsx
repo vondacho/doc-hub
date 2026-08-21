@@ -39,9 +39,10 @@ import {
 	type DragStartEvent,
 } from '@dnd-kit/core';
 import { sortableKeyboardCoordinates } from '@dnd-kit/sortable';
-import { useCallback, useEffect, useMemo, useReducer, useState } from 'react';
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { clearFileInput, downloadText, filenameFor, readTextFile } from '../../lib/files.ts';
 import { applyText, resetIds, toBoard, toDocument } from '../../lib/board/convert.ts';
+import { cardsWithDetail } from '../../lib/board/detail.ts';
 import {
 	canRedo,
 	canUndo,
@@ -55,6 +56,7 @@ import { reduce, resetsHistory, type BoardAction } from '../../lib/board/reducer
 import {
 	bandOrder,
 	emptyBoard,
+	unboundStories,
 	splitCellKey,
 	storiesIn,
 	UNASSIGNED,
@@ -62,17 +64,30 @@ import {
 	type Id,
 } from '../../lib/board/state.ts';
 import type { Product } from '../../lib/products.ts';
+import { effectiveSpace, type StoryStatus } from '../../lib/storymap/model.ts';
 import { parse } from '../../lib/storymap/parser.ts';
 import { StoryMapParseError, type Problem } from '../../lib/storymap/problems.ts';
 import { SAMPLE_SOURCE } from '../../lib/storymap/sample.ts';
 import { serialize } from '../../lib/storymap/serialize.ts';
 import { BoardGrid } from './BoardGrid.tsx';
 import { PreviewDialog } from './PreviewDialog.tsx';
+import { PublishDialog, type PublishProgress } from './PublishDialog.tsx';
 import { ProblemList } from './ProblemList.tsx';
 import { Toolbar } from './Toolbar.tsx';
 
 /** How far back undo goes. Snapshots are cheap; see history.ts. */
 const HISTORY_LIMIT = 100;
+
+/**
+ * Zoom stops, as multipliers of the board's base font size.
+ *
+ * A fixed ladder rather than a continuous slider: the useful question is "show
+ * me more of the board" or "let me read this", and a handful of stops answers it
+ * without anyone fiddling to find a round number. 0.6 fits roughly twice the
+ * columns of 1.2 across the same screen.
+ */
+const ZOOM_STOPS = [0.6, 0.7, 0.85, 1, 1.15, 1.35, 1.6] as const;
+const DEFAULT_ZOOM_INDEX = 3;
 
 const step = undoable<BoardState, BoardAction>(reduce, {
 	limit: HISTORY_LIMIT,
@@ -94,9 +109,22 @@ export interface StoryMapBoardProps {
 	readonly products: readonly Product[];
 	readonly productsUnavailable: string | null;
 	readonly registryUrl: string;
+	/**
+	 * Whether a ticketing system is configured for this deployment.
+	 *
+	 * Passed down rather than probed from here: the address is in-cluster and the
+	 * browser never sees it. All the board needs to know is whether asking is
+	 * worth offering — see the disabled "Create a ticket" entry in BoardGrid.
+	 */
+	readonly ticketingConfigured: boolean;
 }
 
-export default function StoryMapBoard({ products, productsUnavailable, registryUrl }: StoryMapBoardProps) {
+export default function StoryMapBoard({
+	products,
+	productsUnavailable,
+	registryUrl,
+	ticketingConfigured,
+}: StoryMapBoardProps) {
 	const [history, send] = useReducer(
 		step as (state: History<BoardState>, action: BoardAction | HistoryAction) => History<BoardState>,
 		undefined,
@@ -109,6 +137,25 @@ export default function StoryMapBoard({ products, productsUnavailable, registryU
 	// "Changed since the last import or export." The only state doc-sm can lose.
 	const [dirty, setDirty] = useState(false);
 	const [previewing, setPreviewing] = useState(false);
+	const [ticketError, setTicketError] = useState<string | null>(null);
+	const [publishing, setPublishing] = useState(false);
+	const [zoomIndex, setZoomIndex] = useState(DEFAULT_ZOOM_INDEX);
+	/**
+	 * Which cards have their detail open.
+	 *
+	 * View state, not board state: expanding a note is not an edit, so it is not
+	 * undoable and never reaches the exported file. **Everything starts
+	 * collapsed**, which is what keeps a board of eighty stories the size of
+	 * eighty titles.
+	 *
+	 * A set of open ids rather than a flag per card, so "hide all" is one empty
+	 * set and cards that arrive from an import start collapsed without anyone
+	 * having to remember to reset them.
+	 */
+	const [expanded, setExpanded] = useState<ReadonlySet<Id>>(() => new Set());
+	const [fullscreen, setFullscreen] = useState(false);
+	const stage = useRef<HTMLDivElement>(null);
+	const [progress, setProgress] = useState<PublishProgress | null>(null);
 
 	const dispatch = useCallback((action: BoardAction) => {
 		send(action);
@@ -186,6 +233,183 @@ export default function StoryMapBoard({ products, productsUnavailable, registryU
 		downloadText(filenameFor(board.title), serialize(toDocument(board)));
 		setDirty(false);
 	}, [board]);
+
+	/* ---- tickets ----------------------------------------------------------- */
+
+	/**
+	 * Link a story to a ticket that already exists, or clear the link.
+	 *
+	 * A prompt, deliberately. doc-sm does not issue ticket ids, so this is
+	 * transcription — somebody reading a key off the tracker and typing it in —
+	 * and a prompt is the smallest honest thing for that. It becomes a proper
+	 * field the day linking is something people do dozens of times a session.
+	 */
+	const linkTicket = useCallback(
+		(storyId: Id) => {
+			const story = board.stories[storyId];
+			if (!story) return;
+			const entered = window.prompt(
+				'Ticket id, exactly as the ticketing system spells it.\nLeave it empty to unlink.',
+				story.ticket ?? '',
+			);
+			// Cancel is null and means "leave it alone"; an empty string is a
+			// deliberate unlink. They are different answers and are treated so.
+			if (entered === null) return;
+			dispatch({ type: 'setTicket', id: storyId, ticket: entered });
+		},
+		[board.stories, dispatch],
+	);
+
+	/**
+	 * Ask the ticketing system to raise a ticket for a story.
+	 *
+	 * Nothing here invents an id or a status: both come back from the call, and
+	 * both are written exactly as received. If the call fails the story is left
+	 * untouched — an unlinked story is a truthful state, and a half-linked one
+	 * would not be.
+	 */
+	const createTicket = useCallback(
+		async (storyId: Id) => {
+			const story = board.stories[storyId];
+			if (!story) return;
+			setTicketError(null);
+
+			let payload: { id?: string; status?: StoryStatus; error?: string };
+			try {
+				const response = await fetch('/api/ticket', {
+					method: 'POST',
+					headers: { 'content-type': 'application/json' },
+					body: JSON.stringify({ product: board.product, title: story.title }),
+				});
+				payload = await response.json();
+			} catch {
+				setTicketError('Could not reach doc-sm to raise the ticket.');
+				return;
+			}
+
+			if (!payload.id || !payload.status) {
+				setTicketError(payload.error ?? 'The ticket could not be created.');
+				return;
+			}
+
+			dispatch({ type: 'setTicket', id: storyId, ticket: payload.id });
+			dispatch({ type: 'setStatus', id: storyId, status: payload.status });
+		},
+		[board.stories, board.product, dispatch],
+	);
+
+	/* ---- detail ------------------------------------------------------------ */
+
+	const detailed = useMemo(() => cardsWithDetail(board), [board]);
+	// "Some are open" is the state the global control acts on: it collapses if
+	// anything is showing, and expands otherwise. One button, and its meaning is
+	// always the opposite of what you can currently see.
+	const anyExpanded = detailed.some((id) => expanded.has(id));
+
+	const toggleDetail = useCallback((id: Id) => {
+		setExpanded((was) => {
+			const next = new Set(was);
+			if (!next.delete(id)) next.add(id);
+			return next;
+		});
+	}, []);
+
+	const toggleAllDetail = useCallback(() => {
+		setExpanded(anyExpanded ? new Set() : new Set(detailed));
+	}, [anyExpanded, detailed]);
+
+	/* ---- zoom and fullscreen ----------------------------------------------- */
+
+	const zoom = ZOOM_STOPS[zoomIndex] ?? 1;
+
+	/**
+	 * Fullscreen the board, not the page.
+	 *
+	 * `stage` is the whole component, not just the grid, and that is the point:
+	 * anything outside the fullscreen element is simply not painted. Fullscreening
+	 * the grid alone would take the toolbar with it — no zoom, no way back except
+	 * Escape — and would make a dragged card vanish on pickup, because the
+	 * DragOverlay renders beside the grid rather than inside it.
+	 *
+	 * The two dialogs are unaffected either way: `showModal()` puts them in the
+	 * browser's top layer, which paints above a fullscreen element.
+	 *
+	 * State follows the *document*, never the click, because Escape and the
+	 * browser's own chrome exit fullscreen without asking this component first.
+	 */
+	useEffect(() => {
+		const sync = () => setFullscreen(document.fullscreenElement === stage.current);
+		document.addEventListener('fullscreenchange', sync);
+		return () => document.removeEventListener('fullscreenchange', sync);
+	}, []);
+
+	const toggleFullscreen = useCallback(() => {
+		const element = stage.current;
+		if (!element) return;
+		if (document.fullscreenElement === element) {
+			void document.exitFullscreen();
+			return;
+		}
+		// Older Safari only has the prefixed form, and rejecting the promise is
+		// the normal way a browser refuses — neither is worth an error message
+		// here, because the board is entirely usable without fullscreen.
+		const request =
+			element.requestFullscreen ??
+			(element as unknown as { webkitRequestFullscreen?: () => Promise<void> }).webkitRequestFullscreen;
+		void request?.call(element)?.catch?.(() => undefined);
+	}, []);
+
+	/* ---- publishing -------------------------------------------------------- */
+
+	const space = effectiveSpace(board);
+	const unbound = useMemo(() => unboundStories(board), [board]);
+
+	/**
+	 * Raise a ticket for every unbound story.
+	 *
+	 * Sequential, not parallel, and that is not timidity about load. Each ticket
+	 * is recorded on the board the moment it comes back, so a failure at story
+	 * seventeen leaves sixteen real tickets already written down rather than
+	 * sixteen orphans nobody can find. Firing them all at once and awaiting the
+	 * set would lose that ordering, and losing it means creating tickets in
+	 * somebody's tracker that this board has no record of — the worst outcome
+	 * this operation has.
+	 *
+	 * Failures do not stop the run. A story the tracker rejects is left unlinked
+	 * and reported by name, and publishing again retries exactly those, because
+	 * everything that succeeded now has a ticket and is no longer unbound.
+	 */
+	const publish = useCallback(async () => {
+		if (space === null) return;
+		const targets = unboundStories(board);
+		const failures: { title: string; error: string }[] = [];
+		setProgress({ done: 0, total: targets.length, failures: [], running: true });
+
+		for (const [index, story] of targets.entries()) {
+			let payload: { id?: string; status?: StoryStatus; error?: string };
+			try {
+				const response = await fetch('/api/ticket', {
+					method: 'POST',
+					headers: { 'content-type': 'application/json' },
+					body: JSON.stringify({ space, product: board.product, title: story.title }),
+				});
+				payload = await response.json();
+			} catch {
+				payload = { error: 'Could not reach doc-sm to raise the ticket.' };
+			}
+
+			if (payload.id && payload.status) {
+				dispatch({ type: 'setTicket', id: story.id, ticket: payload.id });
+				dispatch({ type: 'setStatus', id: story.id, status: payload.status });
+			} else {
+				failures.push({ title: story.title, error: payload.error ?? 'The ticket could not be created.' });
+			}
+
+			setProgress({ done: index + 1, total: targets.length, failures: [...failures], running: true });
+		}
+
+		setProgress({ done: targets.length, total: targets.length, failures, running: false });
+	}, [board, space, dispatch]);
 
 	/* ---- the dirty guard --------------------------------------------------- */
 
@@ -345,7 +569,12 @@ export default function StoryMapBoard({ products, productsUnavailable, registryU
 	const empty = board.activityOrder.length === 0 && board.releaseOrder.length === 0;
 
 	return (
-		<div className="flex flex-col gap-4">
+		<div
+			ref={stage}
+			className={`flex flex-col gap-4 ${
+				fullscreen ? 'h-screen overflow-hidden bg-white p-4 dark:bg-night' : ''
+			}`}
+		>
 			<Toolbar
 				title={board.title}
 				product={board.product}
@@ -366,14 +595,59 @@ export default function StoryMapBoard({ products, productsUnavailable, registryU
 				}}
 				onExport={exportFile}
 				onPreview={() => setPreviewing(true)}
+				space={board.space}
+				spacePlaceholder={board.product ?? ''}
+				onSpace={(next) => dispatch({ type: 'setSpace', space: next })}
+				onPublish={() => {
+					setProgress(null);
+					setPublishing(true);
+				}}
+				publishCount={unbound.length}
+				publishReason={publishBlockedReason(ticketingConfigured, space, unbound.length)}
 				onLoadSample={() => load(SAMPLE_SOURCE)}
 				onAddActivity={() => dispatch({ type: 'addActivity', index: board.activityOrder.length })}
 				onAddRelease={() => dispatch({ type: 'addRelease', index: board.releaseOrder.length })}
 				onUndo={() => send({ type: 'undo' })}
 				onRedo={() => send({ type: 'redo' })}
+				zoom={zoom}
+				canZoomIn={zoomIndex < ZOOM_STOPS.length - 1}
+				canZoomOut={zoomIndex > 0}
+				onZoomIn={() => setZoomIndex((i) => Math.min(i + 1, ZOOM_STOPS.length - 1))}
+				onZoomOut={() => setZoomIndex((i) => Math.max(i - 1, 0))}
+				onZoomReset={() => setZoomIndex(DEFAULT_ZOOM_INDEX)}
+				fullscreen={fullscreen}
+				onToggleFullscreen={toggleFullscreen}
+				detailShown={anyExpanded}
+				canToggleDetail={detailed.length > 0}
+				onToggleAllDetail={toggleAllDetail}
 			/>
 
 			<ProblemList problems={problems} onDismiss={() => setProblems([])} />
+
+			{ticketError !== null && (
+				<p
+					role="alert"
+					className="rounded-2xl border border-critical/40 bg-critical/5 px-4 py-3 text-sm dark:border-critical/50"
+				>
+					{ticketError}{' '}
+					<button
+						type="button"
+						onClick={() => setTicketError(null)}
+						className="font-semibold text-brand underline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand"
+					>
+						Dismiss
+					</button>
+				</p>
+			)}
+
+			<PublishDialog
+				open={publishing}
+				space={space ?? ''}
+				stories={unbound}
+				progress={progress}
+				onPublish={publish}
+				onClose={() => setPublishing(false)}
+			/>
 
 			<PreviewDialog
 				open={previewing}
@@ -394,19 +668,38 @@ export default function StoryMapBoard({ products, productsUnavailable, registryU
 					onDragCancel={() => setDragging(null)}
 					accessibility={{ announcements }}
 				>
-					<BoardGrid board={board} dispatch={dispatch} />
+					{/* In fullscreen this is the flex child that gets the leftover
+					    height, so the board fills the screen under the toolbar rather
+					    than keeping its 75vh cap. min-h-0 is what lets a flex child
+					    actually shrink to its container. */}
+					<div className={fullscreen ? 'flex min-h-0 flex-1 flex-col' : undefined}>
+						<BoardGrid
+							board={board}
+							dispatch={dispatch}
+							onLinkTicket={linkTicket}
+							onCreateTicket={createTicket}
+							ticketingConfigured={ticketingConfigured}
+							zoom={zoom}
+							fullscreen={fullscreen}
+							expanded={expanded}
+							onToggleDetail={toggleDetail}
+						/>
 
-					{/* Mandatory, not decorative: the board scrolls, and a card
-					    dragged by transform inside an overflow:auto container is
-					    clipped at its edge. The overlay renders outside the flow and
-					    is the only way a card crosses the board. */}
-					<DragOverlay dropAnimation={null}>
-						{dragging && (
-							<div className={`rounded-lg border px-2.5 py-2 text-sm shadow-lg ${cardClass[dragging.kind]}`}>
-								{dragging.title}
-							</div>
-						)}
-					</DragOverlay>
+						{/* Mandatory, not decorative: the board scrolls, and a card
+						    dragged by transform inside an overflow:auto container is
+						    clipped at its edge. The overlay renders outside the flow
+						    and is the only way a card crosses the board. */}
+						<DragOverlay dropAnimation={null}>
+							{dragging && (
+								<div
+									style={{ fontSize: `${13 * zoom}px` }}
+									className={`rounded-[0.4em] border px-[0.55em] py-[0.4em] text-[1em] shadow-lg ${cardClass[dragging.kind]}`}
+								>
+									{dragging.title}
+								</div>
+							)}
+						</DragOverlay>
+					</div>
 				</DndContext>
 			)}
 		</div>
@@ -439,6 +732,18 @@ function EmptyBoard({ onLoadSample, onAddActivity }: { onLoadSample: () => void;
 			</div>
 		</div>
 	);
+}
+
+/** Why the publish control is unavailable, or undefined when it is available. */
+function publishBlockedReason(
+	configured: boolean,
+	space: string | null,
+	count: number,
+): string | undefined {
+	if (!configured) return 'No ticketing system is configured for doc-sm.';
+	if (space === null) return 'Pick a product, or set a ticketing space, first.';
+	if (count === 0) return 'Every story already has a ticket.';
+	return undefined;
 }
 
 function nameOf(board: BoardState, id: string): string {

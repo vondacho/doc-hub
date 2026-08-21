@@ -41,13 +41,13 @@ export function Cell({
 		<div
 			ref={setNodeRef}
 			style={style}
-			className={`group/cell min-h-20 rounded-lg border border-dashed p-1.5 transition-colors motion-reduce:transition-none ${
+			className={`group/cell min-h-[4em] rounded-[0.4em] border border-dashed p-[0.3em] transition-colors motion-reduce:transition-none ${
 				isOver
 					? 'border-brand bg-brand/5 dark:border-sky-400 dark:bg-sky-400/10'
 					: 'border-slate-200 dark:border-slate-700'
 			}`}
 		>
-			<ul aria-label={label} className="flex flex-col gap-1.5">
+			<ul aria-label={label} className="flex flex-col gap-[0.3em]">
 				<SortableContext items={[...storyIds]} strategy={verticalListSortingStrategy}>
 					{children}
 				</SortableContext>
@@ -59,9 +59,9 @@ export function Cell({
 				type="button"
 				onClick={onAdd}
 				aria-label={`Add a story to ${label}`}
-				className="mt-1.5 flex w-full items-center justify-center rounded-md border border-transparent px-2 py-1 text-ink-muted opacity-0 transition hover:border-slate-300 hover:text-brand focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand group-hover/cell:opacity-100 motion-reduce:transition-none dark:text-slate-400 dark:hover:border-slate-600 dark:hover:text-sky-400"
+				className="mt-[0.3em] flex w-full items-center justify-center rounded-md border border-transparent px-2 py-[0.15em] text-ink-muted opacity-0 transition hover:border-slate-300 hover:text-brand focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand group-hover/cell:opacity-100 motion-reduce:transition-none dark:text-slate-400 dark:hover:border-slate-600 dark:hover:text-sky-400"
 			>
-				<Icon name="plus" className="h-4 w-4" />
+				<Icon name="plus" className="h-[1em] w-[1em]" />
 			</button>
 		</div>
 	);

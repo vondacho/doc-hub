@@ -25,9 +25,9 @@
  * off-by-ones live.
  */
 
-import type { CardKind } from '../storymap/model.ts';
+import type { CardKind, StoryStatus } from '../storymap/model.ts';
 
-export type { CardKind };
+export type { CardKind, StoryStatus };
 
 /**
  * In-memory only. Ids are never written to a `.storymap` file and are
@@ -67,6 +67,8 @@ export interface Activity {
 	readonly id: Id;
 	readonly title: string;
 	readonly notes: readonly string[];
+	/** This activity's cast. Its stories may name one of these, and no other. */
+	readonly personas: readonly string[];
 	readonly stepOrder: readonly Id[];
 }
 
@@ -80,6 +82,21 @@ export interface Story {
 	readonly id: Id;
 	readonly title: string;
 	readonly notes: readonly string[];
+	/**
+	 * The linked ticket, as the ticketing system spells it, or null when the
+	 * story is not linked to one.
+	 *
+	 * doc-sm never invents this. It arrives either from a `.storymap` file, from
+	 * an edit in the preview, or from the ticketing system when a ticket is
+	 * created for the story — never from a counter in this application.
+	 */
+	readonly ticket: string | null;
+	/** A cached copy of the ticket's status; `open` while unlinked. */
+	readonly status: StoryStatus;
+	/** The declared persona this story is written for, or null. */
+	readonly persona: string | null;
+	readonly want: string | null;
+	readonly soThat: string | null;
 }
 
 export interface BoardState {
@@ -94,6 +111,11 @@ export interface BoardState {
 	 * product is called, and it is the file that would be wrong.
 	 */
 	readonly product: string | null;
+	/**
+	 * The ticketing space tickets are raised into, or null to follow the product.
+	 * See `effectiveSpace` in ../storymap/model.ts — one answer, one place.
+	 */
+	readonly space: string | null;
 	readonly notes: readonly string[];
 	/** Band order, top to bottom. UNASSIGNED is implicit and always last. */
 	readonly releaseOrder: readonly Id[];
@@ -109,6 +131,7 @@ export function emptyBoard(title = 'Untitled story map'): BoardState {
 	return {
 		title,
 		product: null,
+		space: null,
 		notes: [],
 		releaseOrder: [],
 		releases: {},
@@ -136,6 +159,32 @@ export function stepOrder(board: BoardState): readonly Id[] {
 
 export function storiesIn(board: BoardState, stepId: Id, band: BandId): readonly Id[] {
 	return board.cells[cellKey(stepId, band)] ?? [];
+}
+
+/**
+ * The stories with no ticket, in board order — what publishing would raise.
+ *
+ * Board order, not store order: the list a person confirms has to read in the
+ * order they see on screen, or checking it against the board is guesswork.
+ */
+export function unboundStories(board: BoardState): readonly Story[] {
+	const found: Story[] = [];
+	for (const activityId of board.activityOrder) {
+		for (const stepId of board.activities[activityId]?.stepOrder ?? []) {
+			for (const band of bandOrder(board)) {
+				for (const storyId of storiesIn(board, stepId, band)) {
+					const story = board.stories[storyId];
+					if (story && !isLinked(story)) found.push(story);
+				}
+			}
+		}
+	}
+	return found;
+}
+
+/** True once a story has a ticket, which is the only thing "linked" means. */
+export function isLinked(story: Story): boolean {
+	return story.ticket !== null && story.ticket !== '';
 }
 
 /** The activity a step belongs to, or undefined if the board is inconsistent. */

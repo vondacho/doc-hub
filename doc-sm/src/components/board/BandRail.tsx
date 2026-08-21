@@ -46,10 +46,10 @@ export function BandRail({
 
 			<div
 				style={{ gridColumn: 1, gridRow: firstRow + board.releaseOrder.length }}
-				className="sticky left-0 z-20 rounded-lg bg-white px-2 py-2 dark:bg-night-raised"
+				className="sticky left-0 z-20 rounded-[0.4em] bg-white px-[0.5em] py-[0.4em] dark:bg-night-raised"
 			>
-				<p className="text-sm font-semibold">Below the line</p>
-				<p className="mt-0.5 text-xs text-ink-muted dark:text-slate-400">
+				<p className="text-[0.95em] font-semibold">Below the line</p>
+				<p className="mt-[0.15em] text-[0.75em] text-ink-muted dark:text-slate-400">
 					Known, not committed to.
 				</p>
 			</div>
@@ -102,7 +102,7 @@ function BandLabel({
 				transition,
 				opacity: isDragging ? 0.35 : undefined,
 			}}
-			className="group sticky left-0 z-20 rounded-lg bg-white px-2 py-2 dark:bg-night-raised"
+			className="group sticky left-0 z-20 rounded-[0.4em] bg-white px-[0.5em] py-[0.4em] dark:bg-night-raised"
 		>
 			{editing ? (
 				<input
@@ -123,7 +123,7 @@ function BandLabel({
 					{...listeners}
 					onClick={() => setEditing(true)}
 					aria-label={`Release ${release.title}, band ${index + 1} of ${board.releaseOrder.length}`}
-					className="block w-full cursor-grab text-left text-sm font-semibold break-words focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand active:cursor-grabbing"
+					className="block w-full cursor-grab text-left text-[0.95em] font-semibold break-words focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand active:cursor-grabbing"
 				>
 					{release.title}
 				</button>

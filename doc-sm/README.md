@@ -80,6 +80,126 @@ rail's move and delete) do use `title`, because they sit inside the board's
 scroll container where an absolutely positioned tooltip would be clipped, and
 because every one of them is also reachable from a card's menu.
 
+## Personas and the need
+
+**Each activity lists its cast.** Personas are declared inside the activity they
+belong to, one `persona` per line, and the backbone card shows them as a
+multi-line note. An activity is where "who is doing this?" actually gets asked —
+once per thing people do, not once per product — and putting the answer on the
+backbone means the top row of the board tells you whose map this is, which a row
+of bare titles never does.
+
+**A story may name a persona its own activity lists, and no other.** That is what
+keeps the list a real cast rather than a decoration: if a story is written for
+somebody the activity never mentioned, one of the two is wrong, and the parser
+says which activity and what it does list.
+
+**Every story states its need** in the formal story language:
+
+```
+story "Full-text search" @MVP #CLONB-42 ~in-progress {
+  as "Business analyst"
+  want "to search every product at once"
+  so "I can answer a question without knowing which"
+     "product owns it"
+}
+```
+
+Three fields rather than one sentence of prose, because the three are different
+kinds of thing. `as` is a *reference*, so it cannot drift from the cast; `want`
+and `so` are the story's own words. The card composes them — *As a Business
+analyst, I want …, so that …* — rather than storing the sentence, so the fields
+stay the single record and cannot disagree with a cached copy.
+
+All three are optional and independently so. A story with only a title is where
+every card starts, and a partial need composes as far as it has been thought
+through rather than hiding until somebody fills in the third box.
+
+The `so that` clause earns its place in the model rather than in prose:
+doc-portal's product view already promises to keep it "intact from the story
+file", and a field is what makes that promise keepable.
+
+**Moving work between activities carries its readers with it.** A story may only
+name a persona its own activity lists, so dragging a step — or a card, or
+promoting a step to an activity — into somewhere that never mentioned its reader
+would export a file that will not parse: the board would look fine and the file
+would be broken, which is the worst pairing. The destination's cast is extended
+instead of the story's persona being cleared, because that is what actually
+happened — work for a business analyst now lives under this activity, so this
+activity serves business analysts.
+
+One detail with a reason: `want` and `so` continuation lines join with a
+**space**, where a `note`'s join with a line break. A note may genuinely be
+several lines; these two are one clause of one sentence, and the breaks in the
+file are only there because the measure put them there.
+
+### Reading a wide board
+
+Three things make a large map readable, and all three are layout rather than
+tricks.
+
+**Notes wrap at 50 characters.** A note is prose, and prose is read in lines of
+roughly that length in every typeset thing there has ever been — it also keeps a
+`.storymap` file legible in a diff, which is where these notes are actually
+reviewed. The breaks are carried by the text, not faked in CSS, so the file and
+the card show the same thing. Wrapping is idempotent, a deliberate paragraph
+break survives, and a single word longer than the measure is left to overflow
+rather than cut in half; a URL broken in two is worse than a long line.
+
+In the DSL, a bare quoted string under a `note` continues it:
+
+```
+note "Domain comes from the registry entry, not a"
+     "free-text field that anyone can mistype."
+```
+
+This is unambiguous with one token of lookahead — every item inside a body starts
+with a keyword or closes it, so a bare string there can only be a continuation.
+A `\n` escape inside a note still works for anything writing these files by
+machine, and becomes a real line break the first time the board writes it back.
+
+**Detail is collapsed by default.** A card shows its title; its cast, its need
+and its notes are behind a toggle, and every card starts closed. That is what
+keeps a board of eighty stories the size of eighty titles — the thing the
+narrow columns and the zoom were both reaching for.
+
+The toggle is **always visible** when a card has something to show, never
+hover-only. It is the only sign that a card is hiding anything, and a card whose
+contents can only be found by accident is a card whose contents are lost. It
+names what it hides, too — *cast* on an activity, *need* on a story, *notes*
+elsewhere.
+
+One button in the toolbar opens or closes them all. It reads the board rather
+than remembering a mode: if anything is open it closes everything, otherwise it
+opens everything, so its meaning is always the opposite of what you can see. It
+is disabled — with the reason — on a board where nothing has been written yet.
+
+None of this is board state. Expanding a note is not an edit: it is not
+undoable, it never reaches the exported file, and two people reading the same
+map may reasonably have different things open.
+
+**Narrow cards.** A story map is read *across*: the useful question is how many
+steps fit on screen, and every rem of card width costs one. So the column is
+narrow and titles and notes wrap instead — trading vertical space, which is
+cheap, for horizontal space, which is not. **Notes are never clamped**: a note
+that runs to five lines runs to five lines. Truncating it would hide the one
+sentence somebody wrote down to be remembered.
+
+**Zoom**, on a fixed ladder from 60% to 160%; the percentage is a button that
+resets to 100%. It is implemented by scaling the board's font size, with every
+width, gap and padding measured in `em` against it — *not* by `transform:
+scale()`. A transformed ancestor breaks `position: sticky`, which the header rows
+and the band rail depend on, and confuses dnd-kit's hit-testing, which every drag
+depends on. Scaling the layout keeps both honest.
+
+**Fullscreen**, on the board and its toolbar together. Anything outside the
+fullscreen element is not painted, so fullscreening the grid alone would take the
+controls with it — no zoom, and no way back except Escape — and would make a
+dragged card vanish on pickup, since the DragOverlay renders beside the grid. The
+dialogs are unaffected: `showModal()` puts them in the browser's top layer, which
+paints above a fullscreen element. State follows `fullscreenchange` rather than
+the click, because Escape and the browser's own chrome exit without asking.
+
 **Preview** (the eye) opens the `.storymap` file this board would export, in a
 dialog, with copy and apply buttons. It is a native `<dialog>` — focus trap,
 inert background and Escape come with it rather than being hand-written.
@@ -120,6 +240,95 @@ press, rather than leaving a button that silently did nothing.
 The two buttons on the empty board keep their words. They are the onboarding
 path, and two unexplained circles on an otherwise blank page would be a riddle.
 
+## Tickets and statuses
+
+A story can be linked to a ticket, and carries a status. **doc-sm owns neither.**
+
+- **The ticketing system issues ids.** There is no action anywhere in this
+  component that generates one — a board minting its own would hand out names
+  that collide with real tickets. Ids arrive from a file, from an edit in the
+  preview, or from the ticketing system when a ticket is raised.
+- **An empty id is not shown.** A story with no ticket shows no badge at all,
+  not a placeholder. Until the ticketing system has heard of it there is nothing
+  true to display, and an empty slot on eighty cards is eighty pieces of noise.
+- **Status defaults to Open** and is always shown. `Open`, `Analysing`, `Ready`,
+  `In progress`, `Done`, `Closed`, in workflow order.
+- **The ticketing system stays the truth.** You can set a status here and in the
+  DSL, because a file has to carry one and a board is useful offline — but once a
+  story is linked, that is a cache of what the tracker last said. The card menu
+  says so: on a linked story the entries read "Mark Done *here only*".
+
+### The ticketing space
+
+Where tickets land — a Jira project key, or whatever the tracker calls the
+container an issue belongs to. Stated with `space`, and **left out when it is
+simply the product shortname**, which is the common case; writing the same word
+twice on every map would make that case noisy to serve the uncommon one.
+
+Picking a product on a board that has no space **initialises** it to the
+shortname. Changing the product afterwards leaves a settled space alone: tickets
+already raised carry keys from it, and silently re-pointing the map at another
+space would strand them.
+
+### Publishing
+
+The paper-aeroplane button raises a ticket for every story that has none. It is
+the only control in doc-sm that changes something outside doc-sm, and the only
+one that cannot be undone — the board's history would happily roll back the
+ticket *ids* while the real tickets stayed exactly where they were, which is
+worse than offering no undo at all.
+
+So it is **confirmed twice, with two different questions** — two identical "are
+you sure?" prompts only train people to click through both:
+
+1. **Review** — every story that would get a ticket, by name, with the space they
+   land in. This catches the mistake that actually happens, which is not
+   mis-clicking but publishing the right board into the wrong space.
+2. **Commit** — type the space name. A deliberate act no stray Return can
+   produce, which also re-reads the most consequential field on the way past.
+
+The primary button is not focused on either step.
+
+Tickets are raised **one at a time, and recorded as each returns**. A failure at
+story seventeen leaves sixteen real tickets already written down, rather than
+sixteen tickets in somebody's tracker that this board has no record of — the
+worst outcome the operation has. Failures do not stop the run; they are reported
+by name, and publishing again retries exactly those, because everything that
+succeeded now has a ticket and is no longer unbound.
+
+### The connected system
+
+`TICKETING_API_URL` is global configuration, and **empty by default — which is a
+working state.** With nothing configured every story is unlinked, reads Open, and
+"Create a ticket" is disabled with the reason on it. A guessed default would turn
+*not configured* into *configured wrongly*, which is much harder to diagnose.
+
+It must name an **adapter**, not a tracker's own API. doc-sm speaks two calls:
+
+```
+POST {base}/tickets          { product, title }  ->  { id, status }
+GET  {base}/tickets/{id}                         ->  { id, status }
+```
+
+Jira, GitHub and Azure DevOps each spell issue creation differently and each want
+credentials. An adapter in front keeps a vendor SDK, a secret, and an opinion
+about which tracker a team uses out of this component — which is why the chart
+still has no Secret. The calls go through doc-sm's own `/api/ticket` route, so
+the in-cluster address is never handed to a browser.
+
+A status the adapter returns that doc-sm does not recognise is reported, not
+guessed at. A story a tracker calls "Awaiting UAT" is not Open, and saying so
+would be a false statement about somebody's work.
+
+### Why the status badge has no colour
+
+`global.css` reserves four colours for status and says nothing else may borrow
+them — those four mean *health*, and a workflow state is not health. Nor is a
+seventh, eighth and ninth hue invented: this board's primary encoding is already
+colour (magenta, blue, yellow for the card kinds), and a second colour system on
+top would wreck the first. The status is a word, with weight and fill separating
+work in flight from work that is finished.
+
 ## The DSL
 
 Full reference at `/dsl`; the grammar lives in `src/lib/storymap/`.
@@ -127,15 +336,21 @@ Full reference at `/dsl`; the grammar lives in `src/lib/storymap/`.
 ```
 storymap "Doc-Hub Onboarding" {
   product "client-onboarding"
+  space "CLONB"
 
   release "MVP"
   release "R2"
 
   activity "Discover documentation" {
+    persona "Business analyst"
+    persona "Product manager"
+
     step "Search the catalog" {
-      story "Full-text search" @MVP
-      story "Filter by domain" @R2 {
-        note "Domain comes from the registry entry."
+      story "Full-text search" @MVP #CLONB-42 ~in-progress {
+        as "Business analyst"
+        want "to search every product at once"
+        so "I can answer a question without knowing which"
+           "product owns it"
       }
       story "Saved searches"
     }
@@ -144,7 +359,16 @@ storymap "Doc-Hub Onboarding" {
 }
 ```
 
-Seven decisions the format makes, each argued where it is implemented:
+Ten decisions the format makes, each argued where it is implemented:
+
+- **One ticketing space**, stated with `space` and left out when it is just the
+  product shortname. Picking a product on a board that has none sets it.
+
+- **Tickets come from the ticketing system.** A story carries the id that system
+  issued, whole, after a `#`. doc-sm never mints one. No `#` means not linked,
+  which is where every story starts.
+- **Status defaults to Open** and is never written when it is the default. One
+  of `~open`, `~analysing`, `~ready`, `~in-progress`, `~done`, `~closed`.
 
 - **One product, by shortname.** A map names its product with doc-registry's
   `slug`, not the display name — the name is editable in the CMS, the slug is
@@ -158,6 +382,12 @@ Seven decisions the format makes, each argued where it is implemented:
 - **Release titles are unique.** A story refers to a release by title, which is
   what keeps identifiers out of the file entirely.
 - **Empty cards are real.** A step with no stories keeps its column.
+- **Each activity lists its cast**, one `persona` per line, and a story may name
+  a persona its own activity lists and no other.
+- **Every story states its need** — `as` / `want` / `so`, the formal story
+  language modelled in three fields rather than written as prose.
+- **Notes wrap at 50 characters**, on the card and in the file alike. A bare
+  quoted string under a `note` continues it, joined with a line break.
 - **Comments do not survive the board.** Import, export, and they are gone.
 
 ### What round-trips
@@ -166,11 +396,13 @@ Seven decisions the format makes, each argued where it is implemented:
 |---|---|
 | Map title | Comments — every one of them |
 | The product shortname | Blank lines |
+| The ticketing space, when stated | An unstated space, which stays unstated |
+| Ticket ids, and being unlinked | `~open`, the default, written back as nothing |
 | Release set and band order | Indentation width and style |
 | Structure and order of every card | `@"Bare"` vs `@Bare` (normalised) |
 | Priority order within a cell | `{ }` on an empty card (omitted) |
 | Release assignment, and unassignment | `release` interleaved with activities |
-| Notes, and their order | (`product` and `release` are hoisted to the top) |
+| Notes, their order and their line breaks | A `\n` escape in a note, which becomes a real line break |
 
 The contract the serializer holds to is stronger than "text round-trips":
 
@@ -201,6 +433,7 @@ be, or it leaves the cluster to come back in to a Service one DNS name away.
 | `DOC_PORTAL_URL` | `http://doc-portal.localhost` | the board's footer |
 | `REGISTRY_URL` | `http://doc-registry.localhost` | the footer, and the picker's "register one" link |
 | `REGISTRY_API_URL` | `http://localhost:1337` | **in-cluster**: the product picker's list |
+| `TICKETING_API_URL` | *(empty)* | **in-cluster**: raising tickets. Empty is a working state |
 | `HOST` / `PORT` | `0.0.0.0` / `4322` | the standalone `@astrojs/node` server |
 | `NODE_ENV`, `NODE_OPTIONS` | `production`, unset | Dockerfile / chart |
 

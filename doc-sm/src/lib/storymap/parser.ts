@@ -26,12 +26,17 @@
  */
 
 import { STORYMAP_KEYWORDS, tokenize, type Token, type TokenKind } from './lexer.ts';
-import type {
-	ActivityNode,
-	ReleaseNode,
-	StepNode,
-	StoryMapDocument,
-	StoryNode,
+import {
+	DEFAULT_STORY_STATUS,
+	isStoryStatus,
+	wrapNote,
+	STORY_STATUSES,
+	type ActivityNode,
+	type ReleaseNode,
+	type StepNode,
+	type StoryMapDocument,
+	type StoryNode,
+	type StoryStatus,
 } from './model.ts';
 import { isSaturated, report, StoryMapParseError, type Problem } from './problems.ts';
 
@@ -61,7 +66,15 @@ interface RawStory {
 	readonly title: string;
 	readonly notes: string[];
 	readonly ref: RawRef | null;
+	readonly ticket: string | null;
+	readonly status: StoryStatus;
+	/** Unresolved until the whole file is read, exactly like a release ref. */
+	persona: RawRef | null;
+	want: string | null;
+	soThat: string | null;
 }
+
+
 
 interface RawStep {
 	readonly title: string;
@@ -72,6 +85,8 @@ interface RawStep {
 interface RawActivity {
 	readonly title: string;
 	readonly notes: string[];
+	readonly personas: string[];
+	readonly personaTokens: Token[];
 	readonly steps: RawStep[];
 }
 
@@ -144,14 +159,14 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 		const open = advance();
 
 		while (!at('rbrace') && !at('eof') && !isSaturated(problems)) {
-			// `#id` is reserved, not supported. Rejecting it explicitly costs two
-			// lines now and makes a future card-id feature a parser-only change,
-			// with no break in the file format.
+			// `#` is a ticket id and belongs on a story line, not where a
+			// declaration is expected. Named explicitly because the mistake is an
+			// easy one — a ticket id one line below the story it belongs to.
 			if (at('hash')) {
 				problemAt(
 					peek(),
-					'Card ids are not supported.',
-					'Identity in a story map file is position and title. Remove the `#`.',
+					`A ticket id is not a declaration inside \`${owner}\`.`,
+					'It goes on the story line: story "Full-text search" #client-onboarding-42',
 				);
 				synchronize();
 				continue;
@@ -173,12 +188,63 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 		);
 	}
 
+	/**
+	 * `note "…"`, optionally continued on the lines below.
+	 *
+	 * A note is prose, and prose does not fit on one line. Rather than making
+	 * people write `\n` escapes into a single very long string, a bare quoted
+	 * string following a note is a continuation, and the two are joined with a
+	 * line break:
+	 *
+	 *     note "Domain comes from the registry entry,"
+	 *          "not a free-text field."
+	 *
+	 * Unambiguous with one token of lookahead: every item inside a body starts
+	 * with a keyword or closes it, so a bare string in that position can only be
+	 * a continuation of the note before it. (`\n` inside a string still works,
+	 * for anything that produces these files by machine.)
+	 *
+	 * The joined text is wrapped to NOTE_WRAP_COLUMNS, so the model always holds
+	 * the same breaks the file will be written with.
+	 */
 	function parseNote(notes: string[]): boolean {
 		if (!at('keyword', 'note')) return false;
 		advance();
-		const text = expectString('note', 'A note is quoted: note "Ranking is out of scope"');
-		if (text !== undefined) notes.push(text);
+		const first = expectString('note', 'A note is quoted: note "Ranking is out of scope"');
+		if (first === undefined) {
+			synchronize();
+			return true;
+		}
+
+		const lines = [first];
+		while (at('string')) lines.push(advance().value);
+		notes.push(wrapNote(lines.join('\n')));
 		return true;
+	}
+
+	/**
+	 * `want "…"` / `so "…"`, continued on the lines below.
+	 *
+	 * Continuations join with a **space**, not a line break — the opposite of a
+	 * note, and deliberately. A note may genuinely be several lines; these two are
+	 * one clause of one sentence, and the breaks in the file are only there
+	 * because the measure put them there. Storing them would put a hard break in
+	 * the middle of the sentence the board composes.
+	 *
+	 * So the model holds the clause as written and the serializer re-wraps it.
+	 * Unwrapping and re-wrapping round-trips exactly, because wrapping collapses
+	 * runs of whitespace either way.
+	 */
+	function parseProse(word: 'want' | 'so', hint: string): string | undefined {
+		advance();
+		const first = expectString(word, hint);
+		if (first === undefined) {
+			synchronize();
+			return undefined;
+		}
+		const parts = [first];
+		while (at('string')) parts.push(advance().value);
+		return parts.join(' ').replace(/\s+/g, ' ').trim();
 	}
 
 	function parseStory(stories: RawStory[]): boolean {
@@ -190,26 +256,141 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 			return true;
 		}
 
-		// A release reference binds to the story before it, and `@` can follow
-		// nothing else — which is what lets a long title wrap onto its own line.
+		/*
+		 * Three optional annotations follow the title, and any order is accepted:
+		 *
+		 *   @Release   the band it sits in
+		 *   #ticket    the ticket it is linked to, as the ticketing system spells it
+		 *   ~status    where that ticket is in the workflow
+		 *
+		 * Order is not enforced because there is no reading in which one order is
+		 * more correct, and rejecting `#42 @MVP` would be pedantry. Each may appear
+		 * at most once; a repeat is an error rather than a last-one-wins, because a
+		 * repeat means a bad merge.
+		 */
 		let ref: RawRef | null = null;
-		if (at('at')) {
+		let ticket: string | null = null;
+		let status: StoryStatus | null = null;
+
+		while (at('at') || at('hash') || at('tilde')) {
 			const sigil = advance();
-			if (at('ident') || at('string')) {
+
+			if (sigil.kind === 'at') {
+				if (!at('ident') && !at('string')) {
+					problemAt(
+						sigil,
+						`Expected a release name after \`@\`, found ${describe(peek())}.`,
+						'Write @MVP, or @"Q3 2026" when the name has spaces in it.',
+					);
+					continue;
+				}
 				const name = advance();
+				if (ref !== null) {
+					problemAt(sigil, 'This story names two releases.', 'A story sits in one band.');
+					continue;
+				}
 				ref = { name: name.value, line: sigil.line, column: sigil.column, length: sigil.length + name.length };
-			} else {
+				continue;
+			}
+
+			if (sigil.kind === 'hash') {
+				if (!at('ident') && !at('string')) {
+					problemAt(
+						sigil,
+						`Expected a ticket id after \`#\`, found ${describe(peek())}.`,
+						'Write the id the ticketing system issued: #client-onboarding-42',
+					);
+					continue;
+				}
+				const value = advance().value;
+				if (ticket !== null) {
+					problemAt(sigil, 'This story names two tickets.', 'A story links to one ticket.');
+					continue;
+				}
+				ticket = value;
+				continue;
+			}
+
+			// tilde
+			if (!at('ident')) {
 				problemAt(
 					sigil,
-					`Expected a release name after \`@\`, found ${describe(peek())}.`,
-					'Write @MVP, or @"Q3 2026" when the name has spaces in it.',
+					`Expected a status after \`~\`, found ${describe(peek())}.`,
+					`One of: ${STORY_STATUSES.map((s) => `~${s}`).join(', ')}`,
 				);
+				continue;
 			}
+			const word = advance();
+			if (status !== null) {
+				problemAt(sigil, 'This story names two statuses.', 'A story is in one state.');
+				continue;
+			}
+			if (!isStoryStatus(word.value)) {
+				problemAt(
+					word,
+					`\`${word.value}\` is not a status.`,
+					`One of: ${STORY_STATUSES.map((s) => `~${s}`).join(', ')}`,
+				);
+				continue;
+			}
+			status = word.value;
 		}
 
 		const notes: string[] = [];
-		stories.push({ title, notes, ref });
-		parseBody('story', () => parseNote(notes));
+		// An unlinked story reads as open: nothing has been said about it yet.
+		const raw: RawStory = {
+			title,
+			notes,
+			ref,
+			ticket,
+			status: status ?? DEFAULT_STORY_STATUS,
+			persona: null,
+			want: null,
+			soThat: null,
+		};
+		stories.push(raw);
+
+		parseBody('story', () => {
+			if (at('keyword', 'as')) {
+				const keyword = advance();
+				const name = expectString('as', 'A persona is quoted, and must be declared: as "Business analyst"');
+				if (name === undefined) {
+					synchronize();
+					return true;
+				}
+				if (raw.persona !== null) {
+					problemAt(keyword, 'This story names two personas.', 'A story is written for one.');
+					return true;
+				}
+				raw.persona = {
+					name,
+					line: keyword.line,
+					column: keyword.column,
+					length: keyword.length,
+				};
+				return true;
+			}
+
+			if (at('keyword', 'want')) {
+				const value = parseProse('want', 'What the persona wants, quoted: want "to search every product at once"');
+				if (value !== undefined) {
+					if (raw.want !== null) return true;
+					raw.want = value;
+				}
+				return true;
+			}
+
+			if (at('keyword', 'so')) {
+				const value = parseProse('so', 'The outcome, quoted: so "I can answer a question quickly"');
+				if (value !== undefined) {
+					if (raw.soThat !== null) return true;
+					raw.soThat = value;
+				}
+				return true;
+			}
+
+			return parseNote(notes);
+		});
 		return true;
 	}
 
@@ -239,9 +420,31 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 		}
 
 		const notes: string[] = [];
+		const personas: string[] = [];
+		const personaTokens: Token[] = [];
 		const steps: RawStep[] = [];
-		activities.push({ title, notes, steps });
-		parseBody('activity', () => parseStep(steps) || parseNote(notes));
+		activities.push({ title, notes, personas, personaTokens, steps });
+
+		parseBody('activity', () => {
+			if (at('keyword', 'persona')) {
+				const keyword = advance();
+				const name = expectString('persona', 'A persona is quoted: persona "Business analyst"');
+				if (name === undefined) {
+					synchronize();
+					return true;
+				}
+				if (personas.includes(name)) {
+					// A title is the key a story's `as` resolves against, so it has
+					// to name one thing. A repeat means a bad merge.
+					problemAt(keyword, `This activity lists the persona "${name}" twice.`);
+					return true;
+				}
+				personas.push(name);
+				personaTokens.push(keyword);
+				return true;
+			}
+			return parseStep(steps) || parseNote(notes);
+		});
 		return true;
 	}
 
@@ -252,23 +455,24 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 	 * about one product, and two declarations mean a bad merge, which is exactly
 	 * the thing worth surfacing rather than silently resolving.
 	 */
-	function parseProduct(state: { value: string | null; token: Token | null }): boolean {
-		if (!at('keyword', 'product')) return false;
+	function parseOnce(
+		word: 'product' | 'space',
+		state: { value: string | null; token: Token | null },
+		hint: string,
+		twice: string,
+	): boolean {
+		if (!at('keyword', word)) return false;
 		const keyword = advance();
-		const shortname = expectString('product', 'A product is its shortname, quoted: product "client-onboarding"');
-		if (shortname === undefined) {
+		const value = expectString(word, hint);
+		if (value === undefined) {
 			synchronize();
 			return true;
 		}
 		if (state.token !== null) {
-			problemAt(
-				keyword,
-				'The product is declared twice.',
-				`Already declared on line ${state.token.line}. A story map is about one product.`,
-			);
+			problemAt(keyword, twice, `Already declared on line ${state.token.line}.`);
 			return true;
 		}
-		state.value = shortname;
+		state.value = value;
 		state.token = keyword;
 		return true;
 	}
@@ -314,11 +518,12 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 					hint: 'A story map starts with: storymap "Its title" { … }',
 				});
 			}
-			return { title: 'Untitled story map', product: null, notes: [], releases: [], activities: [] };
+			return { title: 'Untitled story map', product: null, space: null, notes: [], releases: [], activities: [] };
 		}
 
 		let title = 'Untitled story map';
 		const product: { value: string | null; token: Token | null } = { value: null, token: null };
+		const space: { value: string | null; token: Token | null } = { value: null, token: null };
 		let notes: string[] = [];
 		let releases: RawRelease[] = [];
 		let activities: RawActivity[] = [];
@@ -333,7 +538,18 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 			parseBody(
 				'storymap',
 				() =>
-					parseProduct(product) ||
+					parseOnce(
+						'product',
+						product,
+						'A product is its shortname, quoted: product "client-onboarding"',
+						'The product is declared twice. A story map is about one product.',
+					) ||
+					parseOnce(
+						'space',
+						space,
+						'A ticketing space is quoted: space "CLONB"',
+						'The ticketing space is declared twice. Tickets are raised into one space.',
+					) ||
 					parseRelease(releases) ||
 					parseActivity(activities) ||
 					parseNote(notes),
@@ -356,7 +572,7 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 			if (!at('eof') && !at('keyword', 'storymap')) advance();
 		}
 
-		return resolve(title, product.value, notes, releases, activities, problems);
+		return resolve(title, product.value, space.value, notes, releases, activities, problems);
 	}
 
 	return { parseFile };
@@ -368,6 +584,7 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 function resolve(
 	title: string,
 	product: string | null,
+	space: string | null,
 	notes: readonly string[],
 	rawReleases: readonly RawRelease[],
 	rawActivities: readonly RawActivity[],
@@ -401,6 +618,7 @@ function resolve(
 	const activities: ActivityNode[] = rawActivities.map((activity): ActivityNode => ({
 		title: activity.title,
 		notes: [...activity.notes],
+		personas: [...activity.personas],
 		steps: activity.steps.map((step): StepNode => ({
 			title: step.title,
 			notes: [...step.notes],
@@ -408,11 +626,16 @@ function resolve(
 				title: story.title,
 				notes: [...story.notes],
 				release: resolveRef(story.ref),
+				persona: resolvePersona(story.persona, activity),
+				want: story.want,
+				soThat: story.soThat,
+				ticket: story.ticket,
+				status: story.status,
 			})),
 		})),
 	}));
 
-	return { title, product, notes: [...notes], releases, activities };
+	return { title, product, space, notes: [...notes], releases, activities };
 
 	/*
 	 * An `@` naming a release that was never declared is a hard error, not a
@@ -430,6 +653,36 @@ function resolve(
 			column: ref.column,
 			length: ref.length,
 			hint: suggest(ref.name),
+		});
+		return null;
+	}
+
+	/**
+	 * A story may name a persona its own activity lists, and no other.
+	 *
+	 * Scoped to the activity because that is where the cast is declared. The
+	 * alternative — resolving against every persona anywhere on the board — would
+	 * let a story quietly belong to an activity that never mentions its reader,
+	 * which is exactly the disagreement the listing exists to surface.
+	 */
+	function resolvePersona(ref: RawRef | null, activity: RawActivity): string | null {
+		if (ref === null) return null;
+		if (activity.personas.includes(ref.name)) return ref.name;
+
+		const near = activity.personas.find(
+			(candidate) => candidate.toLowerCase() === ref.name.toLowerCase(),
+		);
+		report(problems, {
+			message: `The activity "${activity.title}" does not list a persona called "${ref.name}".`,
+			line: ref.line,
+			column: ref.column,
+			length: ref.length,
+			hint:
+				activity.personas.length === 0
+					? `This activity lists no personas. Add one to it: persona "${ref.name}"`
+					: near
+						? `Did you mean "${near}"? Persona names are case-sensitive.`
+						: `It lists: ${activity.personas.map((n) => `"${n}"`).join(', ')}.`,
 		});
 		return null;
 	}

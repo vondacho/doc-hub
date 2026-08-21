@@ -26,7 +26,9 @@ import {
 	type CardKind,
 	type CellKey,
 	type Id,
+	type StoryStatus,
 } from './state.ts';
+import { DEFAULT_STORY_STATUS } from '../storymap/model.ts';
 import { nextId } from './convert.ts';
 
 export type BoardAction =
@@ -45,7 +47,17 @@ export type BoardAction =
 	| { type: 'applyText'; board: BoardState }
 	| { type: 'reset' }
 	| { type: 'setMapTitle'; title: string }
+	/**
+	 * Choose the product, and initialise the ticketing space from it.
+	 *
+	 * The space is set to the shortname **only when it has none yet**. Choosing a
+	 * product on a fresh board therefore fills both, which is the case that wants
+	 * no thought; changing the product later leaves a space that was already
+	 * settled alone, because tickets raised into it carry keys from it and quietly
+	 * re-pointing the map at another space would strand them.
+	 */
 	| { type: 'setProduct'; product: string | null }
+	| { type: 'setSpace'; space: string | null }
 	| { type: 'retitle'; kind: CardKind | 'release'; id: Id; title: string }
 	| { type: 'addActivity'; index: number }
 	| { type: 'addStep'; activityId: Id; index: number }
@@ -57,7 +69,33 @@ export type BoardAction =
 	| { type: 'moveStep'; stepId: Id; fromActivityId: Id; toActivityId: Id; index: number }
 	| { type: 'moveActivity'; activityId: Id; index: number }
 	| { type: 'moveRelease'; releaseId: Id; index: number }
-	| { type: 'changeKind'; kind: CardKind; id: Id; to: CardKind };
+	| { type: 'changeKind'; kind: CardKind; id: Id; to: CardKind }
+	/**
+	 * Link a story to a ticket, or unlink it with `null`.
+	 *
+	 * Only ever carries an id that came from outside doc-sm — a file, an edit in
+	 * the preview, or the ticketing system itself. There is deliberately no action
+	 * that *generates* one: the ticketing system issues ticket ids, and a board
+	 * that minted its own would hand out names that collide with real ones.
+	 */
+	| { type: 'setTicket'; id: Id; ticket: string | null }
+	/**
+	 * Record a status against a story.
+	 *
+	 * Authoritative only while the story is unlinked. Once it has a ticket this is
+	 * a cache of what the ticketing system last said, and setting it by hand
+	 * changes the board's copy, not the ticket.
+	 */
+	| { type: 'setStatus'; id: Id; status: StoryStatus }
+	/**
+	 * Write a story for one of the map's declared personas, or for nobody.
+	 *
+	 * Only ever a title the map already declares — the menu offers exactly those —
+	 * so the reference cannot drift from the cast. Clearing it with `null` is a
+	 * real answer: a story nobody has decided the audience for is an ordinary
+	 * state on a board mid-workshop.
+	 */
+	| { type: 'setPersona'; id: Id; persona: string | null };
 
 /** Actions that replace the document rather than edit it; history.ts clears on these. */
 export function resetsHistory(action: BoardAction): boolean {
@@ -71,13 +109,24 @@ export function reduce(board: BoardState, action: BoardAction): BoardState {
 			return action.board;
 
 		case 'reset':
-			return { ...board, product: null, notes: [], releaseOrder: [], releases: {}, activityOrder: [], activities: {}, steps: {}, stories: {}, cells: {} };
+			return { ...board, product: null, space: null, notes: [], releaseOrder: [], releases: {}, activityOrder: [], activities: {}, steps: {}, stories: {}, cells: {} };
 
 		case 'setMapTitle':
 			return action.title === board.title ? board : { ...board, title: action.title };
 
-		case 'setProduct':
-			return action.product === board.product ? board : { ...board, product: action.product };
+		case 'setProduct': {
+			if (action.product === board.product) return board;
+			// Initialised, not derived: once it holds a value it is the map's own.
+			const space = board.space ?? action.product;
+			return { ...board, product: action.product, space };
+		}
+
+		case 'setSpace': {
+			// Blank and "follow the product" are the same intent, so an emptied
+			// field returns the space to null rather than storing "".
+			const space = action.space === null || action.space.trim() === '' ? null : action.space.trim();
+			return space === board.space ? board : { ...board, space };
+		}
 
 		case 'retitle':
 			return retitle(board, action.kind, action.id, action.title);
@@ -86,7 +135,7 @@ export function reduce(board: BoardState, action: BoardAction): BoardState {
 			const id = nextId('a');
 			return {
 				...board,
-				activities: { ...board.activities, [id]: { id, title: 'New activity', notes: [], stepOrder: [] } },
+				activities: { ...board.activities, [id]: { id, title: 'New activity', notes: [], personas: [], stepOrder: [] } },
 				activityOrder: insertAt(board.activityOrder, action.index, id),
 			};
 		}
@@ -111,7 +160,12 @@ export function reduce(board: BoardState, action: BoardAction): BoardState {
 			const id = nextId('y');
 			return {
 				...board,
-				stories: { ...board.stories, [id]: { id, title: 'New story', notes: [] } },
+				stories: {
+					...board.stories,
+					// Unlinked and open: nothing has been said about it yet, and doc-sm
+					// does not issue ticket ids.
+					[id]: { id, title: 'New story', notes: [], ticket: null, status: DEFAULT_STORY_STATUS, persona: null, want: null, soThat: null },
+				},
 				cells: { ...board.cells, [action.cell]: insertAt(board.cells[action.cell] ?? [], action.index, id) },
 			};
 		}
@@ -149,6 +203,31 @@ export function reduce(board: BoardState, action: BoardAction): BoardState {
 
 		case 'changeKind':
 			return changeKind(board, action.kind, action.id, action.to);
+
+		case 'setTicket': {
+			const story = board.stories[action.id];
+			// An empty string and "no ticket" are the same state, so they normalise
+			// to one of them rather than both being representable.
+			const ticket = action.ticket === null || action.ticket.trim() === '' ? null : action.ticket.trim();
+			if (!story || story.ticket === ticket) return board;
+			return { ...board, stories: { ...board.stories, [action.id]: { ...story, ticket } } };
+		}
+
+		case 'setPersona': {
+			const story = board.stories[action.id];
+			if (!story || story.persona === action.persona) return board;
+			// Refuse a persona the story's own activity does not list, rather than
+			// storing a name that would fail to resolve on the next import. The
+			// cast belongs to the activity — see resolvePersona in the parser.
+			if (action.persona !== null && !personasFor(board, action.id).includes(action.persona)) return board;
+			return { ...board, stories: { ...board.stories, [action.id]: { ...story, persona: action.persona } } };
+		}
+
+		case 'setStatus': {
+			const story = board.stories[action.id];
+			if (!story || story.status === action.status) return board;
+			return { ...board, stories: { ...board.stories, [action.id]: { ...story, status: action.status } } };
+		}
 	}
 }
 
@@ -298,7 +377,13 @@ function moveStory(board: BoardState, storyId: Id, from: CellKey, to: CellKey, i
 	const cells = { ...board.cells, [to]: target };
 	if (remaining.length > 0) cells[from] = remaining;
 	else delete cells[from];
-	return { ...board, cells };
+
+	// The destination step may belong to another activity, so the reader moves
+	// with the card.
+	const moved: BoardState = { ...board, cells };
+	const stepId = splitCellKey(to).stepId;
+	const owner = moved.activityOrder.find((id) => moved.activities[id]?.stepOrder.includes(stepId));
+	return owner === undefined ? moved : withCastFor(moved, owner, [stepId]);
 }
 
 function moveStep(board: BoardState, stepId: Id, fromId: Id, toId: Id, index: number): BoardState {
@@ -313,8 +398,9 @@ function moveStep(board: BoardState, stepId: Id, fromId: Id, toId: Id, index: nu
 	}
 
 	// The step's stories travel with it: cells are keyed by step id, so nothing
-	// about them changes when the step changes parent.
-	return {
+	// about them changes when the step changes parent. Its readers travel too —
+	// see withCastFor.
+	const moved: BoardState = {
 		...board,
 		activities: {
 			...board.activities,
@@ -322,6 +408,7 @@ function moveStep(board: BoardState, stepId: Id, fromId: Id, toId: Id, index: nu
 			[toId]: { ...to, stepOrder: insertAt(to.stepOrder, index, stepId) },
 		},
 	};
+	return withCastFor(moved, toId, [stepId]);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -412,15 +499,16 @@ function changeKind(board: BoardState, kind: CardKind, id: Id, to: CardKind): Bo
 		if (!activity || !step) return board;
 
 		const activityId = nextId('a');
-		return {
+		const promoted: BoardState = {
 			...board,
 			activities: {
 				...board.activities,
 				[activity.id]: { ...activity, stepOrder: activity.stepOrder.filter((other) => other !== id) },
-				[activityId]: { id: activityId, title: step.title, notes: [], stepOrder: [id] },
+				[activityId]: { id: activityId, title: step.title, notes: [], personas: [], stepOrder: [id] },
 			},
 			activityOrder: insertAt(board.activityOrder, board.activityOrder.indexOf(activity.id) + 1, activityId),
 		};
+		return withCastFor(promoted, activityId, [id]);
 	}
 
 	// step → story. Only reachable for an empty step, so there are no cells to
@@ -440,7 +528,11 @@ function changeKind(board: BoardState, kind: CardKind, id: Id, to: CardKind): Bo
 		const key = cellKey(neighbour, UNASSIGNED);
 		return {
 			...after,
-			stories: { ...after.stories, [storyId]: { id: storyId, title: step.title, notes: [...step.notes] } },
+			stories: {
+				...after.stories,
+				// A step never had a ticket, so the story it becomes starts unlinked.
+				[storyId]: { id: storyId, title: step.title, notes: [...step.notes], ticket: null, status: DEFAULT_STORY_STATUS, persona: null, want: null, soThat: null },
+			},
 			cells: { ...after.cells, [key]: [...(after.cells[key] ?? []), storyId] },
 		};
 	}
@@ -472,6 +564,59 @@ function changeKind(board: BoardState, kind: CardKind, id: Id, to: CardKind): Bo
 /* -------------------------------------------------------------------------- */
 /* Small helpers                                                               */
 /* -------------------------------------------------------------------------- */
+
+/**
+ * Add to an activity's cast any persona its stories now need.
+ *
+ * Called after every move that can carry a story into a different activity —
+ * a step changing parent, a story dragged into another activity's column, a step
+ * promoted to an activity of its own.
+ *
+ * Without it those moves break the file. A story may only name a persona its own
+ * activity lists, so a story arriving somewhere that never mentioned its reader
+ * exports a `.storymap` that will not parse — the board would look fine and the
+ * file would be broken, which is the worst pairing.
+ *
+ * Extending the cast rather than clearing the story's persona, because that is
+ * what actually happened: work for a business analyst has been moved under this
+ * activity, so this activity now serves business analysts. Dropping the persona
+ * instead would silently discard something somebody decided.
+ */
+function withCastFor(board: BoardState, activityId: Id, stepIds: readonly Id[]): BoardState {
+	const activity = board.activities[activityId];
+	if (!activity) return board;
+
+	const needed = new Set<string>();
+	for (const [key, ids] of Object.entries(board.cells)) {
+		if (!stepIds.includes(splitCellKey(key).stepId)) continue;
+		for (const storyId of ids) {
+			const persona = board.stories[storyId]?.persona;
+			if (persona !== null && persona !== undefined && !activity.personas.includes(persona)) {
+				needed.add(persona);
+			}
+		}
+	}
+	if (needed.size === 0) return board;
+
+	return {
+		...board,
+		activities: {
+			...board.activities,
+			[activityId]: { ...activity, personas: [...activity.personas, ...needed] },
+		},
+	};
+}
+
+/** The personas a story may be written for: those its own activity lists. */
+export function personasFor(board: BoardState, storyId: Id): readonly string[] {
+	const found = locateStory(board, storyId);
+	if (!found) return [];
+	for (const activityId of board.activityOrder) {
+		const activity = board.activities[activityId];
+		if (activity?.stepOrder.includes(found.stepId)) return activity.personas;
+	}
+	return [];
+}
 
 export function locateStory(
 	board: BoardState,

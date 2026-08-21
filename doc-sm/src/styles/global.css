@@ -43,32 +43,48 @@
    * That is what lets a reader scan a wall of two hundred cards and see the
    * backbone without reading a word.
    *
-   * They sit in the cool arc (225-300) and far above the status palette in
-   * lightness, deliberately. The reserved four above are the only colours in
-   * doc-hub that carry state, and a lilac card next to an amber warning must
-   * never read as a second warning.
+   * Magenta for activities, light blue for steps, light yellow for stories —
+   * chosen to match how these boards are drawn on a wall, where the story is the
+   * yellow sticky note and everything above it is not.
    *
-   * The rule that travels with the status palette travels with these too, in the
-   * same form: colour is never the only signal. Every card names its kind in its
-   * accessible name ("Story: Full-text search"), and the row it sits in says it
-   * again visually. Somebody who cannot separate these three hues loses nothing.
+   * ## The one thing to watch
    *
-   * Story is the palest on purpose — it is the kind that appears eighty times on
-   * one screen, and a wall of saturated notes is unreadable.
+   * Light yellow sits near `--color-warning` (#fab219) in hue, and the status
+   * palette above says in as many words that nothing else may borrow it. This is
+   * the exception, and it is kept safe by distance rather than by hue: the story
+   * fill is oklch L 0.95 C 0.055 against the warning's L 0.81 C 0.16 — far
+   * lighter and a third as chromatic, which is the difference between a pale
+   * sticky note and a saturated status dot. They measure 1.6:1 against each
+   * other, so they cannot be confused for the same colour.
+   *
+   * Nothing in doc-sm renders a status today. If one ever appears on a card,
+   * this pairing is the first thing to re-examine — and the answer is to move
+   * the status, not the card, because the card colours are the ones people
+   * arrive already knowing.
+   *
+   * ## And the rule that always holds
+   *
+   * Colour is never the only signal, exactly as for the status palette. Every
+   * card names its kind in its accessible name ("Story: Full-text search"), the
+   * row it sits in says it again, and the board carries a legend. Somebody who
+   * cannot separate these three hues loses nothing.
+   *
+   * Dark ink on every light fill measures 10.6:1 or better; slate-100 on every
+   * dark fill measures 10.3:1 or better.
    */
-  --color-activity: oklch(0.9 0.055 300);
-  --color-activity-edge: oklch(0.62 0.1 300);
-  --color-step: oklch(0.91 0.05 225);
-  --color-step-edge: oklch(0.62 0.09 225);
-  --color-story: oklch(0.94 0.025 255);
-  --color-story-edge: oklch(0.68 0.05 255);
+  --color-activity: oklch(0.87 0.1 340);
+  --color-activity-edge: oklch(0.6 0.16 340);
+  --color-step: oklch(0.91 0.05 235);
+  --color-step-edge: oklch(0.62 0.09 235);
+  --color-story: oklch(0.95 0.055 100);
+  --color-story-edge: oklch(0.66 0.11 100);
 
-  --color-activity-night: oklch(0.34 0.05 300);
-  --color-activity-night-edge: oklch(0.5 0.07 300);
-  --color-step-night: oklch(0.33 0.05 225);
-  --color-step-night-edge: oklch(0.5 0.07 225);
-  --color-story-night: oklch(0.3 0.02 255);
-  --color-story-night-edge: oklch(0.45 0.03 255);
+  --color-activity-night: oklch(0.33 0.07 340);
+  --color-activity-night-edge: oklch(0.5 0.1 340);
+  --color-step-night: oklch(0.33 0.05 235);
+  --color-step-night-edge: oklch(0.5 0.07 235);
+  --color-story-night: oklch(0.35 0.05 95);
+  --color-story-night-edge: oklch(0.52 0.07 95);
 }
 
 html {

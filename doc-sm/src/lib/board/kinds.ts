@@ -14,8 +14,8 @@
  * The labels are not decoration either. Colour is kind in doc-sm, and the rule
  * that travels with the reserved status palette travels with these too: colour
  * is never the only signal. `label` goes into each card's accessible name, so a
- * screen reader and a reader who cannot separate three cool hues both get the
- * same information the fill carries.
+ * screen reader and a reader who cannot separate magenta, blue and yellow both
+ * get the same information the fill carries.
  */
 
 import type { CardKind } from './state.ts';

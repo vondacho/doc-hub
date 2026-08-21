@@ -35,16 +35,30 @@ import {
 	type Id,
 } from '../../lib/board/state.ts';
 import { kindLabel } from '../../lib/board/kinds.ts';
+import { STORY_STATUSES, storyStatusLabel, type StoryStatus } from '../../lib/storymap/model.ts';
+import { activityDetail, stepDetail, storyDetail } from '../../lib/board/detail.ts';
 import { BandRail } from './BandRail.tsx';
+import { StoryMeta } from './StoryMeta.tsx';
 import { Icon } from './Icon.tsx';
 import { Card } from './Card.tsx';
 import type { CardMenuAction } from './CardMenu.tsx';
 import { Cell } from './Cell.tsx';
 
-/** Width of the sticky band rail. A rem value so it tracks the root font size. */
-const RAIL = '11rem';
-/** Minimum readable width for a step column before the board starts scrolling. */
-const COLUMN = '13rem';
+/*
+ * Track widths in `em`, against the font-size the scroll container gets from the
+ * zoom level. One number therefore moves the whole board — columns, cards,
+ * padding and text together — without a `transform`, which would break the
+ * sticky header rows and confuse dnd-kit's hit-testing.
+ *
+ * The column is narrow on purpose. A story map is read *across*: the useful
+ * question is how many steps fit on screen, and every rem of card width costs
+ * one. Titles and notes wrap to as many lines as they need instead, which trades
+ * vertical space that is cheap for horizontal space that is not.
+ */
+const RAIL = '8.5em';
+const COLUMN = '10em';
+/** Font-size at 100%, in px. Everything on the board is `em` against this. */
+const BASE_FONT = 13;
 
 /** Grid rows 1 and 2 are the two header rows; bands start at 3. */
 const ACTIVITY_ROW = 1;
@@ -54,9 +68,27 @@ const FIRST_BAND_ROW = 3;
 export function BoardGrid({
 	board,
 	dispatch,
+	onLinkTicket,
+	onCreateTicket,
+	ticketingConfigured,
+	zoom,
+	fullscreen,
+	expanded,
+	onToggleDetail,
 }: {
 	board: BoardState;
 	dispatch: (action: BoardAction) => void;
+	/** Prompt for a ticket id and link it, or clear the link. */
+	onLinkTicket: (storyId: Id) => void;
+	/** Ask the ticketing system for a new ticket. */
+	onCreateTicket: (storyId: Id) => void;
+	ticketingConfigured: boolean;
+	/** 1 is 100%. Scales the whole board; see the note on RAIL above. */
+	zoom: number;
+	fullscreen: boolean;
+	/** Cards whose detail is open. Everything not in here is collapsed. */
+	expanded: ReadonlySet<Id>;
+	onToggleDetail: (id: Id) => void;
 }) {
 	const geometry = useMemo(() => columnGeometry(board), [board]);
 	const bands = bandOrder(board);
@@ -66,21 +98,29 @@ export function BoardGrid({
 
 	return (
 		<div
-			className="board-scroll relative rounded-2xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-night-raised"
-			// A bounded height is what gives `position: sticky` a scroll container
-			// to stick within. Without it the rail and the header rows stick to the
-			// page, which on a long board is not what anyone means.
-			style={{ maxHeight: '75vh' }}
+			className={`board-scroll relative border border-slate-200 bg-white dark:border-slate-700 dark:bg-night-raised ${
+				fullscreen ? 'min-h-0 flex-1 rounded-xl p-3' : 'rounded-2xl p-3'
+			}`}
+			style={{
+				// A bounded height is what gives `position: sticky` a scroll
+				// container to stick within. Without it the rail and the header rows
+				// stick to the page, which on a long board is not what anyone means.
+				// In fullscreen the wrapper is already the viewport, so the board
+				// takes all of it.
+				maxHeight: fullscreen ? '100%' : '75vh',
+				// The one number the whole board is measured against.
+				fontSize: `${BASE_FONT * zoom}px`,
+			}}
 		>
 			<div
-				className="grid min-w-max gap-2"
+				className="grid min-w-max gap-[0.4em]"
 				style={{ gridTemplateColumns: `${RAIL} repeat(${geometry.columnCount}, minmax(${COLUMN}, 1fr))` }}
 			>
 				{/* Top-left corner. Sticks in both directions, so it must outrank
 				    both the rail and the header rows. */}
 				<div
 					style={{ gridColumn: 1, gridRow: `${ACTIVITY_ROW} / span 2` }}
-					className="sticky top-0 left-0 z-30 rounded-lg bg-white px-2 py-1 text-xs font-semibold tracking-[0.14em] text-ink-muted uppercase dark:bg-night-raised dark:text-slate-400"
+					className="sticky top-0 left-0 z-30 rounded-[0.4em] bg-white px-[0.5em] py-[0.25em] text-[0.7em] font-semibold tracking-[0.14em] text-ink-muted uppercase dark:bg-night-raised dark:text-slate-400"
 				>
 					Releases
 				</div>
@@ -97,8 +137,13 @@ export function BoardGrid({
 								id={activityId}
 								kind="activity"
 								title={activity.title}
-								notes={activity.notes}
-								position={`activity ${index + 1} of ${board.activityOrder.length}`}
+								notes={activityDetail(activity)}
+								detailOpen={expanded.has(activityId)}
+								onToggleDetail={() => onToggleDetail(activityId)}
+								detailLabel="cast"
+								position={`activity ${index + 1} of ${board.activityOrder.length}${
+									activity.personas.length > 0 ? `, for ${activity.personas.join(', ')}` : ''
+								}`}
 								data={{ type: 'activity' }}
 								onRetitle={(title) => dispatch({ type: 'retitle', kind: 'activity', id: activityId, title })}
 								menu={cardMenu(board, dispatch, 'activity', activityId, index)}
@@ -129,12 +174,15 @@ export function BoardGrid({
 										id={stepId}
 										kind="step"
 										title={step.title}
-										notes={step.notes}
+										notes={stepDetail(step)}
+									detailOpen={expanded.has(stepId)}
+									onToggleDetail={() => onToggleDetail(stepId)}
+									detailLabel="notes"
 										position={`step ${index + 1} of ${activity.stepOrder.length} in ${activity.title}`}
 										data={{ type: 'step', activityId }}
 										onRetitle={(title) => dispatch({ type: 'retitle', kind: 'step', id: stepId, title })}
 										menu={cardMenu(board, dispatch, 'step', stepId, index, activityId)}
-										className="sticky top-9 z-10"
+										className="sticky top-[2.6em] z-10"
 										style={{ gridColumn: column + 2, gridRow: STEP_ROW }}
 									/>
 								);
@@ -157,9 +205,9 @@ export function BoardGrid({
 							onClick={() => dispatch({ type: 'addStep', activityId, index: 0 })}
 							aria-label={`Add the first step to ${activity.title}`}
 							style={{ gridColumn: span.start + 2, gridRow: STEP_ROW }}
-							className="flex items-center justify-center rounded-lg border border-dashed border-slate-300 px-2 py-2 text-ink-muted hover:border-brand hover:text-brand focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand dark:border-slate-600 dark:text-slate-400 dark:hover:border-sky-400 dark:hover:text-sky-400"
+							className="flex items-center justify-center rounded-[0.4em] border border-dashed border-slate-300 px-2 py-[0.4em] text-ink-muted hover:border-brand hover:text-brand focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand dark:border-slate-600 dark:text-slate-400 dark:hover:border-sky-400 dark:hover:text-sky-400"
 						>
-							<Icon name="plus" className="h-4 w-4" />
+							<Icon name="plus" className="h-[1em] w-[1em]" />
 						</button>
 					);
 				})}
@@ -196,11 +244,25 @@ export function BoardGrid({
 													id={storyId}
 													kind="story"
 													title={story.title}
-													notes={story.notes}
+													notes={storyDetail(story)}
+											detailOpen={expanded.has(storyId)}
+											onToggleDetail={() => onToggleDetail(storyId)}
+											detailLabel="need"
 													position={`in ${label}, ${index + 1} of ${ids.length}`}
 													data={{ type: 'story', cell: key }}
 													onRetitle={(title) => dispatch({ type: 'retitle', kind: 'story', id: storyId, title })}
-													menu={storyMenu(board, dispatch, storyId, key, index, ids.length)}
+													meta={
+														<StoryMeta
+															ticket={story.ticket}
+															status={story.status}
+															onEditTicket={() => onLinkTicket(storyId)}
+														/>
+													}
+													menu={storyMenu(board, dispatch, storyId, key, index, ids.length, {
+														onLinkTicket,
+														onCreateTicket,
+														ticketingConfigured,
+													})}
 												/>
 											</li>
 										);
@@ -278,6 +340,11 @@ function storyMenu(
 	from: string,
 	index: number,
 	total: number,
+	ticketing: {
+		onLinkTicket: (storyId: Id) => void;
+		onCreateTicket: (storyId: Id) => void;
+		ticketingConfigured: boolean;
+	},
 ): CardMenuAction[] {
 	const separator = from.indexOf('|');
 	const stepId = from.slice(0, separator);
@@ -305,10 +372,48 @@ function storyMenu(
 				}),
 		}));
 
+	const story = board.stories[storyId];
+	const linked = story?.ticket != null;
+
+	/*
+	 * Setting a status by hand is offered, and it is also not the truth. While a
+	 * story is unlinked it is the only record there is; once a ticket exists the
+	 * ticketing system owns the answer and this only changes the board's copy —
+	 * which the label says, so nobody believes they have moved a ticket.
+	 */
+	const statusMoves: CardMenuAction[] = STORY_STATUSES.filter(
+		(candidate) => candidate !== story?.status,
+	).map((candidate: StoryStatus, position) => ({
+		label: linked
+			? `Mark ${storyStatusLabel[candidate]} here only`
+			: `Mark ${storyStatusLabel[candidate]}`,
+		separated: position === 0,
+		run: () => dispatch({ type: 'setStatus', id: storyId, status: candidate }),
+	}));
+
+	const ticketMoves: CardMenuAction[] = linked
+		? [
+				{ label: 'Change the ticket id…', separated: true, run: () => ticketing.onLinkTicket(storyId) },
+				{ label: 'Unlink from its ticket', run: () => dispatch({ type: 'setTicket', id: storyId, ticket: null }) },
+			]
+		: [
+				{
+					label: 'Create a ticket',
+					separated: true,
+					run: ticketing.ticketingConfigured ? () => ticketing.onCreateTicket(storyId) : undefined,
+					disabledReason: ticketing.ticketingConfigured
+						? undefined
+						: 'No ticketing system is configured for doc-sm.',
+				},
+				{ label: 'Link an existing ticket…', run: () => ticketing.onLinkTicket(storyId) },
+			];
+
 	return [
 		{ label: 'Move up', run: up, disabledReason: up ? undefined : 'It is already at the top.' },
 		{ label: 'Move down', run: down, disabledReason: down ? undefined : 'It is already at the bottom.' },
 		...bandMoves,
+		...statusMoves,
+		...ticketMoves,
 		...kindChangeActions(board, dispatch, 'story', storyId),
 		{ label: 'Delete story', separated: true, run: () => dispatch({ type: 'removeCard', kind: 'story', id: storyId }) },
 	];

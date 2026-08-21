@@ -48,3 +48,20 @@ export function registryUrl(): string {
 export function registryApiUrl(): string {
   return fromEnv('REGISTRY_API_URL', 'http://localhost:1337');
 }
+
+/**
+ * The ticketing system doc-sm raises tickets against, as *this server* sees it.
+ *
+ * Global configuration, and the second in-cluster call in this component. It
+ * names an adapter speaking the two calls described in src/lib/ticketing.ts,
+ * not a tracker's own API — the credentials live on that side, not here.
+ *
+ * **Empty by default, and that is a working state.** A board with no ticketing
+ * system attached is entirely usable: stories are unlinked, statuses read Open,
+ * and the control that would raise a ticket says why it cannot. Defaulting to a
+ * guessed address would turn "not configured" into "configured wrongly", which
+ * is a much worse thing to debug.
+ */
+export function ticketingApiUrl(): string {
+  return fromEnv('TICKETING_API_URL', '');
+}

@@ -42,6 +42,10 @@ app:
   docPortalUrl: http://doc-portal.localhost
   registryUrl: http://doc-registry.localhost
   registryApiUrl: http://doc-registry:1337
+  # No ticketing adapter runs on the local cluster, so stories stay unlinked and
+  # "create a ticket" is disabled with its reason. Point this at an adapter to
+  # exercise the path.
+  ticketingApiUrl: ""
 
 resources:
   requests:
