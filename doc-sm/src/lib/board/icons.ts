@@ -75,6 +75,10 @@ export const icons = {
 	up: 'm18 15-6-6-6 6',
 	down: 'm6 9 6 6 6-6',
 	trash: 'M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3',
+	/** A floppy disk, still the only glyph everybody reads as "save". */
+	save: 'M5 3h11l3 3v15H5zM8 3v6h8V3M8 14h8v7H8z',
+	/** A folder — the boards this browser is keeping. */
+	folder: 'M3 6h6l2 3h10v10H3zM3 6v13',
 	/** A milestone flag — a release, as distinct from a sprint's plain band. */
 	flag: 'M6 21V4h11l-2 4 2 4H6',
 } as const;

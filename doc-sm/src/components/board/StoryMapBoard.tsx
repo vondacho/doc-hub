@@ -41,6 +41,7 @@ import {
 import { sortableKeyboardCoordinates } from '@dnd-kit/sortable';
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { clearFileInput, downloadText, filenameFor, readTextFile } from '../../lib/files.ts';
+import * as storage from '../../lib/storage.ts';
 import { applyText, resetIds, toBoard, toDocument } from '../../lib/board/convert.ts';
 import { cardsWithDetail } from '../../lib/board/detail.ts';
 import {
@@ -72,6 +73,7 @@ import { SAMPLE_SOURCE } from '../../lib/storymap/sample.ts';
 import { serialize } from '../../lib/storymap/serialize.ts';
 import { BoardGrid } from './BoardGrid.tsx';
 import { BASE_FONT } from './BoardGrid.tsx';
+import { OpenDialog } from './OpenDialog.tsx';
 import { PreviewDialog } from './PreviewDialog.tsx';
 import { PublishDialog, type PublishProgress } from './PublishDialog.tsx';
 import { ProblemList } from './ProblemList.tsx';
@@ -79,6 +81,8 @@ import { Toolbar } from './Toolbar.tsx';
 
 /** How far back undo goes. Snapshots are cheap; see history.ts. */
 const HISTORY_LIMIT = 100;
+/** How long the board must be still before autosave writes. See the effect. */
+const AUTOSAVE_DELAY_MS = 1_000;
 
 /**
  * Zoom stops, as multipliers of the board's base font size.
@@ -146,6 +150,17 @@ export default function StoryMapBoard({
 	const [dragging, setDragging] = useState<{ id: Id; title: string; kind: 'activity' | 'step' | 'story' } | null>(null);
 	// "Changed since the last import or export." The only state doc-sm can lose.
 	const [dirty, setDirty] = useState(false);
+	/** What the browser's copy last said, or why it could not be written. */
+	const [stored, setStored] = useState<{ at: number } | { error: string } | null>(null);
+	const [opening, setOpening] = useState(false);
+	/**
+	 * The saved list, read when the dialog opens rather than on every render.
+	 *
+	 * `saved()` walks every key at this origin, which is cheap but not free, and
+	 * nothing on the board changes it except this component — so it is refreshed
+	 * where it can change: opening the dialog, and deleting from it.
+	 */
+	const [savedKeys, setSavedKeys] = useState<readonly string[]>([]);
 	const [previewing, setPreviewing] = useState(false);
 	const [ticketError, setTicketError] = useState<string | null>(null);
 	// Counts documents, not edits: see the note on BoardGrid's documentKey.
@@ -243,7 +258,7 @@ export default function StoryMapBoard({
 	);
 
 	const exportFile = useCallback(() => {
-		downloadText(filenameFor(board.title), serialize(toDocument(board)));
+		downloadText(filenameFor(board.product, board.title), serialize(toDocument(board)));
 		setDirty(false);
 	}, [board]);
 
@@ -429,6 +444,95 @@ export default function StoryMapBoard({
 
 		setProgress({ done: targets.length, total: targets.length, failures, running: false });
 	}, [board, space, dispatch]);
+
+	/* ---- the browser's copy ------------------------------------------------ */
+
+	const key = storageKeyOf(board);
+
+	/**
+	 * Write the board to this browser, now.
+	 *
+	 * Also what the Save button calls. Autosave below is this on a timer; there
+	 * is deliberately no second code path, because "the save button saved
+	 * something slightly different from the autosave" is a bug nobody would ever
+	 * think to look for.
+	 */
+	const persist = useCallback((state: BoardState) => {
+		const result = storage.save(storageKeyOf(state), serialize(toDocument(state)));
+		setStored(storage.failed(result) ? { error: result.error } : { at: Date.now() });
+	}, []);
+
+	/**
+	 * Follow a rename, so one board keeps one entry.
+	 *
+	 * The key is derived from the product and the title, so editing either moves
+	 * the board. Without this the next autosave would write the new key and leave
+	 * the old one behind, and a board renamed twice would appear three times in
+	 * the open dialog — two of them stale, with names all equally plausible.
+	 *
+	 * A ref rather than state: this fires *because* the key changed, and storing
+	 * the previous one in state would schedule a second render to record
+	 * something no one renders.
+	 */
+	const previousKey = useRef<string | null>(null);
+	useEffect(() => {
+		const was = previousKey.current;
+		previousKey.current = key;
+		if (was !== null && was !== key) storage.rename(was, key);
+	}, [key]);
+
+	/**
+	 * Autosave, a second after the last change.
+	 *
+	 * Debounced rather than written on every action: dragging a story fires one
+	 * action, but typing a title fires one per keystroke, and serialising the
+	 * whole map on each of them would be work nobody asked for.
+	 *
+	 * One second is short enough that the answer to "did I lose it?" is no, and
+	 * long enough that a burst of typing writes once. The timer is cleared on
+	 * every change, so the write happens when the room stops moving.
+	 *
+	 * Skipped while the board is untouched. A visitor who opens doc-sm, looks
+	 * around and leaves should not find an "untitled" board saved in their
+	 * browser afterwards — an empty board is not work, and autosave is for work.
+	 */
+	useEffect(() => {
+		if (!dirty) return;
+		const timer = setTimeout(() => persist(board), AUTOSAVE_DELAY_MS);
+		return () => clearTimeout(timer);
+	}, [board, dirty, persist]);
+
+	/**
+	 * Reopen whatever this browser had open last.
+	 *
+	 * Once, on mount, and only when there is something to reopen. This is the
+	 * point of autosave: a closed laptop or a crashed tab should cost nothing,
+	 * and a person who has to remember to reopen their own board after a crash is
+	 * exactly the person who will not.
+	 *
+	 * A stored entry that no longer parses is *left alone* rather than dropped.
+	 * It is the only copy, it is recoverable by hand from devtools, and silently
+	 * discarding somebody's session because this version reads the format
+	 * differently would be the worst thing this module could do.
+	 */
+	useEffect(() => {
+		const last = storage.lastOpened();
+		if (last === null) return;
+		const text = storage.load(last);
+		if (text === null) return;
+		try {
+			resetIds();
+			send({ type: 'import', board: toBoard(parse(text)) });
+			setDocumentKey((n) => n + 1);
+			previousKey.current = last;
+		} catch (error) {
+			if (!(error instanceof StoryMapParseError)) throw error;
+			setProblems(error.problems);
+		}
+		// Mount only. `board` is deliberately not a dependency: this restores the
+		// last session, it does not keep re-reading storage.
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, []);
 
 	/* ---- the dirty guard --------------------------------------------------- */
 
@@ -624,6 +728,12 @@ export default function StoryMapBoard({
 				publishCount={unbound.length}
 				publishReason={publishBlockedReason(ticketingConfigured, space, unbound.length)}
 				onLoadSample={() => load(SAMPLE_SOURCE)}
+				onSave={() => persist(board)}
+				onOpenSaved={() => {
+					setSavedKeys(storage.saved());
+					setOpening(true);
+				}}
+				saveState={stored}
 				onAddActivity={() => dispatch({ type: 'addActivity', index: board.activityOrder.length })}
 				onAddSprint={() => dispatch({ type: 'addDelivery', kind: 'sprint', index: board.deliveryOrder.length })}
 				onAddRelease={() => dispatch({ type: 'addDelivery', kind: 'release', index: board.deliveryOrder.length })}
@@ -669,9 +779,25 @@ export default function StoryMapBoard({
 				onClose={() => setPublishing(false)}
 			/>
 
+			<OpenDialog
+				open={opening}
+				keys={savedKeys}
+				current={key}
+				onOpen={(pick) => {
+					const text = storage.load(pick);
+					setOpening(false);
+					if (text !== null) load(text);
+				}}
+				onDelete={(pick) => {
+					storage.remove(pick);
+					setSavedKeys(storage.saved());
+				}}
+				onClose={() => setOpening(false)}
+			/>
+
 			<PreviewDialog
 				open={previewing}
-				filename={filenameFor(board.title)}
+				filename={filenameFor(board.product, board.title)}
 				text={preview}
 				onApply={applyPreview}
 				onClose={() => setPreviewing(false)}
@@ -782,6 +908,11 @@ function publishBlockedReason(
 	if (space === null) return 'Pick a product, or set a ticketing space, first.';
 	if (count === 0) return 'Every story already has a ticket.';
 	return undefined;
+}
+
+/** Where this board belongs in storage. One derivation, three callers. */
+function storageKeyOf(board: BoardState): string {
+	return storage.storageKey(board.product, board.title);
 }
 
 function nameOf(board: BoardState, id: string): string {

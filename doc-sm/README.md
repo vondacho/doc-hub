@@ -16,7 +16,8 @@ to extract them.
 
 ## The board keeps nothing
 
-There is no database, no volume and no autosave. A story map is a `.storymap`
+There is no database and no volume, and nothing about a map reaches the
+server. A story map is a `.storymap`
 file: you import one, edit it, and export it again. The file belongs in the
 repository of the product it describes, where it diffs, reviews and merges like
 everything else there.
@@ -36,9 +37,45 @@ events, in its `src/lib/product-sections.ts`:
 A story map held in the registry would be exactly that staler second view. The
 registry holds product identity; the repository holds the model.
 
-The one consequence worth knowing: work you have not exported lives only in the
-browser tab. The board warns you before you close it, and undo goes back 100
-steps, but neither survives the tab.
+The one consequence worth knowing: work you have not exported is not in a file
+yet. The board warns you before you close it, undo goes back 100 steps, and the
+browser keeps a copy of the map — see below — but undo does not survive the tab,
+and a copy in one browser is not the artefact.
+
+
+## The board saves itself, in your browser
+
+The board keeps a copy in `localStorage`, a second after you stop changing it.
+Close the tab, sleep the laptop, crash the browser — reopen the page and the
+board you had open comes back.
+
+What is stored is **the file**, byte for byte the same text the export button
+hands you. Not the board model, not JSON with the board inside it. The format
+already round-trips, so a restored board is a parsed file and cannot be a shape
+the parser has never seen; there is no second serialisation to keep in step with
+the first; and an entry is recoverable by hand — copy it out of devtools and it
+is simply the `.storymap` file.
+
+The key is `<product>_<title>`, the same stem the export filename uses, so the
+entry in `localStorage` and the file in your downloads folder are recognisably
+the same board. Renaming the map, or pointing it at another product, *moves* the
+entry rather than forking it. A map about no registered product is keyed by its
+title alone.
+
+The toolbar has **Save** (write now) and **Open** (the boards this browser is
+keeping, with a two-step delete). Autosave and Save go through one code path, so
+they cannot disagree.
+
+**This is insurance, not an artefact.** It is this browser only — not a server,
+not your other machines, not your colleagues. The file you export is still the
+map, it is still what belongs in the product's repository, and the board still
+warns before you close it with unexported changes. Blocked storage or a full
+quota costs you the copy and nothing else: the board works exactly as it did
+before this existed, and says so in the toolbar rather than failing quietly.
+
+An entry that no longer parses is **kept**, not dropped. It is the only copy, and
+silently discarding somebody's session because this version reads the format
+differently would be the worst thing this feature could do.
 
 ## Pages
 

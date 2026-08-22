@@ -35,7 +35,7 @@ const ticketingConfigured = isConfigured(ticketingApiUrl());
 
 <Layout
 	title="Story mapping — doc-hub"
-	description="A user story mapping board. Import and export a .storymap file; nothing is stored on the server."
+	description="A user story mapping board. Import and export a .storymap file; the board saves itself in your browser and nothing is stored on the server."
 >
 	<main id="main" class="mx-auto w-full max-w-[110rem] px-6 py-10">
 		<header class="mb-8">
@@ -119,7 +119,7 @@ const ticketingConfigured = isConfigured(ticketingApiUrl());
 
 		<footer class="mt-10 border-t border-slate-200 pt-6 text-sm text-ink-muted dark:border-slate-700 dark:text-slate-400">
           <p>
-            Nothing here is stored on the server. The <code>.storymap</code> file you export is the map —
+            Nothing here is stored on the server — the board keeps a copy in this browser, and that copy goes no further. The <code>.storymap</code> file you export is the map —
             keep it in the product's repository, next to the code it describes.
             The technique is written up in <a class="font-semibold text-brand underline" href={practice}>the development hub</a>.
             The <a class="font-semibold text-brand underline" href="/dsl">format is documented</a>, and

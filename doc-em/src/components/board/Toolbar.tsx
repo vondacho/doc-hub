@@ -36,6 +36,9 @@ export function Toolbar({
 	onExportGherkin,
 	onPreview,
 	onLoadSample,
+	onSave,
+	onOpenSaved,
+	saveState,
 	onAddRule,
 	onAddSprint,
 	onAddRelease,
@@ -72,6 +75,10 @@ export function Toolbar({
 	onExportGherkin: () => void;
 	onPreview: () => void;
 	onLoadSample: () => void;
+	onSave: () => void;
+	onOpenSaved: () => void;
+	/** What the browser's copy last did, for the line beside the title. */
+	saveState: { at: number } | { error: string } | null;
 	onAddRule: () => void;
 	onAddSprint: () => void;
 	onAddRelease: () => void;
@@ -129,8 +136,25 @@ export function Toolbar({
 					className="min-w-56 flex-1 rounded-lg border border-transparent bg-transparent px-2 py-1 text-xl font-bold hover:border-slate-300 focus-visible:border-brand focus-visible:outline-2 focus-visible:outline-brand dark:hover:border-slate-600"
 				/>
 
-				<span className={`text-xs ${dirty ? 'text-ink-muted dark:text-slate-400' : 'text-transparent'}`} aria-live="polite">
-					{dirty ? 'Unexported changes' : ''}
+				{/*
+				 * One line for two different facts, because they answer one question.
+				 *
+				 * "Unexported changes" is about the *file* — the thing that outlives
+				 * this browser. A storage failure outranks it: it is the only one of
+				 * the two that needs anybody to do anything, and it means the
+				 * insurance everybody assumes is running is not.
+				 */}
+				<span
+					className={`text-xs ${
+						saveState !== null && 'error' in saveState
+							? 'text-critical'
+							: dirty
+								? 'text-ink-muted dark:text-slate-400'
+								: 'text-transparent'
+					}`}
+					aria-live="polite"
+				>
+					{saveState !== null && 'error' in saveState ? saveState.error : dirty ? 'Unexported changes' : ''}
 				</span>
 
 				<div className="flex flex-wrap items-center gap-1">
@@ -146,6 +170,11 @@ export function Toolbar({
 				<IconButton icon="addRelease" label="Add a sprint" onClick={onAddSprint} />
 				<IconButton icon="flag" label="Add a release" onClick={onAddRelease} />
 					<IconButton icon="example" label="Load the example" onClick={onLoadSample} />
+
+					<span className="mx-1 h-6 w-px bg-slate-200 dark:bg-slate-700" aria-hidden="true" />
+
+					<IconButton icon="save" label="Save to this browser now" onClick={onSave} />
+					<IconButton icon="folder" label="Open a board saved in this browser" onClick={onOpenSaved} />
 
 					<span className="mx-1 h-6 w-px bg-slate-200 dark:bg-slate-700" aria-hidden="true" />
 

@@ -6,6 +6,8 @@
  * only reason this is a module rather than four inline statements.
  */
 
+import { storageKey } from './storage.ts';
+
 /** The extension doc-sm reads and writes. `.sm` is Standard ML's, in every editor. */
 export const STORYMAP_EXTENSION = '.storymap';
 
@@ -60,21 +62,17 @@ export function downloadText(filename: string, text: string): void {
 }
 
 /**
- * A filename for a map title.
+ * A filename for a map: `<product>_<title>.storymap`.
+ *
+ * The same stem the browser stores the board under — see `storageKey` in
+ * src/lib/storage.ts, which is where the composition and the slugging live. One
+ * name for one board, whether it is sitting in a downloads folder or in
+ * `localStorage`, so the two are recognisably the same thing.
  *
  * A title with a slash in it produces a download the browser silently refuses,
- * so separators and control characters go before anything else does.
+ * so separators and control characters go before anything else does — and that
+ * hazard and the key's are the same hazard.
  */
-export function filenameFor(title: string): string {
-	// An allowlist rather than a list of characters to strip: path separators
-	// and control characters are what actually break a download, but enumerating
-	// everything a title might contain is a losing game — titles are free text and
-	// may be in any script.
-	const slug = title
-		.toLowerCase()
-		.replace(/[^a-z0-9]+/g, '-')
-		.replace(/^-+|-+$/g, '')
-		.slice(0, 60)
-		.replace(/-+$/, '');
-	return `${slug === '' ? 'untitled' : slug}${STORYMAP_EXTENSION}`;
+export function filenameFor(product: string | null, title: string): string {
+	return `${storageKey(product, title)}${STORYMAP_EXTENSION}`;
 }

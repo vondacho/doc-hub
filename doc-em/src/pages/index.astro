@@ -30,7 +30,7 @@ const storyMapper = storyMapperUrl();
 
 <Layout
   title="Example mapping — doc-hub"
-  description="An example mapping board. Import and export an .examplemap file, and write the Gherkin it produces."
+  description="An example mapping board. Import and export an .examplemap file, write the Gherkin it produces, and let the board save itself in your browser."
 >
   <main id="main" class="mx-auto w-full max-w-[110rem] px-6 py-10">
     <header class="mb-8">
@@ -85,7 +85,7 @@ const storyMapper = storyMapperUrl();
 
     <footer class="mt-10 border-t border-slate-200 pt-6 text-sm text-ink-muted dark:border-slate-700 dark:text-slate-400">
       <p>
-        Nothing here is stored on the server. The <code>.examplemap</code> file you export is the map, and the <code>.feature</code> file is what it produced.
+        Nothing here is stored on the server — the board keeps a copy in this browser, and that copy goes no further. The <code>.examplemap</code> file you export is the map, and the <code>.feature</code> file is what it produced.
         The technique is written up in <a class="font-semibold text-brand underline" href={practice}>the development hub</a>;
         the <a class="font-semibold text-brand underline" href={storyMapper}>Story mapper</a> tool is what picks which story to open.
         The <a class="font-semibold text-brand underline" href="/dsl">format is documented</a>, and
