@@ -60,29 +60,94 @@ const MENU_WIDTH = 246;
 const GAP = 4;
 const EDGE = 8;
 
+/*
+ * Enough to guess the menu's height before it exists.
+ *
+ * Measured off the rendered rules rather than invented: py-1.5 plus a line at
+ * text-sm is about 30px an item, a disabled item's reason adds a text-xs line,
+ * and a separator adds its rule and margin. It only has to be close — it decides
+ * which side to open on, not where anything lands.
+ */
+const ITEM_HEIGHT = 30;
+const REASON_HEIGHT = 18;
+const SEPARATOR_HEIGHT = 9;
+const MENU_PADDING = 8;
+
 export function CardMenu({ label, actions }: { label: string; actions: readonly CardMenuAction[] }) {
 	const [open, setOpen] = useState(false);
-	const [at, setAt] = useState<{ top: number; left: number; flip: boolean } | null>(null);
+	const [at, setAt] = useState<{ top: number; left: number } | null>(null);
+	// The menu's real height, once it has one. Until then the estimate stands in.
+	const [height, setHeight] = useState(0);
 	const button = useRef<HTMLButtonElement>(null);
 	const menu = useRef<HTMLUListElement>(null);
 	const menuId = useId();
 
-	const place = () => {
+	/*
+	 * Place the whole menu on the screen.
+	 *
+	 * It has no scrollbar of its own, on purpose. One inside a menu is a trap:
+	 * the page-scroll listener that dismisses the menu cannot tell a wheel over
+	 * the menu from a wheel over the board, so reaching for the scrollbar closed
+	 * the very thing you were reaching into.
+	 *
+	 * So instead of capping the height and letting it scroll, the position is
+	 * chosen so nothing is ever out of reach: below the button by preference,
+	 * above it when it will not fit below, and clamped into the viewport when it
+	 * fits neither way — which detaches it from the button slightly, and is far
+	 * better than a menu with items nobody can get to.
+	 */
+	const place = (known: number) => {
 		const rect = button.current?.getBoundingClientRect();
 		if (!rect) return;
+
 		// Right-aligned to the button, then pulled back inside the viewport — a
 		// card near the right edge would otherwise open off-screen.
 		const left = Math.max(EDGE, Math.min(rect.right - MENU_WIDTH, window.innerWidth - MENU_WIDTH - EDGE));
-		// Below normally; above when there is more room there, which is what
-		// happens for the bottom row of a long board.
-		const flip = rect.bottom > window.innerHeight * 0.6;
-		setAt({ top: flip ? rect.top - GAP : rect.bottom + GAP, left, flip });
+
+		/*
+		 * The estimate only has to hold until the menu exists and can be measured.
+		 * Measured off the rendered rules rather than invented: py-1.5 plus a line
+		 * at text-sm is about 30px an item, a disabled item's reason adds a
+		 * text-xs line, and a separator adds its rule and margin.
+		 */
+		const tall =
+			known ||
+			MENU_PADDING +
+				actions.reduce(
+					(total, action) =>
+						total +
+						ITEM_HEIGHT +
+						(action.disabledReason === undefined ? 0 : REASON_HEIGHT) +
+						(action.separated === true ? SEPARATOR_HEIGHT : 0),
+					0,
+				);
+
+		let top = rect.bottom + GAP;
+		// Above, as soon as it would not fit below — which for a story's fifteen
+		// entries is a good deal higher up the screen than for a menu of three.
+		if (top + tall > window.innerHeight - EDGE) top = rect.top - GAP - tall;
+		// And inside the viewport regardless, for the case where neither side has
+		// the room.
+		top = Math.max(EDGE, Math.min(top, window.innerHeight - tall - EDGE));
+
+		setAt((was) => (was?.top === top && was.left === left ? was : { top, left }));
 	};
 
 	// Before paint, so the menu never appears at the wrong place first.
 	useLayoutEffect(() => {
-		if (open) place();
+		if (open) place(0);
+		else setHeight(0);
 	}, [open]);
+
+	// Then again with the height it turned out to have. The estimate is close
+	// enough that this rarely moves anything, and exact enough when it does.
+	useLayoutEffect(() => {
+		if (!open) return;
+		const measured = menu.current?.offsetHeight ?? 0;
+		if (measured === 0 || measured === height) return;
+		setHeight(measured);
+		place(measured);
+	}, [open, at, height]);
 
 	useEffect(() => {
 		if (!open) return;
@@ -98,8 +163,12 @@ export function CardMenu({ label, actions }: { label: string; actions: readonly 
 			if (event.key === 'Escape') setOpen(false);
 		};
 		// A fixed menu does not travel with the card, so it is dismissed rather
-		// than left hanging beside whatever scrolled into its place.
-		const onMove = () => setOpen(false);
+		// than left hanging beside whatever scrolled into its place — but never
+		// because of a scroll that started inside the menu itself.
+		const onMove = (event: Event) => {
+			if (event.target instanceof Node && menu.current?.contains(event.target)) return;
+			setOpen(false);
+		};
 
 		document.addEventListener('pointerdown', onPointer);
 		document.addEventListener('keydown', onKey);
@@ -140,11 +209,8 @@ export function CardMenu({ label, actions }: { label: string; actions: readonly 
 						top: at.top,
 						left: at.left,
 						width: MENU_WIDTH,
-						// Translated up by its own height when flipped, which needs no
-						// measurement and cannot be wrong.
-						transform: at.flip ? 'translateY(-100%)' : undefined,
 					}}
-					className="z-[1000] max-h-[60vh] overflow-auto rounded-lg border border-slate-200 bg-white py-1 text-left text-sm shadow-lg dark:border-slate-700 dark:bg-night-raised"
+					className="z-[1000] rounded-lg border border-slate-200 bg-white py-1 text-left text-sm shadow-lg dark:border-slate-700 dark:bg-night-raised"
 				>
 					{actions.map((action, index) => {
 						const reasonId = `${menuId}-r${index}`;

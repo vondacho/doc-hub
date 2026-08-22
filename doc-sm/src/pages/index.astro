@@ -56,8 +56,8 @@ const ticketingConfigured = isConfigured(ticketingApiUrl());
 				right outcome. Forcing it would push the page into a sideways
 				scroll, and a header is not worth that.
 
-				`{/* */}` rather than `<!-- -->`: Astro ships HTML comments to the
-				browser, and this is a note to the next author, not to the reader.
+				A brace comment rather than an HTML one: Astro ships HTML comments to
+				the browser, and this is a note to the next author, not the reader.
 			*/}
 			<p class="mt-3 text-ink-muted dark:text-slate-400">
 				Activities across the top, the steps beneath them, and the stories in the release that will
@@ -65,12 +65,12 @@ const ticketingConfigured = isConfigured(ticketingApiUrl());
 			</p>
 		</header>
 
-		<!--
+		{/*
 			The legend is not decoration. Colour is kind on this board, and the rule
 			that governs doc-portal's status palette governs these three too: colour
 			is never the only signal. This says in words what the fills say in hue,
 			and every card repeats it in its accessible name.
-		-->
+		*/}
 		<section aria-labelledby="legend" class="mb-6">
 			<h2 id="legend" class="sr-only">What the colours mean</h2>
 			<ul class="flex flex-wrap gap-x-6 gap-y-2 text-sm">
@@ -86,7 +86,7 @@ const ticketingConfigured = isConfigured(ticketingApiUrl());
 			</ul>
 		</section>
 
-		<!--
+		{/*
 			The only hydrated component in doc-hub. See the header comment in
 			StoryMapBoard.tsx for why this one earns it and a search form does not.
 
@@ -95,7 +95,7 @@ const ticketingConfigured = isConfigured(ticketingApiUrl());
 			SSR would emit an empty grid, ship it, and throw it away — and it would
 			invite hydration-mismatch warnings from the ids dnd-kit generates for its
 			announcement region, for markup with no value.
-		-->
+		*/}
 		<StoryMapBoard
 			client:only="react"
 			products={products}
