@@ -41,6 +41,7 @@ export function Toolbar({
 	onSpace,
 	onLoadSample,
 	onAddActivity,
+	onAddSprint,
 	onAddRelease,
 	onUndo,
 	onRedo,
@@ -80,6 +81,7 @@ export function Toolbar({
 	onSpace: (space: string | null) => void;
 	onLoadSample: () => void;
 	onAddActivity: () => void;
+	onAddSprint: () => void;
 	onAddRelease: () => void;
 	onUndo: () => void;
 	onRedo: () => void;
@@ -159,7 +161,11 @@ export function Toolbar({
 					<span className="mx-1 h-6 w-px bg-slate-200 dark:bg-slate-700" aria-hidden="true" />
 
 					<IconButton icon="addActivity" label="Add activity" onClick={onAddActivity} />
-					<IconButton icon="addRelease" label="Add release" onClick={onAddRelease} />
+					{/* Two buttons and not one with a menu: there are two kinds, the
+					    choice is the whole decision, and a sprint is added far more
+					    often than a release. */}
+					<IconButton icon="addRelease" label="Add a sprint" onClick={onAddSprint} />
+					<IconButton icon="flag" label="Add a release" onClick={onAddRelease} />
 					<IconButton icon="example" label="Load the example" onClick={onLoadSample} />
 
 					<span className="mx-1 h-6 w-px bg-slate-200 dark:bg-slate-700" aria-hidden="true" />

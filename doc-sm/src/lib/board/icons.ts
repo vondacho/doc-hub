@@ -75,6 +75,8 @@ export const icons = {
 	up: 'm18 15-6-6-6 6',
 	down: 'm6 9 6 6 6-6',
 	trash: 'M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3',
+	/** A milestone flag — a release, as distinct from a sprint's plain band. */
+	flag: 'M6 21V4h11l-2 4 2 4H6',
 } as const;
 
 export type IconName = keyof typeof icons;

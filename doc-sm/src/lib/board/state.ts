@@ -25,9 +25,9 @@
  * off-by-ones live.
  */
 
-import type { CardKind, StoryStatus } from '../storymap/model.ts';
+import type { CardKind, DeliveryKind, StoryStatus } from '../storymap/model.ts';
 
-export type { CardKind, StoryStatus };
+export type { CardKind, DeliveryKind, StoryStatus };
 
 /**
  * In-memory only. Ids are never written to a `.storymap` file and are
@@ -38,7 +38,7 @@ export type Id = string;
 /**
  * The below-the-line band: stories that are known and not committed to.
  *
- * A sentinel rather than a real release, because it is not one — it cannot be
+ * A sentinel rather than a real delivery, because it is not one — it cannot be
  * renamed, reordered or deleted, and it is always last. Using `null` for it
  * would work until it had to be part of a `CellKey`, which is a string.
  */
@@ -57,9 +57,13 @@ export function splitCellKey(key: CellKey): { stepId: Id; band: BandId } {
 	return { stepId: key.slice(0, separator), band: key.slice(separator + 1) };
 }
 
-export interface Release {
+export interface Delivery {
 	readonly id: Id;
 	readonly title: string;
+	/** Sprint or release. One type with a kind — see DeliveryNode in the model. */
+	readonly kind: DeliveryKind;
+	/** The band's id in the tracker, or null for one not linked to anything. */
+	readonly ticket: string | null;
 	readonly notes: readonly string[];
 }
 
@@ -124,8 +128,8 @@ export interface BoardState {
 	readonly space: string | null;
 	readonly notes: readonly string[];
 	/** Band order, top to bottom. UNASSIGNED is implicit and always last. */
-	readonly releaseOrder: readonly Id[];
-	readonly releases: Readonly<Record<Id, Release>>;
+	readonly deliveryOrder: readonly Id[];
+	readonly deliveries: Readonly<Record<Id, Delivery>>;
 	readonly activityOrder: readonly Id[];
 	readonly activities: Readonly<Record<Id, Activity>>;
 	readonly steps: Readonly<Record<Id, Step>>;
@@ -139,8 +143,8 @@ export function emptyBoard(title = 'Untitled story map'): BoardState {
 		product: null,
 		space: null,
 		notes: [],
-		releaseOrder: [],
-		releases: {},
+		deliveryOrder: [],
+		deliveries: {},
 		activityOrder: [],
 		activities: {},
 		steps: {},
@@ -153,9 +157,9 @@ export function emptyBoard(title = 'Untitled story map'): BoardState {
 /* Selectors                                                                   */
 /* -------------------------------------------------------------------------- */
 
-/** Every band, in render order: the releases as declared, then below the line. */
+/** Every band, in render order: the deliveries as declared, then below the line. */
 export function bandOrder(board: BoardState): readonly BandId[] {
-	return [...board.releaseOrder, UNASSIGNED];
+	return [...board.deliveryOrder, UNASSIGNED];
 }
 
 /** Steps left to right across the whole board, flattened out of the activities. */

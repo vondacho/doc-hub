@@ -65,7 +65,8 @@ island appears is the day to ask whether this is still a documentation site.
 
 ## The toolbar
 
-The actions are icon buttons: undo and redo, then add-activity / add-release /
+The actions are icon buttons: undo and redo, then add-activity / add-sprint /
+add-release /
 load-the-example, then import, preview and export, with a rule between the
 groups. Eight labelled pills wrapped onto two lines on a laptop and pushed the
 board below the fold, which on a tool whose point is seeing a wall of cards at
@@ -333,9 +334,9 @@ up with the three levels every tracker has:
 | Story | a **story** | `CLONB-42` and up |
 
 That is not a coincidence being exploited — it is why a story map is worth
-keeping next to a backlog at all. Only a story takes a `@release`: an activity
+keeping next to a backlog at all. Only a story takes a `@delivery`: an activity
 and a step span every band, so *when* the work happens is settled one level
-down, and putting a release on either is refused with that reason.
+down, and putting a band on either is refused with that reason.
 
 **doc-sm owns neither the id nor the status.**
 
@@ -433,15 +434,16 @@ storymap "Doc-Hub Onboarding" {
   product "client-onboarding"
   space "CLONB"
 
-  release "MVP"
-  release "R2"
+  delivery "Sprint 24" sprint #CLONB-S24
+  delivery "Sprint 25" sprint #CLONB-S25
+  delivery "MVP" release #CLONB-R1
 
   activity "Discover documentation" {
     persona "Business analyst"
     persona "Product manager"
 
     step "Search the catalog" {
-      story "Full-text search" @MVP #CLONB-42 ~in-progress {
+      story "Full-text search" @"Sprint 24" #CLONB-42 ~in-progress {
         as "Business analyst"
         want "to search every product at once"
         so "I can answer a question without knowing which"
@@ -471,11 +473,27 @@ Ten decisions the format makes, each argued where it is implemented:
   error, because two declarations mean a bad merge.
 - **Braces, not indentation.** Whitespace is never syntax, so a file that has
   been through a chat window or a different editor still parses.
-- **Release order is band order.** No ordinal to drift out of step with the file.
-- **No `@release` means below the line.** Absence is the encoding; there is no
+- **Declaration order is timeline order.** A `delivery` line adds a band —
+  `delivery "Sprint 24" sprint`, `delivery "MVP" release` — and no ordinal or
+  date drifts out of step with the file. The tracker holds the calendar; this
+  holds the sequence.
+- **A sprint is a kind of delivery, not a different thing.** Both kinds are the
+  same structure; the word is for reading, and "four sprints and a release" says
+  something five equal bands do not. The same three words mean the same in
+  `doc-em`, so a band keeps its meaning when a story is carried between boards.
+- **A band carries its own `#ticket`.** A sprint has a number in the tracker and
+  a release a version. Editable on the board here — unlike `doc-em`, doc-sm
+  *issues* tickets through its publish flow, so refusing to store what came back
+  would be refusing its own output.
+- **`release "MVP"` still opens.** It means `delivery "MVP" release`. Nothing
+  writes that spelling any more, so one trip through the board converts a file:
+  a migration path, not a dialect the format keeps.
+- **No `@delivery` means below the line.** Absence is the encoding; there is no
   keyword to spell wrong.
-- **Release titles are unique.** A story refers to a release by title, which is
-  what keeps identifiers out of the file entirely.
+- **Band titles are unique.** A story refers to a band by title, which is what
+  keeps card identifiers out of the file entirely. A band's own `#ticket` is not
+  such an identifier — it names the band elsewhere, and nothing resolves
+  against it.
 - **Empty cards are real.** A step with no stories keeps its column.
 - **Each activity lists its cast**, one `persona` per line, and a story may name
   a persona its own activity lists and no other.
@@ -493,10 +511,11 @@ Ten decisions the format makes, each argued where it is implemented:
 | The product shortname | Blank lines |
 | The ticketing space, when stated | An unstated space, which stays unstated |
 | Ticket ids, and being unlinked | `~open`, the default, written back as nothing |
-| Release set and band order | Indentation width and style |
+| Bands: order, kind and ticket | Indentation width and style |
 | Structure and order of every card | `@"Bare"` vs `@Bare` (normalised) |
 | Priority order within a cell | `{ }` on an empty card (omitted) |
-| Release assignment, and unassignment | `release` interleaved with activities |
+| Band assignment, and unassignment | `delivery` interleaved with activities |
+| | the older `release "MVP"` spelling, rewritten as `delivery` |
 | Notes, their order and their line breaks | A `\n` escape in a note, which becomes a real line break |
 
 The contract the serializer holds to is stronger than "text round-trips":

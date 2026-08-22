@@ -175,7 +175,7 @@ export function BoardGrid({
 	}, []);
 
 	const bandName = (band: BandId): string =>
-		band === UNASSIGNED ? 'Below the line' : board.releases[band]?.title ?? 'Unknown';
+		band === UNASSIGNED ? 'Below the line' : board.deliveries[band]?.title ?? 'Unknown';
 
 	return (
 		/*
@@ -637,7 +637,7 @@ function storyMenu(
 	const bandMoves: CardMenuAction[] = bandOrder(board)
 		.filter((other) => other !== band)
 		.map((other, position) => ({
-			label: `Move to ${other === UNASSIGNED ? 'below the line' : board.releases[other]?.title ?? 'unknown'}`,
+			label: `Move to ${other === UNASSIGNED ? 'below the line' : board.deliveries[other]?.title ?? 'unknown'}`,
 			separated: position === 0,
 			run: () =>
 				dispatch({

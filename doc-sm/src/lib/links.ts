@@ -27,6 +27,11 @@ export function docPortalUrl(): string {
   return fromEnv('DOC_PORTAL_URL', 'http://doc-portal.localhost');
 }
 
+/** dev-hub's page on the practice — the source this component was built from. */
+export function practiceUrl(): string {
+  return fromEnv('PRACTICE_URL', 'http://dev-portal.localhost/doc/practices/story-mapping/');
+}
+
 /**
  * The registry's admin UI, as the *browser* sees it — a link, not a call.
  *

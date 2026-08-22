@@ -50,6 +50,12 @@
  * has no body at all: a step that has been identified and has no stories yet.
  * Both are first-class states, and an example that omitted them would suggest
  * they were not.
+ *
+ * **Its timeline is two sprints leading to a release**, which is the shape the
+ * kinds exist to express — five equal bands would say nothing about which is a
+ * step towards which. Two of the three carry a tracker id and one does not,
+ * because a band that nobody has raised in the tracker yet is an ordinary state
+ * and the example should show it.
  */
 
 export const SAMPLE_FILENAME = 'doc-hub-onboarding.storymap';
@@ -69,21 +75,21 @@ storymap "Doc-Hub Onboarding" {
   product "client-onboarding"
   space "CLONB"
 
-  release "MVP"
-  release "R2"
-  release "Later"
+  delivery "Sprint 24" sprint #CLONB-S24
+  delivery "Sprint 25" sprint #CLONB-S25
+  delivery "MVP" release #CLONB-R1
 
   activity "Discover documentation" #CLONB-1 ~in-progress {
     persona "Business analyst"
     persona "Product manager"
     persona "Support engineer"
     step "Search the catalog" #CLONB-10 ~in-progress {
-      story "Full-text search" @MVP #CLONB-42 ~in-progress {
+      story "Full-text search" @"Sprint 24" #CLONB-42 ~in-progress {
         as "Business analyst"
         want "to search every product at once"
         so "I can answer a question without knowing which product owns it"
       }
-      story "Filter by domain" @R2 #CLONB-43 ~ready {
+      story "Filter by domain" @"Sprint 25" #CLONB-43 ~ready {
         as "Product manager"
         want "to narrow the catalogue to one domain"
         so "I review only the products my portfolio covers"
@@ -103,24 +109,24 @@ storymap "Doc-Hub Onboarding" {
     persona "Support engineer"
     persona "Documentation owner"
     step "Check how current it is" #CLONB-12 ~in-progress {
-      story "Show the age of the docs" @MVP #CLONB-51 ~done {
+      story "Show the age of the docs" @"Sprint 24" #CLONB-51 ~done {
         as "Support engineer"
         want "to see when a page was last updated"
         so "I can judge whether to trust it"
       }
-      story "Flag anything over 90 days" @R2 ~analysing {
+      story "Flag anything over 90 days" @"Sprint 25" ~analysing {
         as "Documentation owner"
         want "stale pages called out for me"
         so "I fix them before somebody is misled"
       }
     }
     step "Check who owns it" #CLONB-13 ~ready {
-      story "Name the owning squad" @MVP {
+      story "Name the owning squad" @"Sprint 24" {
         as "Support engineer"
         want "to see which squad owns a product"
         so "I can route an incident without guessing"
       }
-      story "Link the squad's channel" @Later {
+      story "Link the squad's channel" @MVP {
         as "Support engineer"
         want "to reach the owning squad in one click"
         so "I can ask while the incident is still open"
@@ -132,24 +138,24 @@ storymap "Doc-Hub Onboarding" {
     persona "Registrar"
     persona "Product owner"
     step "Fill the registration form" #CLONB-14 ~ready {
-      story "Validate the repository URL" @MVP {
+      story "Validate the repository URL" @"Sprint 24" {
         as "Registrar"
         want "a bad repository link refused at entry"
         so "the catalogue never points at nothing"
       }
-      story "Reject a duplicate slug" @MVP {
+      story "Reject a duplicate slug" @"Sprint 24" {
         as "Registrar"
         want "a shortname that is already taken refused"
         so "two products can never share an address"
       }
     }
     step "Confirm it landed" #CLONB-15 ~analysing {
-      story "Show the entry in the catalog" @R2 {
+      story "Show the entry in the catalog" @"Sprint 25" {
         as "Product owner"
         want "to see my product listed straight after registering"
         so "I know the registration actually took"
       }
-      story "Mail the owner a receipt" @Later {
+      story "Mail the owner a receipt" @MVP {
         as "Product owner"
         want "a written record of what I registered"
         so "I can correct it if it is wrong"

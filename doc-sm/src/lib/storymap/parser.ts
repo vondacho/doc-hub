@@ -6,11 +6,11 @@
  *   1. parse    builds the tree, carrying each `@Release` reference as a raw
  *               name plus the position it was written at.
  *   2. resolve  validates what only makes sense once the whole file is read:
- *               duplicate release titles, references to releases that were
+ *               duplicate delivery titles, references to deliveries that were
  *               never declared, a second `storymap` block, no block at all.
  *
- * Phase 2 is why a `release` declaration may appear *after* the activity that
- * references it. A hand-editor adding a release at the bottom of the file is not
+ * Phase 2 is why a `delivery` declaration may appear *after* the activity that
+ * references it. A hand-editor adding a band at the bottom of the file is not
  * doing anything wrong, and a single-pass parser would punish them for it.
  *
  * Errors are collected rather than fatal. The argument is worth stating because
@@ -28,11 +28,14 @@
 import { STORYMAP_KEYWORDS, tokenize, type Token, type TokenKind } from './lexer.ts';
 import {
 	DEFAULT_STORY_STATUS,
+	DELIVERY_KINDS,
+	isDeliveryKind,
 	isStoryStatus,
 	wrapNote,
 	STORY_STATUSES,
 	type ActivityNode,
-	type ReleaseNode,
+	type DeliveryKind,
+	type DeliveryNode,
 	type StepNode,
 	type StoryMapDocument,
 	type StoryNode,
@@ -94,8 +97,10 @@ interface RawActivity {
 	readonly steps: RawStep[];
 }
 
-interface RawRelease {
+interface RawDelivery {
 	readonly title: string;
+	readonly kind: DeliveryKind;
+	readonly ticket: string | null;
 	readonly notes: string[];
 	readonly token: Token;
 }
@@ -488,18 +493,78 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 		return true;
 	}
 
-	function parseRelease(releases: RawRelease[]): boolean {
-		if (!at('keyword', 'release')) return false;
+	/**
+	 * `delivery "Sprint 24" sprint #CLONB-S24` — one band of the timeline.
+	 *
+	 * ## `release "MVP"` still parses, and is why this reads two spellings
+	 *
+	 * That was the only spelling until deliveries arrived, and `.storymap` files
+	 * live in product repositories where nobody is watching for a grammar change.
+	 * Refusing them would mean a tool upgrade silently broke files the tool itself
+	 * wrote, which is the one thing a format that promises a round trip must not
+	 * do.
+	 *
+	 * So `release "MVP"` is accepted and means `delivery "MVP" release`. It is a
+	 * migration path rather than a permanent dialect: the serializer only ever
+	 * writes `delivery`, so one trip through the board converts a file and the old
+	 * spelling disappears from it. Delete this branch once no old file is left —
+	 * nothing else depends on it.
+	 */
+	function parseDelivery(deliveries: RawDelivery[]): boolean {
+		const legacy = at('keyword', 'release');
+		if (!legacy && !at('keyword', 'delivery')) return false;
 		const keyword = advance();
-		const title = expectString('release', 'A release is quoted: release "MVP"');
+		const title = expectString(
+			legacy ? 'release' : 'delivery',
+			legacy ? 'A release is quoted: release "MVP"' : 'A delivery is quoted: delivery "Sprint 24" sprint',
+		);
 		if (title === undefined) {
 			synchronize();
 			return true;
 		}
 
+		// The old spelling names its own kind, so it takes no kind word. The new
+		// one requires it: a defaulted kind would make the meaning of a bare
+		// `delivery` line depend on a choice made months ago.
+		let kind: DeliveryKind = 'release';
+		if (!legacy) {
+			if (!at('keyword') || !isDeliveryKind(peek().value)) {
+				problemAt(
+					peek(),
+					`Expected ${DELIVERY_KINDS.join(' or ')} after the delivery's name, found ${describe(peek())}.`,
+					'A delivery says which it is: delivery "1.0" release',
+				);
+			} else {
+				kind = advance().value as DeliveryKind;
+			}
+		}
+
+		// `#ticket`, on either spelling. A band takes no `~status` — where a
+		// sprint is in its own lifecycle is the tracker's business — and no `@`,
+		// because a delivery is a point on the timeline rather than a thing
+		// placed on one.
+		let ticket: string | null = null;
+		while (at('hash')) {
+			const sigil = advance();
+			if (!at('ident') && !at('string')) {
+				problemAt(
+					sigil,
+					`Expected a ticket id after \`#\`, found ${describe(peek())}.`,
+					'Write the id the ticketing system issued: #CLONB-S24',
+				);
+				continue;
+			}
+			const value = advance().value;
+			if (ticket !== null) {
+				problemAt(sigil, 'This delivery names two tickets.', 'A delivery links to one ticket.');
+				continue;
+			}
+			ticket = value;
+		}
+
 		const notes: string[] = [];
-		releases.push({ title, notes, token: keyword });
-		parseBody('release', () => parseNote(notes));
+		deliveries.push({ title, kind, ticket, notes, token: keyword });
+		parseBody(legacy ? 'release' : 'delivery', () => parseNote(notes));
 		return true;
 	}
 
@@ -529,14 +594,14 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 					hint: 'A story map starts with: storymap "Its title" { … }',
 				});
 			}
-			return { title: 'Untitled story map', product: null, space: null, notes: [], releases: [], activities: [] };
+			return { title: 'Untitled story map', product: null, space: null, notes: [], deliveries: [], activities: [] };
 		}
 
 		let title = 'Untitled story map';
 		const product: { value: string | null; token: Token | null } = { value: null, token: null };
 		const space: { value: string | null; token: Token | null } = { value: null, token: null };
 		let notes: string[] = [];
-		let releases: RawRelease[] = [];
+		let deliveries: RawDelivery[] = [];
 		let activities: RawActivity[] = [];
 
 		if (at('keyword', 'storymap')) {
@@ -544,7 +609,7 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 			const parsed = expectString('storymap', 'The map is titled: storymap "Doc-Hub Onboarding"');
 			if (parsed !== undefined) title = parsed;
 			notes = [];
-			releases = [];
+			deliveries = [];
 			activities = [];
 			parseBody(
 				'storymap',
@@ -561,7 +626,7 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 						'A ticketing space is quoted: space "CLONB"',
 						'The ticketing space is declared twice. Tickets are raised into one space.',
 					) ||
-					parseRelease(releases) ||
+					parseDelivery(deliveries) ||
 					parseActivity(activities) ||
 					parseNote(notes),
 			);
@@ -583,7 +648,7 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 			if (!at('eof') && !at('keyword', 'storymap')) advance();
 		}
 
-		return resolve(title, product.value, space.value, notes, releases, activities, problems);
+		return resolve(title, product.value, space.value, notes, deliveries, activities, problems);
 	}
 
 	return { parseFile };
@@ -597,33 +662,42 @@ function resolve(
 	product: string | null,
 	space: string | null,
 	notes: readonly string[],
-	rawReleases: readonly RawRelease[],
+	rawDeliveries: readonly RawDelivery[],
 	rawActivities: readonly RawActivity[],
 	problems: Problem[],
 ): StoryMapDocument {
 	/*
-	 * Duplicate release titles are an error, and this is the decision that keeps
+	 * Duplicate delivery titles are an error, and this is the decision that keeps
 	 * identifiers out of the file at all: `@MVP` resolves by title, so titles
 	 * have to be unique for the reference to mean one thing. The two decisions
-	 * stand or fall together — if ids are ever added to the format, this rule is
-	 * the one to reconsider first.
+	 * stand or fall together — if card ids are ever added to the format, this rule
+	 * is the one to reconsider first.
+	 *
+	 * A band's `#ticket` is not such an id. It names the band in *another*
+	 * system and is never resolved against, so two bands could carry the same one
+	 * without any reference becoming ambiguous.
 	 */
-	const declared = new Map<string, RawRelease>();
-	const releases: ReleaseNode[] = [];
-	for (const release of rawReleases) {
-		const existing = declared.get(release.title);
+	const declared = new Map<string, RawDelivery>();
+	const deliveries: DeliveryNode[] = [];
+	for (const delivery of rawDeliveries) {
+		const existing = declared.get(delivery.title);
 		if (existing) {
 			report(problems, {
-				message: `The release "${release.title}" is declared twice.`,
-				line: release.token.line,
-				column: release.token.column,
-				length: release.token.length,
-				hint: `Already declared on line ${existing.token.line}. A story refers to a release by its title, so the titles have to differ.`,
+				message: `The delivery "${delivery.title}" is declared twice.`,
+				line: delivery.token.line,
+				column: delivery.token.column,
+				length: delivery.token.length,
+				hint: `Already declared on line ${existing.token.line}. A story refers to a delivery by its title, so the titles have to differ.`,
 			});
 			continue;
 		}
-		declared.set(release.title, release);
-		releases.push({ title: release.title, notes: [...release.notes] });
+		declared.set(delivery.title, delivery);
+		deliveries.push({
+			title: delivery.title,
+			kind: delivery.kind,
+			ticket: delivery.ticket,
+			notes: [...delivery.notes],
+		});
 	}
 
 	const activities: ActivityNode[] = rawActivities.map((activity): ActivityNode => ({
@@ -650,7 +724,7 @@ function resolve(
 		})),
 	}));
 
-	return { title, product, space, notes: [...notes], releases, activities };
+	return { title, product, space, notes: [...notes], deliveries, activities };
 
 	/*
 	 * An `@` naming a release that was never declared is a hard error, not a
@@ -663,7 +737,7 @@ function resolve(
 		if (declared.has(ref.name)) return ref.name;
 
 		report(problems, {
-			message: `No release is called "${ref.name}".`,
+			message: `No delivery is called "${ref.name}".`,
 			line: ref.line,
 			column: ref.column,
 			length: ref.length,
@@ -704,10 +778,10 @@ function resolve(
 
 	function suggest(name: string): string {
 		const names = [...declared.keys()];
-		if (names.length === 0) return 'No releases are declared. Add: release "MVP"';
+		if (names.length === 0) return 'No deliveries are declared. Add: delivery "Sprint 24" sprint';
 		const near = names.find((candidate) => candidate.toLowerCase() === name.toLowerCase());
 		if (near) return `Did you mean @${quoteIfNeeded(near)}? Release names are case-sensitive.`;
-		return `Declared releases: ${names.map((n) => `"${n}"`).join(', ')}.`;
+		return `Declared deliveries: ${names.map((n) => `"${n}"`).join(', ')}.`;
 	}
 }
 

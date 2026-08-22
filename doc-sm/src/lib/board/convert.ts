@@ -27,7 +27,7 @@ import {
 	type BoardState,
 	type CellKey,
 	type Id,
-	type Release,
+	type Delivery,
 	type Step,
 	type Story,
 } from './state.ts';
@@ -46,16 +46,22 @@ export function resetIds(): void {
 }
 
 export function toBoard(document: StoryMapDocument): BoardState {
-	const releases: Record<Id, Release> = {};
-	const releaseOrder: Id[] = [];
-	/** Release title → id. Sound because duplicate titles are a parse error. */
-	const idOfRelease = new Map<string, Id>();
+	const deliveries: Record<Id, Delivery> = {};
+	const deliveryOrder: Id[] = [];
+	/** Delivery title → id. Sound because duplicate titles are a parse error. */
+	const idOfDelivery = new Map<string, Id>();
 
-	for (const release of document.releases) {
+	for (const delivery of document.deliveries) {
 		const id = nextId('r');
-		releases[id] = { id, title: release.title, notes: [...release.notes] };
-		releaseOrder.push(id);
-		idOfRelease.set(release.title, id);
+		deliveries[id] = {
+			id,
+			title: delivery.title,
+			kind: delivery.kind,
+			ticket: delivery.ticket,
+			notes: [...delivery.notes],
+		};
+		deliveryOrder.push(id);
+		idOfDelivery.set(delivery.title, id);
 	}
 
 	const activities: Record<Id, Activity> = {};
@@ -96,7 +102,7 @@ export function toBoard(document: StoryMapDocument): BoardState {
 				// reference to an undeclared release — so an unknown one here
 				// would be a bug in the parser, not bad input. Falling back to
 				// below-the-line keeps the board consistent either way.
-				const band = story.release === null ? UNASSIGNED : idOfRelease.get(story.release) ?? UNASSIGNED;
+				const band = story.release === null ? UNASSIGNED : idOfDelivery.get(story.release) ?? UNASSIGNED;
 				const key = cellKey(stepId, band);
 				(cells[key] ??= []).push(storyId);
 			}
@@ -119,8 +125,8 @@ export function toBoard(document: StoryMapDocument): BoardState {
 		product: document.product,
 		space: document.space,
 		notes: [...document.notes],
-		releaseOrder,
-		releases,
+		deliveryOrder,
+		deliveries,
 		activityOrder,
 		activities,
 		steps,
@@ -161,9 +167,18 @@ export function toDocument(board: BoardState): StoryMapDocument {
 		product: board.product,
 		space: board.space,
 		notes: [...board.notes],
-		releases: board.releaseOrder.flatMap((id) => {
-			const release = board.releases[id];
-			return release ? [{ title: release.title, notes: [...release.notes] }] : [];
+		deliveries: board.deliveryOrder.flatMap((id) => {
+			const delivery = board.deliveries[id];
+			return delivery
+				? [
+						{
+							title: delivery.title,
+							kind: delivery.kind,
+							ticket: delivery.ticket,
+							notes: [...delivery.notes],
+						},
+					]
+				: [];
 		}),
 		activities: board.activityOrder.flatMap((activityId) => {
 			const activity = board.activities[activityId];
@@ -184,11 +199,11 @@ export function toDocument(board: BoardState): StoryMapDocument {
 						status: step.status,
 						// Walk the bands in order so priority within a step reads
 						// top band first — the same order the board shows.
-						stories: [...board.releaseOrder, UNASSIGNED].flatMap((band) =>
+						stories: [...board.deliveryOrder, UNASSIGNED].flatMap((band) =>
 							(board.cells[cellKey(stepId, band)] ?? []).flatMap((storyId) => {
 								const story = board.stories[storyId];
 								if (!story) return [];
-								const release = band === UNASSIGNED ? null : board.releases[band]?.title ?? null;
+								const release = band === UNASSIGNED ? null : board.deliveries[band]?.title ?? null;
 								return [
 									{
 										title: story.title,

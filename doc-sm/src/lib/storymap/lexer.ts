@@ -56,6 +56,11 @@ export const STORYMAP_KEYWORDS: ReadonlySet<string> = new Set([
 	'as',
 	'want',
 	'so',
+	// The time axis. `delivery` declares a band and `sprint`/`release` say which
+	// kind it is — the same three words doc-em uses, so a band means the same
+	// thing on both boards.
+	'delivery',
+	'sprint',
 	'release',
 	'activity',
 	'step',

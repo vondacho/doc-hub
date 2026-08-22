@@ -28,7 +28,7 @@ import {
 	type Id,
 	type StoryStatus,
 } from './state.ts';
-import { DEFAULT_STORY_STATUS, splitNotes } from '../storymap/model.ts';
+import { DEFAULT_STORY_STATUS, splitNotes, type DeliveryKind } from '../storymap/model.ts';
 import { nextId } from './convert.ts';
 
 export type BoardAction =
@@ -58,17 +58,20 @@ export type BoardAction =
 	 */
 	| { type: 'setProduct'; product: string | null }
 	| { type: 'setSpace'; space: string | null }
-	| { type: 'retitle'; kind: CardKind | 'release'; id: Id; title: string }
+	| { type: 'retitle'; kind: CardKind | 'delivery'; id: Id; title: string }
 	| { type: 'addActivity'; index: number }
 	| { type: 'addStep'; activityId: Id; index: number }
 	| { type: 'addStory'; cell: CellKey; index: number }
-	| { type: 'addRelease'; index: number }
-	| { type: 'removeRelease'; id: Id }
+	| { type: 'addDelivery'; kind: DeliveryKind; index: number }
+	| { type: 'setDeliveryKind'; id: Id; kind: DeliveryKind }
+	/** The band's id in the tracker. Editable here: doc-sm issues these itself. */
+	| { type: 'setDeliveryTicket'; id: Id; ticket: string | null }
+	| { type: 'removeDelivery'; id: Id }
 	| { type: 'removeCard'; kind: CardKind; id: Id }
 	| { type: 'moveStory'; storyId: Id; from: CellKey; to: CellKey; index: number }
 	| { type: 'moveStep'; stepId: Id; fromActivityId: Id; toActivityId: Id; index: number }
 	| { type: 'moveActivity'; activityId: Id; index: number }
-	| { type: 'moveRelease'; releaseId: Id; index: number }
+	| { type: 'moveDelivery'; deliveryId: Id; index: number }
 	| { type: 'changeKind'; kind: CardKind; id: Id; to: CardKind }
 	/**
 	 * Link a story to a ticket, or unlink it with `null`.
@@ -131,7 +134,7 @@ export function reduce(board: BoardState, action: BoardAction): BoardState {
 			return action.board;
 
 		case 'reset':
-			return { ...board, product: null, space: null, notes: [], releaseOrder: [], releases: {}, activityOrder: [], activities: {}, steps: {}, stories: {}, cells: {} };
+			return { ...board, product: null, space: null, notes: [], deliveryOrder: [], deliveries: {}, activityOrder: [], activities: {}, steps: {}, stories: {}, cells: {} };
 
 		case 'setMapTitle':
 			return action.title === board.title ? board : { ...board, title: action.title };
@@ -196,17 +199,37 @@ export function reduce(board: BoardState, action: BoardAction): BoardState {
 			};
 		}
 
-		case 'addRelease': {
+		case 'addDelivery': {
 			const id = nextId('r');
 			return {
 				...board,
-				releases: { ...board.releases, [id]: { id, title: uniqueReleaseTitle(board), notes: [] } },
-				releaseOrder: insertAt(board.releaseOrder, action.index, id),
+				deliveries: {
+					...board.deliveries,
+					[id]: { id, title: uniqueDeliveryTitle(board, action.kind), kind: action.kind, ticket: null, notes: [] },
+				},
+				deliveryOrder: insertAt(board.deliveryOrder, action.index, id),
 			};
 		}
 
-		case 'removeRelease':
-			return removeRelease(board, action.id);
+		case 'removeDelivery':
+			return removeDelivery(board, action.id);
+
+		case 'setDeliveryKind': {
+			const delivery = board.deliveries[action.id];
+			if (!delivery || delivery.kind === action.kind) return board;
+			return { ...board, deliveries: { ...board.deliveries, [action.id]: { ...delivery, kind: action.kind } } };
+		}
+
+		case 'setDeliveryTicket': {
+			const delivery = board.deliveries[action.id];
+			if (!delivery) return board;
+			// Blank and "not linked" are the same intent, so an emptied field
+			// returns the ticket to null rather than storing "".
+			const ticket = action.ticket === null || action.ticket.trim() === '' ? null : action.ticket.trim();
+			return ticket === delivery.ticket
+				? board
+				: { ...board, deliveries: { ...board.deliveries, [action.id]: { ...delivery, ticket } } };
+		}
 
 		case 'removeCard':
 			return removeCard(board, action.kind, action.id);
@@ -222,9 +245,9 @@ export function reduce(board: BoardState, action: BoardAction): BoardState {
 			return order === board.activityOrder ? board : { ...board, activityOrder: order };
 		}
 
-		case 'moveRelease': {
-			const order = moveWithin(board.releaseOrder, action.releaseId, action.index);
-			return order === board.releaseOrder ? board : { ...board, releaseOrder: order };
+		case 'moveDelivery': {
+			const order = moveWithin(board.deliveryOrder, action.deliveryId, action.index);
+			return order === board.deliveryOrder ? board : { ...board, deliveryOrder: order };
 		}
 
 		case 'changeKind':
@@ -316,18 +339,18 @@ export function reduce(board: BoardState, action: BoardAction): BoardState {
 /* Retitle                                                                     */
 /* -------------------------------------------------------------------------- */
 
-function retitle(board: BoardState, kind: CardKind | 'release', id: Id, raw: string): BoardState {
+function retitle(board: BoardState, kind: CardKind | 'delivery', id: Id, raw: string): BoardState {
 	const title = raw.trim();
 	if (title === '') return board;
 
-	if (kind === 'release') {
-		const release = board.releases[id];
-		if (!release || release.title === title) return board;
-		// Release titles are the key `@Release` resolves against, so a duplicate
+	if (kind === 'delivery') {
+		const delivery = board.deliveries[id];
+		if (!delivery || delivery.title === title) return board;
+		// Delivery titles are the key `@Delivery` resolves against, so a duplicate
 		// would not survive an export. Refused here rather than at export time,
 		// where the damage is already done.
-		if (board.releaseOrder.some((other) => other !== id && board.releases[other]?.title === title)) return board;
-		return { ...board, releases: { ...board.releases, [id]: { ...release, title } } };
+		if (board.deliveryOrder.some((other) => other !== id && board.deliveries[other]?.title === title)) return board;
+		return { ...board, deliveries: { ...board.deliveries, [id]: { ...delivery, title } } };
 	}
 
 	if (kind === 'activity') {
@@ -354,15 +377,15 @@ function retitle(board: BoardState, kind: CardKind | 'release', id: Id, raw: str
 /**
  * Deleting a band moves its stories below the line; it never deletes them.
  *
- * Removing a release is a statement about the plan, not about the work. A
+ * Removing a band is a statement about the plan, not about the work. A
  * delete that silently took ten stories with it would be the most expensive
  * click in the tool.
  */
-function removeRelease(board: BoardState, id: Id): BoardState {
-	if (!board.releases[id]) return board;
+function removeDelivery(board: BoardState, id: Id): BoardState {
+	if (!board.deliveries[id]) return board;
 
-	const releases = { ...board.releases };
-	delete releases[id];
+	const deliveries = { ...board.deliveries };
+	delete deliveries[id];
 
 	const cells: Record<CellKey, readonly Id[]> = { ...board.cells };
 	for (const key of Object.keys(board.cells)) {
@@ -377,8 +400,8 @@ function removeRelease(board: BoardState, id: Id): BoardState {
 
 	return {
 		...board,
-		releases,
-		releaseOrder: board.releaseOrder.filter((other) => other !== id),
+		deliveries,
+		deliveryOrder: board.deliveryOrder.filter((other) => other !== id),
 		cells,
 	};
 }
@@ -730,10 +753,11 @@ function activityOwning(board: BoardState, stepId: Id): Activity | undefined {
 	return undefined;
 }
 
-function uniqueReleaseTitle(board: BoardState): string {
-	const taken = new Set(board.releaseOrder.map((id) => board.releases[id]?.title));
-	for (let n = board.releaseOrder.length + 1; ; n += 1) {
-		const candidate = `Release ${n}`;
+function uniqueDeliveryTitle(board: BoardState, kind: DeliveryKind): string {
+	const taken = new Set(board.deliveryOrder.map((id) => board.deliveries[id]?.title));
+	const stem = kind === 'sprint' ? 'Sprint' : 'Release';
+	for (let n = board.deliveryOrder.filter((id) => board.deliveries[id]?.kind === kind).length + 1; ; n += 1) {
+		const candidate = `${stem} ${n}`;
 		if (!taken.has(candidate)) return candidate;
 	}
 }

@@ -2,7 +2,7 @@
 import Layout from '../layouts/Layout.astro';
 import StoryMapBoard from '../components/board/StoryMapBoard.tsx';
 import { swatchClass, kindLabel, kindDescription, KIND_ORDER } from '../lib/board/kinds';
-import { docPortalUrl, registryApiUrl, registryUrl, ticketingApiUrl } from '../lib/links';
+import { docPortalUrl, practiceUrl, registryApiUrl, registryUrl, ticketingApiUrl } from '../lib/links';
 import { fetchProducts } from '../lib/products';
 import { isConfigured } from '../lib/ticketing';
 
@@ -24,6 +24,7 @@ import { isConfigured } from '../lib/ticketing';
 const { products, unavailable } = await fetchProducts(registryApiUrl());
 
 const portal = docPortalUrl();
+const practice = practiceUrl();
 const registry = registryUrl();
 
 // Whether a ticketing system is attached, and nothing more. The address itself

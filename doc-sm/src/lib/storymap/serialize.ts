@@ -12,10 +12,10 @@
  * | ------------------------------------------- | ------------------------------------ |
  * | Map title                                   | Comments — every one of them         |
  * | The product shortname                       | Blank lines                          |
- * | Release set, and band order                 | Indentation width and style          |
+ * | Bands: order, kind and ticket               | Indentation width and style          |
  * | Activity / step / story structure and order | `@"Bare"` vs `@Bare` (normalised)    |
  * | Priority order within a cell                | `{ }` on an empty card (omitted)     |
- * | Release assignment, and unassignment        | `release` interleaved with activities |
+ * | Band assignment, and unassignment           | `delivery` interleaved with activities |
  * | Ticket ids, and being unlinked              | `~open`, the default, which is        |
  * | Story statuses                              | written back out as nothing           |
  * | Notes, their order and their breaks         | (both are hoisted to the top)        |
@@ -130,18 +130,25 @@ export function serialize(document: StoryMapDocument): string {
 
 	const headed = document.product !== null || document.space !== null || document.notes.length > 0;
 
-	// Releases are hoisted above the activities regardless of where they were
+	// Deliveries are hoisted above the activities regardless of where they were
 	// written. Band order is declaration order, so this is also the one place
 	// the vertical axis of the board is spelled out in the file.
-	if (document.releases.length > 0) {
+	//
+	// Always written as `delivery`, never as the older `release "MVP"`. The
+	// parser still reads that spelling so existing files keep opening, but
+	// nothing writes it: one trip through the board converts a file, and the
+	// alias is a migration path rather than a dialect the format keeps.
+	if (document.deliveries.length > 0) {
 		if (headed) out.push('');
-		for (const release of document.releases) {
-			if (release.notes.length === 0) {
-				out.push(`${INDENT}release ${quote(release.title)}`);
+		for (const delivery of document.deliveries) {
+			const ticket = delivery.ticket === null ? '' : ` #${quoteIfNeeded(delivery.ticket)}`;
+			const head = `${INDENT}delivery ${quote(delivery.title)} ${delivery.kind}${ticket}`;
+			if (delivery.notes.length === 0) {
+				out.push(head);
 				continue;
 			}
-			out.push(`${INDENT}release ${quote(release.title)} {`);
-			for (const note of release.notes) emitNote(out, INDENT.repeat(2), note);
+			out.push(`${head} {`);
+			for (const note of delivery.notes) emitNote(out, INDENT.repeat(2), note);
 			out.push(`${INDENT}}`);
 		}
 	}
@@ -152,7 +159,7 @@ export function serialize(document: StoryMapDocument): string {
 		const actStatus = activity.status === DEFAULT_STORY_STATUS ? '' : ` ~${activity.status}`;
 		const actHead = `${INDENT}activity ${quote(activity.title)}${actTicket}${actStatus}`;
 		// A blank line between blocks, but never one directly under the opening
-		// brace of a map with no header and no releases.
+		// brace of a map with no header and no bands.
 		if (out.length > 1 && out[out.length - 1] !== `storymap ${quote(document.title)} {`) out.push('');
 		const hasBody =
 			activity.notes.length > 0 || activity.personas.length > 0 || activity.steps.length > 0;

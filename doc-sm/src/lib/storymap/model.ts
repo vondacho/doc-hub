@@ -81,14 +81,56 @@ export function isStoryStatus(value: unknown): value is StoryStatus {
 }
 
 /**
- * A release, increment or phase — one horizontal band of the board.
+ * A sprint or a release — the two kinds of delivery, and the whole time axis.
+ *
+ * One type with a kind rather than two types, because a sprint *is* a release in
+ * every way this board cares about: it is a dated thing that work is committed
+ * to, it sits at a point on a timeline, and cards are placed in it. The only
+ * difference is scale, and scale is a word, not a structure.
+ *
+ * The same vocabulary doc-em uses, deliberately. A story map picks which story
+ * to open and an example map opens it; a band called "Sprint 24" has to mean the
+ * same thing in both, or carrying a story from one board to the other loses the
+ * one fact the two share.
+ */
+export type DeliveryKind = 'sprint' | 'release';
+
+export const DELIVERY_KINDS: readonly DeliveryKind[] = ['sprint', 'release'];
+
+export const deliveryKindLabel: Record<DeliveryKind, string> = {
+	sprint: 'Sprint',
+	release: 'Release',
+};
+
+export function isDeliveryKind(value: unknown): value is DeliveryKind {
+	return typeof value === 'string' && (DELIVERY_KINDS as readonly string[]).includes(value);
+}
+
+/**
+ * A sprint, release, increment or phase — one horizontal band of the board.
  *
  * Declaration order in the file *is* band order, top to bottom. There is no
  * index field on purpose: an explicit ordinal is a second copy of the same
- * fact, and the copy is what drifts.
+ * fact, and the copy is what drifts. No dates either: the tracker holds the
+ * calendar, this holds the sequence.
  */
-export interface ReleaseNode {
+export interface DeliveryNode {
 	readonly title: string;
+	readonly kind: DeliveryKind;
+	/**
+	 * The ticket this band is in the tracker — a Jira version or sprint id.
+	 *
+	 * A band is a real object over there, not just a word on this board: a sprint
+	 * has a number, a release has a version, and both are things you can open. So
+	 * it carries an id for the same reason a story does, spelled the same way and
+	 * owned by the same system.
+	 *
+	 * `null` means not linked, which is the state every band starts in. Editable
+	 * in the DSL and on the board here — unlike doc-em, doc-sm *issues* tickets
+	 * through its publish flow, so a board that could not record what came back
+	 * would be refusing to store its own output.
+	 */
+	readonly ticket: string | null;
 	readonly notes: readonly string[];
 }
 
@@ -246,7 +288,8 @@ export interface StoryMapDocument {
 	 */
 	readonly space: string | null;
 	readonly notes: readonly string[];
-	readonly releases: readonly ReleaseNode[];
+	/** The time axis, in order, earliest first. */
+	readonly deliveries: readonly DeliveryNode[];
 	readonly activities: readonly ActivityNode[];
 }
 
@@ -410,5 +453,5 @@ export function effectiveSpace(map: { space: string | null; product: string | nu
 
 /** The empty document a fresh board starts from. */
 export function emptyDocument(title = 'Untitled story map'): StoryMapDocument {
-	return { title, product: null, space: null, notes: [], releases: [], activities: [] };
+	return { title, product: null, space: null, notes: [], deliveries: [], activities: [] };
 }

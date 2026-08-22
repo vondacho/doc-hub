@@ -65,7 +65,7 @@ import {
 	type Id,
 } from '../../lib/board/state.ts';
 import type { Product } from '../../lib/products.ts';
-import { effectiveSpace, ticketKindOf, type StoryStatus } from '../../lib/storymap/model.ts';
+import { deliveryKindLabel, effectiveSpace, ticketKindOf, type StoryStatus } from '../../lib/storymap/model.ts';
 import { parse } from '../../lib/storymap/parser.ts';
 import { StoryMapParseError, type Problem } from '../../lib/storymap/problems.ts';
 import { SAMPLE_SOURCE } from '../../lib/storymap/sample.ts';
@@ -558,9 +558,9 @@ export default function StoryMapBoard({
 				return;
 			}
 
-			if (activeData?.type === 'release') {
-				const index = board.releaseOrder.indexOf(overId);
-				if (index !== -1) dispatch({ type: 'moveRelease', releaseId: activeId, index });
+			if (activeData?.type === 'delivery') {
+				const index = board.deliveryOrder.indexOf(overId);
+				if (index !== -1) dispatch({ type: 'moveDelivery', deliveryId: activeId, index });
 			}
 		},
 		[board, dispatch],
@@ -585,7 +585,7 @@ export default function StoryMapBoard({
 		[board],
 	);
 
-	const empty = board.activityOrder.length === 0 && board.releaseOrder.length === 0;
+	const empty = board.activityOrder.length === 0 && board.deliveryOrder.length === 0;
 
 	return (
 		<div
@@ -625,7 +625,8 @@ export default function StoryMapBoard({
 				publishReason={publishBlockedReason(ticketingConfigured, space, unbound.length)}
 				onLoadSample={() => load(SAMPLE_SOURCE)}
 				onAddActivity={() => dispatch({ type: 'addActivity', index: board.activityOrder.length })}
-				onAddRelease={() => dispatch({ type: 'addRelease', index: board.releaseOrder.length })}
+				onAddSprint={() => dispatch({ type: 'addDelivery', kind: 'sprint', index: board.deliveryOrder.length })}
+				onAddRelease={() => dispatch({ type: 'addDelivery', kind: 'release', index: board.deliveryOrder.length })}
 				onUndo={() => send({ type: 'undo' })}
 				onRedo={() => send({ type: 'redo' })}
 				zoom={zoom}
@@ -787,7 +788,8 @@ function nameOf(board: BoardState, id: string): string {
 	if (board.stories[id]) return `${kindLabel.story} ${board.stories[id]!.title}`;
 	if (board.steps[id]) return `${kindLabel.step} ${board.steps[id]!.title}`;
 	if (board.activities[id]) return `${kindLabel.activity} ${board.activities[id]!.title}`;
-	if (board.releases[id]) return `Release ${board.releases[id]!.title}`;
+	const delivery = board.deliveries[id];
+	if (delivery) return `${deliveryKindLabel[delivery.kind]} ${delivery.title}`;
 	return 'the card';
 }
 
@@ -795,9 +797,9 @@ function placeOf(board: BoardState, id: string): string {
 	if (id.includes('|')) {
 		const { stepId, band } = splitCellKey(id);
 		const stepTitle = board.steps[stepId]?.title ?? 'a step';
-		const bandTitle = band === UNASSIGNED ? 'below the line' : board.releases[band]?.title ?? 'a release';
+		const bandTitle = band === UNASSIGNED ? 'below the line' : board.deliveries[band]?.title ?? 'a band';
 		return `${stepTitle}, ${bandTitle}`;
 	}
-	const found = bandOrder(board).includes(id) ? board.releases[id]?.title : undefined;
+	const found = bandOrder(board).includes(id) ? board.deliveries[id]?.title : undefined;
 	return found ? `the ${found} band` : nameOf(board, id);
 }
