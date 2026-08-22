@@ -106,6 +106,8 @@ export function toBoard(document: StoryMapDocument): BoardState {
 			id: activityId,
 			title: activity.title,
 			notes: [...activity.notes],
+			ticket: activity.ticket,
+			status: activity.status,
 			personas: [...activity.personas],
 			stepOrder,
 		};
@@ -169,6 +171,8 @@ export function toDocument(board: BoardState): StoryMapDocument {
 			return [{
 				title: activity.title,
 				notes: [...activity.notes],
+				ticket: activity.ticket,
+				status: activity.status,
 				personas: [...activity.personas],
 				steps: activity.stepOrder.flatMap((stepId) => {
 					const step = board.steps[stepId];

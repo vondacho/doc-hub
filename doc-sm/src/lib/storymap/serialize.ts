@@ -147,16 +147,20 @@ export function serialize(document: StoryMapDocument): string {
 	}
 
 	for (const activity of document.activities) {
+		// A capability, written exactly as an epic and a story are.
+		const actTicket = activity.ticket === null ? '' : ` #${quoteIfNeeded(activity.ticket)}`;
+		const actStatus = activity.status === DEFAULT_STORY_STATUS ? '' : ` ~${activity.status}`;
+		const actHead = `${INDENT}activity ${quote(activity.title)}${actTicket}${actStatus}`;
 		// A blank line between blocks, but never one directly under the opening
 		// brace of a map with no header and no releases.
 		if (out.length > 1 && out[out.length - 1] !== `storymap ${quote(document.title)} {`) out.push('');
 		const hasBody =
 			activity.notes.length > 0 || activity.personas.length > 0 || activity.steps.length > 0;
 		if (!hasBody) {
-			out.push(`${INDENT}activity ${quote(activity.title)}`);
+			out.push(actHead);
 			continue;
 		}
-		out.push(`${INDENT}activity ${quote(activity.title)} {`);
+		out.push(`${actHead} {`);
 		// The cast first: who this is for, before what they do.
 		for (const persona of activity.personas) out.push(`${INDENT.repeat(2)}persona ${quote(persona)}`);
 		for (const note of activity.notes) emitNote(out, INDENT.repeat(2), note);

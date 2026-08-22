@@ -22,7 +22,7 @@
  */
 
 import { SortableContext, horizontalListSortingStrategy } from '@dnd-kit/sortable';
-import { useMemo } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { canChangeKind, personasFor, type BoardAction } from '../../lib/board/reducer.ts';
 import {
 	bandOrder,
@@ -36,7 +36,12 @@ import {
 	type Id,
 } from '../../lib/board/state.ts';
 import { kindLabel } from '../../lib/board/kinds.ts';
-import { STORY_STATUSES, storyStatusLabel, type StoryStatus } from '../../lib/storymap/model.ts';
+import {
+	STORY_STATUSES,
+	storyStatusLabel,
+	ticketKindOf,
+	type StoryStatus,
+} from '../../lib/storymap/model.ts';
 import { activityDerived, stepDerived } from '../../lib/board/detail.ts';
 import { StoryNeed } from './StoryNeed.tsx';
 import { BandRail } from './BandRail.tsx';
@@ -92,9 +97,9 @@ export function BoardGrid({
 	board: BoardState;
 	dispatch: (action: BoardAction) => void;
 	/** Prompt for a ticket id and link it, or clear the link. */
-	onLinkTicket: (kind: 'step' | 'story', id: Id) => void;
+	onLinkTicket: (kind: CardKind, id: Id) => void;
 	/** Ask the ticketing system for a new ticket — an epic for a step. */
-	onCreateTicket: (kind: 'step' | 'story', id: Id) => void;
+	onCreateTicket: (kind: CardKind, id: Id) => void;
 	ticketingConfigured: boolean;
 	/** 1 is 100%. Scales the whole board; see the note on RAIL above. */
 	zoom: number;
@@ -105,6 +110,40 @@ export function BoardGrid({
 }) {
 	const geometry = useMemo(() => columnGeometry(board), [board]);
 	const bands = bandOrder(board);
+
+	/*
+	 * Both header rows stay put while the bands scroll under them.
+	 *
+	 * The activity row sticks at 0 and the step row sticks directly below it —
+	 * but "directly below" is a pixel count nobody can write down. It was a
+	 * hard-coded `2.6em`, which was right until activity cards grew a ticket and
+	 * status line and became taller than the guess; the step row then stuck
+	 * *behind* the activity row and looked like it was not sticking at all.
+	 *
+	 * So it is measured. The grid's resolved `gridTemplateRows` gives the used
+	 * height of row one, which is exactly what the offset is, and a
+	 * ResizeObserver keeps it right through zooming, expanding a card's detail,
+	 * and anything else that changes the backbone's height.
+	 */
+	const grid = useRef<HTMLDivElement>(null);
+	const [stepTop, setStepTop] = useState(0);
+
+	useLayoutEffect(() => {
+		const element = grid.current;
+		if (!element) return;
+
+		const measure = () => {
+			const style = getComputedStyle(element);
+			const first = Number.parseFloat(style.gridTemplateRows.split(' ')[0] ?? '');
+			const gap = Number.parseFloat(style.rowGap) || 0;
+			if (Number.isFinite(first)) setStepTop(first + gap);
+		};
+
+		measure();
+		const observer = new ResizeObserver(measure);
+		observer.observe(element);
+		return () => observer.disconnect();
+	}, []);
 
 	const bandName = (band: BandId): string =>
 		band === UNASSIGNED ? 'Below the line' : board.releases[band]?.title ?? 'Unknown';
@@ -126,9 +165,28 @@ export function BoardGrid({
 			}}
 		>
 			<div
+				ref={grid}
 				className="grid min-w-max gap-[0.4em]"
 				style={{ gridTemplateColumns: `${RAIL} repeat(${geometry.columnCount}, minmax(${COLUMN}, 1fr))` }}
 			>
+				{/*
+				    An opaque band behind both header rows.
+
+				    The cards are opaque but the grid's gaps are not, so without this
+				    the stories scrolling underneath show through the seams between
+				    the header cards — a flicker of cards inside the backbone, which
+				    reads as a rendering fault rather than as scrolling.
+
+				    Spans both rows and every column, sticks at the top with the
+				    activity row, and sits at z-5: above the cells, below the header
+				    cards themselves.
+				*/}
+				<div
+					aria-hidden="true"
+					style={{ gridColumn: '1 / -1', gridRow: `${ACTIVITY_ROW} / span 2` }}
+					className="sticky top-0 z-[5] -m-[0.2em] bg-white dark:bg-night-raised"
+				/>
+
 				{/* Top-left corner. Sticks in both directions, so it must outrank
 				    both the rail and the header rows. */}
 				<div
@@ -153,6 +211,13 @@ export function BoardGrid({
 								derived={activityDerived(activity)}
 								notes={activity.notes}
 								onNotes={(text) => dispatch({ type: 'setNotes', kind: 'activity', id: activityId, text })}
+								meta={
+									<StoryMeta
+										ticket={activity.ticket}
+										status={activity.status}
+										onEditTicket={() => onLinkTicket('activity', activityId)}
+									/>
+								}
 								detailOpen={expanded.has(activityId)}
 								onToggleDetail={() => onToggleDetail(activityId)}
 								detailLabel="cast"
@@ -214,8 +279,8 @@ export function BoardGrid({
 										onCreateTicket,
 										ticketingConfigured,
 									})}
-										className="sticky top-[2.6em] z-10"
-										style={{ gridColumn: column + 2, gridRow: STEP_ROW }}
+										className="sticky z-10"
+										style={{ gridColumn: column + 2, gridRow: STEP_ROW, top: stepTop }}
 									/>
 								);
 							})}
@@ -340,7 +405,7 @@ export function BoardGrid({
  */
 function statusActions(
 	dispatch: (action: BoardAction) => void,
-	kind: 'step' | 'story',
+	kind: CardKind,
 	id: Id,
 	current: StoryStatus | undefined,
 	linked: boolean,
@@ -352,19 +417,25 @@ function statusActions(
 	}));
 }
 
-/** A step raises an epic and a story raises a story; the wording follows. */
+/**
+ * An activity raises a capability, a step an epic, a story a story.
+ *
+ * The wording follows the row, because "create a ticket" on a backbone card is
+ * true and useless — the reader wants to know what will appear in the tracker.
+ */
 function ticketActions(
 	dispatch: (action: BoardAction) => void,
-	kind: 'step' | 'story',
+	kind: CardKind,
 	id: Id,
 	ticket: string | null,
 	ticketing: {
-		onLinkTicket: (kind: 'step' | 'story', id: Id) => void;
-		onCreateTicket: (kind: 'step' | 'story', id: Id) => void;
+		onLinkTicket: (kind: CardKind, id: Id) => void;
+		onCreateTicket: (kind: CardKind, id: Id) => void;
 		ticketingConfigured: boolean;
 	},
 ): CardMenuAction[] {
-	const noun = kind === 'step' ? 'epic' : 'ticket';
+	const noun = ticketKindOf[kind];
+	const article = noun === 'epic' ? 'an' : 'a';
 	if (ticket !== null) {
 		return [
 			{ label: `Change the ${noun} id…`, separated: true, run: () => ticketing.onLinkTicket(kind, id) },
@@ -373,7 +444,7 @@ function ticketActions(
 	}
 	return [
 		{
-			label: `Create ${kind === 'step' ? 'an epic' : 'a ticket'}`,
+			label: `Create ${article} ${noun}`,
 			separated: true,
 			run: ticketing.ticketingConfigured ? () => ticketing.onCreateTicket(kind, id) : undefined,
 			disabledReason: ticketing.ticketingConfigured
@@ -430,8 +501,8 @@ function cardMenu(
 	index: number,
 	activityId: Id | undefined,
 	ticketing: {
-		onLinkTicket: (kind: 'step' | 'story', id: Id) => void;
-		onCreateTicket: (kind: 'step' | 'story', id: Id) => void;
+		onLinkTicket: (kind: CardKind, id: Id) => void;
+		onCreateTicket: (kind: CardKind, id: Id) => void;
 		ticketingConfigured: boolean;
 	},
 ): CardMenuAction[] {
@@ -449,14 +520,15 @@ function cardMenu(
 	const right = move(index + 1);
 
 	const notes = (kind === 'activity' ? board.activities[id]?.notes : board.steps[id]?.notes) ?? [];
-	const step = kind === 'step' ? board.steps[id] : undefined;
+	// Both kinds raise a ticket: an activity a capability, a step an epic.
+	const card = kind === 'activity' ? board.activities[id] : board.steps[id];
 
 	return [
 		{ label: 'Move left', run: left, disabledReason: left ? undefined : 'It is already first.' },
 		{ label: 'Move right', run: right, disabledReason: right ? undefined : 'It is already last.' },
 		addNoteAction(dispatch, kind, id, notes),
-		...(step ? statusActions(dispatch, 'step', id, step.status, step.ticket !== null) : []),
-		...(step ? ticketActions(dispatch, 'step', id, step.ticket, ticketing) : []),
+		...(card ? statusActions(dispatch, kind, id, card.status, card.ticket !== null) : []),
+		...(card ? ticketActions(dispatch, kind, id, card.ticket, ticketing) : []),
 		...kindChangeActions(board, dispatch, kind, id),
 		{
 			label: kind === 'activity' ? 'Delete activity and its steps' : 'Delete step and its stories',
@@ -474,8 +546,8 @@ function storyMenu(
 	index: number,
 	total: number,
 	ticketing: {
-		onLinkTicket: (kind: 'step' | 'story', id: Id) => void;
-		onCreateTicket: (kind: 'step' | 'story', id: Id) => void;
+		onLinkTicket: (kind: CardKind, id: Id) => void;
+		onCreateTicket: (kind: CardKind, id: Id) => void;
 		ticketingConfigured: boolean;
 	},
 ): CardMenuAction[] {

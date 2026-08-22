@@ -45,7 +45,14 @@ export type StoryStatus = 'open' | 'analysing' | 'ready' | 'in-progress' | 'done
  * because the two are different issue types in every tracker there is, and
  * guessing from the title would be absurd.
  */
-export type TicketKind = 'epic' | 'story';
+export type TicketKind = 'capability' | 'epic' | 'story';
+
+/** What each row of the board raises in the tracker. */
+export const ticketKindOf = {
+	activity: 'capability',
+	step: 'epic',
+	story: 'story',
+} as const satisfies Record<CardKind, TicketKind>;
 
 /** In workflow order. The slug is what the DSL writes after `~`. */
 export const STORY_STATUSES: readonly StoryStatus[] = [
@@ -85,10 +92,23 @@ export interface ReleaseNode {
 	readonly notes: readonly string[];
 }
 
-/** A user activity — the backbone, spanning one or more steps. */
+/**
+ * A user activity — the backbone, spanning one or more steps.
+ *
+ * An activity is the natural shape of a **capability**: a thing the product
+ * lets people do, made of the epics underneath it. So it carries the same
+ * ticket and status a step and a story do, and they mean the same thing — the
+ * ticketing system issues the id, doc-sm never does.
+ *
+ * The three rows of the board therefore line up with the three levels every
+ * tracker has: capability, epic, story. That is not a coincidence being
+ * exploited; it is why a story map is worth keeping next to a backlog at all.
+ */
 export interface ActivityNode {
 	readonly title: string;
 	readonly notes: readonly string[];
+	readonly ticket: string | null;
+	readonly status: StoryStatus;
 	/**
 	 * Who this activity is for — its cast, listed on the activity itself.
 	 *

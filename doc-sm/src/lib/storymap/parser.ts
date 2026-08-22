@@ -87,6 +87,8 @@ interface RawStep {
 interface RawActivity {
 	readonly title: string;
 	readonly notes: string[];
+	readonly ticket: string | null;
+	readonly status: StoryStatus;
 	readonly personas: string[];
 	readonly personaTokens: Token[];
 	readonly steps: RawStep[];
@@ -245,7 +247,7 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 	 * correct — and each may appear once. A repeat is an error rather than a
 	 * last-one-wins, because a repeat means a bad merge.
 	 */
-	function parseAnnotations(allowRelease: boolean): {
+	function parseAnnotations(allowRelease: boolean, noun = 'card'): {
 		ref: RawRef | null;
 		ticket: string | null;
 		status: StoryStatus;
@@ -261,8 +263,8 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 				if (!allowRelease) {
 					problemAt(
 						sigil,
-						'A step is not in a release.',
-						'A step spans every band; put the `@release` on its stories.',
+						`${noun.charAt(0).toUpperCase()}${noun.slice(1)} is not in a release.`,
+						`It spans every band; put the \`@release\` on its stories.`,
 					);
 					if (at('ident') || at('string')) advance();
 					continue;
@@ -339,7 +341,7 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 			return true;
 		}
 
-		const { ref, ticket, status } = parseAnnotations(true);
+		const { ref, ticket, status } = parseAnnotations(true, 'a story');
 
 		const notes: string[] = [];
 		// An unlinked story reads as open: nothing has been said about it yet.
@@ -408,7 +410,7 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 			return true;
 		}
 
-		const { ticket, status } = parseAnnotations(false);
+		const { ticket, status } = parseAnnotations(false, 'a step');
 
 		const notes: string[] = [];
 		const stories: RawStory[] = [];
@@ -426,11 +428,13 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 			return true;
 		}
 
+		const { ticket, status } = parseAnnotations(false, 'an activity');
+
 		const notes: string[] = [];
 		const personas: string[] = [];
 		const personaTokens: Token[] = [];
 		const steps: RawStep[] = [];
-		activities.push({ title, notes, personas, personaTokens, steps });
+		activities.push({ title, notes, ticket, status, personas, personaTokens, steps });
 
 		parseBody('activity', () => {
 			if (at('keyword', 'persona')) {
@@ -625,6 +629,8 @@ function resolve(
 	const activities: ActivityNode[] = rawActivities.map((activity): ActivityNode => ({
 		title: activity.title,
 		notes: [...activity.notes],
+		ticket: activity.ticket,
+		status: activity.status,
 		personas: [...activity.personas],
 		steps: activity.steps.map((step): StepNode => ({
 			title: step.title,

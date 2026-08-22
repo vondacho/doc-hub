@@ -15,7 +15,7 @@ import { createTicket, isFailure } from '../../lib/ticketing';
 export const prerender = false;
 
 export const POST: APIRoute = async ({ request }) => {
-  let body: { space?: unknown; product?: unknown; title?: unknown };
+  let body: { kind?: unknown; space?: unknown; product?: unknown; title?: unknown };
   try {
     body = await request.json();
   } catch {
@@ -34,7 +34,15 @@ export const POST: APIRoute = async ({ request }) => {
     return json({ error: 'Set a ticketing space, or pick a product to take it from.' }, 400);
   }
 
-  const result = await createTicket(ticketingApiUrl(), { space, product, title });
+  // The row the card sits on decides the issue type, and the adapter cannot
+  // guess it from a title. Anything unrecognised is refused rather than
+  // defaulted: raising an epic where a story was meant is not a small mistake.
+  const kind = body.kind;
+  if (kind !== 'capability' && kind !== 'epic' && kind !== 'story') {
+    return json({ error: 'A ticket needs a kind: capability, epic or story.' }, 400);
+  }
+
+  const result = await createTicket(ticketingApiUrl(), { kind, space, product, title });
 
   // A failure here is usually not a server fault: an unconfigured tracker, an
   // unreachable one, and a story with no product are all ordinary states the

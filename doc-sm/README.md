@@ -323,7 +323,21 @@ path, and two unexplained circles on an otherwise blank page would be a riddle.
 
 ## Tickets and statuses
 
-A story can be linked to a ticket, and carries a status. **doc-sm owns neither.**
+**Every row of the board carries a ticket and a status**, and the three rows line
+up with the three levels every tracker has:
+
+| Row | Raises | In the sample |
+|---|---|---|
+| Activity | a **capability** | `CLONB-1..3` |
+| Step | an **epic** | `CLONB-10..15` |
+| Story | a **story** | `CLONB-42` and up |
+
+That is not a coincidence being exploited — it is why a story map is worth
+keeping next to a backlog at all. Only a story takes a `@release`: an activity
+and a step span every band, so *when* the work happens is settled one level
+down, and putting a release on either is refused with that reason.
+
+**doc-sm owns neither the id nor the status.**
 
 - **The ticketing system issues ids.** There is no action anywhere in this
   component that generates one — a board minting its own would hand out names

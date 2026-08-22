@@ -61,10 +61,11 @@ import {
 	storiesIn,
 	UNASSIGNED,
 	type BoardState,
+	type CardKind,
 	type Id,
 } from '../../lib/board/state.ts';
 import type { Product } from '../../lib/products.ts';
-import { effectiveSpace, type StoryStatus } from '../../lib/storymap/model.ts';
+import { effectiveSpace, ticketKindOf, type StoryStatus } from '../../lib/storymap/model.ts';
 import { parse } from '../../lib/storymap/parser.ts';
 import { StoryMapParseError, type Problem } from '../../lib/storymap/problems.ts';
 import { SAMPLE_SOURCE } from '../../lib/storymap/sample.ts';
@@ -254,11 +255,11 @@ export default function StoryMapBoard({
 	 * field the day linking is something people do dozens of times a session.
 	 */
 	const linkTicket = useCallback(
-		(kind: 'step' | 'story', id: Id) => {
-			const card = kind === 'step' ? board.steps[id] : board.stories[id];
+		(kind: CardKind, id: Id) => {
+			const card = cardOf(board, kind, id);
 			if (!card) return;
 			const entered = window.prompt(
-				`${kind === 'step' ? 'Epic' : 'Ticket'} id, exactly as the ticketing system spells it.\nLeave it empty to unlink.`,
+				`${capitalise(ticketKindOf[kind])} id, exactly as the ticketing system spells it.\nLeave it empty to unlink.`,
 				card.ticket ?? '',
 			);
 			// Cancel is null and means "leave it alone"; an empty string is a
@@ -266,7 +267,7 @@ export default function StoryMapBoard({
 			if (entered === null) return;
 			dispatch({ type: 'setTicket', kind, id, ticket: entered });
 		},
-		[board.steps, board.stories, dispatch],
+		[board, dispatch],
 	);
 
 	/**
@@ -278,8 +279,8 @@ export default function StoryMapBoard({
 	 * would not be.
 	 */
 	const createTicket = useCallback(
-		async (kind: 'step' | 'story', id: Id) => {
-			const card = kind === 'step' ? board.steps[id] : board.stories[id];
+		async (kind: CardKind, id: Id) => {
+			const card = cardOf(board, kind, id);
 			if (!card) return;
 			setTicketError(null);
 
@@ -288,9 +289,9 @@ export default function StoryMapBoard({
 				const response = await fetch('/api/ticket', {
 					method: 'POST',
 					headers: { 'content-type': 'application/json' },
-					// A step raises an epic; the adapter cannot guess the issue type.
+					// The adapter cannot guess the issue type from a title.
 					body: JSON.stringify({
-						kind: kind === 'step' ? 'epic' : 'story',
+						kind: ticketKindOf[kind],
 						space,
 						product: board.product,
 						title: card.title,
@@ -310,7 +311,7 @@ export default function StoryMapBoard({
 			dispatch({ type: 'setTicket', kind, id, ticket: payload.id });
 			dispatch({ type: 'setStatus', kind, id, status: payload.status });
 		},
-		[board.steps, board.stories, board.product, space, dispatch],
+		[board, space, dispatch],
 	);
 
 	/* ---- detail ------------------------------------------------------------ */
@@ -405,7 +406,8 @@ export default function StoryMapBoard({
 				const response = await fetch('/api/ticket', {
 					method: 'POST',
 					headers: { 'content-type': 'application/json' },
-					body: JSON.stringify({ space, product: board.product, title: story.title }),
+					// Publishing only ever raises stories today — see unboundStories.
+					body: JSON.stringify({ kind: 'story', space, product: board.product, title: story.title }),
 				});
 				payload = await response.json();
 			} catch {
@@ -751,6 +753,21 @@ function EmptyBoard({ onLoadSample, onAddActivity }: { onLoadSample: () => void;
 }
 
 /** Why the publish control is unavailable, or undefined when it is available. */
+/** The card behind an id, whichever row it is on. */
+function cardOf(
+	board: BoardState,
+	kind: CardKind,
+	id: Id,
+): { title: string; ticket: string | null } | undefined {
+	if (kind === 'activity') return board.activities[id];
+	if (kind === 'step') return board.steps[id];
+	return board.stories[id];
+}
+
+function capitalise(word: string): string {
+	return `${word.charAt(0).toUpperCase()}${word.slice(1)}`;
+}
+
 function publishBlockedReason(
 	configured: boolean,
 	space: string | null,

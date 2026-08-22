@@ -67,6 +67,9 @@ export interface Activity {
 	readonly id: Id;
 	readonly title: string;
 	readonly notes: readonly string[];
+	/** An activity is a capability: same ticket and status a step and story carry. */
+	readonly ticket: string | null;
+	readonly status: StoryStatus;
 	/** This activity's cast. Its stories may name one of these, and no other. */
 	readonly personas: readonly string[];
 	readonly stepOrder: readonly Id[];

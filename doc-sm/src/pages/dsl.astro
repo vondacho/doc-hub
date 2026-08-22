@@ -20,6 +20,10 @@ const rules: { title: string; body: string }[] = [
 		body: 'Where tickets are raised — a Jira project key, or whatever the tracker calls one. Stated with `space`, and left out when it is simply the product shortname, which is the common case. Picking a product on a board that has none sets it.',
 	},
 	{
+		title: 'Three rows, three levels',
+		body: 'An activity is a capability, a step is an epic, a story is a story — the three levels every tracker has. Each carries the same #ticket and ~status, and only a story takes a @release: the other two span every band, so when the work happens is settled one level down.',
+	},
+	{
 		title: 'Tickets come from the ticketing system',
 		body: 'A story carries the ticket id the ticketing system issued, written whole after a #. doc-sm never invents one. A story with no # is simply not linked yet, which is where every story starts.',
 	},
@@ -111,9 +115,11 @@ StoryMap    = 'storymap' , String , [ '{' , { Product | Space | Release | Activi
 Product     = 'product'  , String ;   (* at most one *)
 Space       = 'space'    , String ;   (* at most one; defaults to the product *)
 Release     = 'release'  , String , [ '{' , { Note } , '}' ] ;
-Activity    = 'activity' , String , [ '{' , { Persona | Step | Note } , '}' ] ;
+Activity    = 'activity' , String , { TicketRef | StatusRef } ,
+                           [ '{' , { Persona | Step | Note } , '}' ] ;
 Persona     = 'persona'  , String ;   (* the activity's cast; unique within it *)
-Step        = 'step'     , String , [ '{' , { Story | Note } , '}' ] ;
+Step        = 'step'     , String , { TicketRef | StatusRef } ,
+                           [ '{' , { Story | Note } , '}' ] ;
 Story       = 'story'    , String , { ReleaseRef | TicketRef | StatusRef } ,
                            [ '{' , { As | Want | So | Note } , '}' ] ;
 As          = 'as'       , String ;   (* a persona this activity lists *)

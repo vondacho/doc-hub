@@ -15,10 +15,11 @@
  * always do — and would hide the fact that ticket ids come from the space, not
  * from the product.
  *
- * **Every step carries an epic**, numbered CLONB-10..15 against the stories'
- * CLONB-42 and up. Trackers hand epics out early and low, and an example where
- * the two ranges overlapped would suggest the numbers mean nothing. Each epic's
- * status is consistent with the stories underneath it, for the same reason.
+ * **Every row carries its ticket**: a capability on each activity (CLONB-1..3),
+ * an epic on each step (CLONB-10..15), a story id on the stories (CLONB-42 and
+ * up). Three ranges for the three levels, in the order a tracker hands them out
+ * — an example where they overlapped would suggest the numbers mean nothing.
+ * Each status is consistent with the row beneath it, for the same reason.
  *
  * Its stories carry the two states worth showing side by side: some are linked
  * to a ticket and some are not. `story "Saved searches"` has no `#` and no `~`,
@@ -72,7 +73,7 @@ storymap "Doc-Hub Onboarding" {
   release "R2"
   release "Later"
 
-  activity "Discover documentation" {
+  activity "Discover documentation" #CLONB-1 ~in-progress {
     persona "Business analyst"
     persona "Product manager"
     persona "Support engineer"
@@ -98,7 +99,7 @@ storymap "Doc-Hub Onboarding" {
     step "Open a product" #CLONB-11 ~analysing
   }
 
-  activity "Judge what I am reading" {
+  activity "Judge what I am reading" #CLONB-2 ~analysing {
     persona "Support engineer"
     persona "Documentation owner"
     step "Check how current it is" #CLONB-12 ~in-progress {
@@ -127,7 +128,7 @@ storymap "Doc-Hub Onboarding" {
     }
   }
 
-  activity "Register a new product" {
+  activity "Register a new product" #CLONB-3 ~ready {
     persona "Registrar"
     persona "Product owner"
     step "Fill the registration form" #CLONB-14 ~ready {

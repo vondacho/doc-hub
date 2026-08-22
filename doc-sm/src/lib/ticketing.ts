@@ -8,8 +8,12 @@
  *
  * One base URL, configured globally as `TICKETING_API_URL`, speaking two calls:
  *
- *   POST {base}/tickets        { space, product, title }  ->  { id, status }
+ *   POST {base}/tickets        { kind, space, product, title }  ->  { id, status }
  *   GET  {base}/tickets/{id}                              ->  { id, status }
+ *
+ * `kind` is `capability`, `epic` or `story` — the three rows of the board, and
+ * the three levels every tracker has. The adapter maps them to its own issue
+ * types; doc-sm will not guess one from a title.
  *
  * `space` is the container a ticket is raised into — a Jira project key, or
  * whatever the tracker calls one. It is the map's stated space, falling back to
@@ -41,7 +45,7 @@
  * disagree, the ticketing system is right and doc-sm is out of date.
  */
 
-import { isStoryStatus, type StoryStatus } from './storymap/model.ts';
+import { isStoryStatus, type StoryStatus, type TicketKind } from './storymap/model.ts';
 
 const TIMEOUT_MS = 8_000;
 
@@ -77,7 +81,7 @@ export function isConfigured(baseUrl: string): boolean {
 
 export async function createTicket(
 	baseUrl: string,
-	input: { space: string | null; product: string | null; title: string },
+	input: { kind: TicketKind; space: string | null; product: string | null; title: string },
 ): Promise<TicketingResult> {
 	if (!isConfigured(baseUrl)) {
 		return { error: 'No ticketing system is configured.', unconfigured: true };

@@ -78,7 +78,7 @@ export type BoardAction =
 	 * that *generates* one: the ticketing system issues ticket ids, and a board
 	 * that minted its own would hand out names that collide with real ones.
 	 */
-	| { type: 'setTicket'; kind: 'step' | 'story'; id: Id; ticket: string | null }
+	| { type: 'setTicket'; kind: CardKind; id: Id; ticket: string | null }
 	/**
 	 * Record a status against a story.
 	 *
@@ -86,7 +86,7 @@ export type BoardAction =
 	 * a cache of what the ticketing system last said, and setting it by hand
 	 * changes the board's copy, not the ticket.
 	 */
-	| { type: 'setStatus'; kind: 'step' | 'story'; id: Id; status: StoryStatus }
+	| { type: 'setStatus'; kind: CardKind; id: Id; status: StoryStatus }
 	/**
 	 * Write a story for one of the map's declared personas, or for nobody.
 	 *
@@ -157,7 +157,7 @@ export function reduce(board: BoardState, action: BoardAction): BoardState {
 			const id = nextId('a');
 			return {
 				...board,
-				activities: { ...board.activities, [id]: { id, title: 'New activity', notes: [], personas: [], stepOrder: [] } },
+				activities: { ...board.activities, [id]: { id, title: 'New activity', notes: [], ticket: null, status: DEFAULT_STORY_STATUS, personas: [], stepOrder: [] } },
 				activityOrder: insertAt(board.activityOrder, action.index, id),
 			};
 		}
@@ -234,6 +234,14 @@ export function reduce(board: BoardState, action: BoardAction): BoardState {
 			// An empty string and "no ticket" are the same state, so they normalise
 			// to one of them rather than both being representable.
 			const ticket = action.ticket === null || action.ticket.trim() === '' ? null : action.ticket.trim();
+			if (action.kind === 'activity') {
+				const activity = board.activities[action.id];
+				if (!activity || activity.ticket === ticket) return board;
+				return {
+					...board,
+					activities: { ...board.activities, [action.id]: { ...activity, ticket } },
+				};
+			}
 			if (action.kind === 'step') {
 				const step = board.steps[action.id];
 				if (!step || step.ticket === ticket) return board;
@@ -284,6 +292,14 @@ export function reduce(board: BoardState, action: BoardAction): BoardState {
 		}
 
 		case 'setStatus': {
+			if (action.kind === 'activity') {
+				const activity = board.activities[action.id];
+				if (!activity || activity.status === action.status) return board;
+				return {
+					...board,
+					activities: { ...board.activities, [action.id]: { ...activity, status: action.status } },
+				};
+			}
 			if (action.kind === 'step') {
 				const step = board.steps[action.id];
 				if (!step || step.status === action.status) return board;
@@ -569,7 +585,17 @@ function changeKind(board: BoardState, kind: CardKind, id: Id, to: CardKind): Bo
 			activities: {
 				...board.activities,
 				[activity.id]: { ...activity, stepOrder: activity.stepOrder.filter((other) => other !== id) },
-				[activityId]: { id: activityId, title: step.title, notes: [], personas: [], stepOrder: [id] },
+				[activityId]: {
+					id: activityId,
+					title: step.title,
+					notes: [],
+					// A step promoted to an activity is a new thing the tracker has not
+					// been told about; its epic stays with the step it came from.
+					ticket: null,
+					status: DEFAULT_STORY_STATUS,
+					personas: [],
+					stepOrder: [id],
+				},
 			},
 			activityOrder: insertAt(board.activityOrder, board.activityOrder.indexOf(activity.id) + 1, activityId),
 		};
