@@ -42,10 +42,26 @@ const ticketingConfigured = isConfigured(ticketingApiUrl());
 				doc-hub · story mapping
 			</p>
 			<h1 class="mt-2 text-3xl font-bold sm:text-4xl">Map the work before you plan it</h1>
-			<p class="mt-3 max-w-prose text-ink-muted dark:text-slate-400">
-				Pick the product, then map it: activities across the top, the steps people take underneath
-				them left to right, and the stories stacked into the release that will carry them. Everything
-				below the last release band is known and not committed to.
+			{/*
+				One line, so no `max-w-prose`: a measure of 65ch is right for a
+				paragraph and wrong for a standfirst, which is read at a glance
+				rather than in lines.
+
+				The sentence about what sits below the last band went with it. The
+				band rail already says "Below the line — known, not committed to"
+				on the board itself, and a header that explains what the board is
+				about to show you is a header nobody reads twice.
+
+				Not `whitespace-nowrap`: on a narrow window this wraps, which is the
+				right outcome. Forcing it would push the page into a sideways
+				scroll, and a header is not worth that.
+
+				`{/* */}` rather than `<!-- -->`: Astro ships HTML comments to the
+				browser, and this is a note to the next author, not to the reader.
+			*/}
+			<p class="mt-3 text-ink-muted dark:text-slate-400">
+				Activities across the top, the steps beneath them, and the stories in the release that will
+				carry them.
 			</p>
 		</header>
 
