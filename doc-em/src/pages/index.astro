@@ -1,0 +1,77 @@
+---
+import Layout from '../layouts/Layout.astro';
+import ExampleMapBoard from '../components/board/ExampleMapBoard.tsx';
+import { swatchClass } from '../lib/board/kinds';
+import { CARD_KINDS, cardLabel, cardMeaning } from '../lib/examplemap/model';
+import { docPortalUrl, practiceUrl, storyMapperUrl } from '../lib/links';
+
+// Server-rendered like every page in doc-hub. This one asks the server for
+// nothing — the map comes from a file the visitor picks — but it is left as a
+// server route rather than prerendered so the three addresses below stay
+// configuration, resolved per request.
+const portal = docPortalUrl();
+const practice = practiceUrl();
+const storyMapper = storyMapperUrl();
+---
+
+<Layout
+  title="Example mapping — doc-hub"
+  description="An example mapping board. Import and export an .examplemap file, and write the Gherkin it produces."
+>
+  <main id="main" class="mx-auto w-full max-w-[110rem] px-6 py-10">
+    <header class="mb-8">
+      <p class="text-xs font-semibold tracking-[0.16em] text-ink-muted uppercase dark:text-slate-400">
+        doc-hub · example mapping
+      </p>
+      <h1 class="mt-2 text-3xl font-bold sm:text-4xl">Twenty-five minutes on one story</h1>
+      <p class="mt-3 text-ink-muted dark:text-slate-400">
+        One story, the rules under it, and an example under each rule until everyone agrees.
+      </p>
+    </header>
+
+    {/*
+      The legend is the notation, not decoration. These four colours are the
+      technique — somebody who has run a session before must recognise the board
+      without being told — and the rule that governs doc-portal's status palette
+      governs them too: colour is never the only signal.
+    */}
+    <section aria-labelledby="legend" class="mb-6">
+      <h2 id="legend" class="sr-only">What the colours mean</h2>
+      <ul class="flex flex-wrap gap-x-6 gap-y-2 text-sm">
+        {
+          CARD_KINDS.map((kind) => (
+            <li class="flex items-center gap-2">
+              <span class={`inline-block h-3.5 w-3.5 rounded-sm border ${swatchClass[kind]}`} aria-hidden="true" />
+              <span class="font-semibold">{cardLabel[kind]}</span>
+              <span class="text-ink-muted dark:text-slate-400">{cardMeaning[kind]}</span>
+            </li>
+          ))
+        }
+      </ul>
+    </section>
+
+    <ExampleMapBoard client:only="react" />
+
+    <noscript>
+      <div class="rounded-2xl border border-slate-200 p-6 dark:border-slate-700">
+        <h2 class="font-semibold">The board needs JavaScript</h2>
+        <p class="mt-2 max-w-prose text-ink-muted dark:text-slate-400">
+          Cards are written and moved by hand, which is not something a page can do without scripting. The
+          file format is plain text and is documented on
+          <a class="font-semibold text-brand underline" href="/dsl">the format page</a>, which needs none.
+        </p>
+      </div>
+    </noscript>
+
+    <footer class="mt-10 border-t border-slate-200 pt-6 text-sm text-ink-muted dark:border-slate-700 dark:text-slate-400">
+      <p>
+        Nothing here is stored on the server. The <code>.examplemap</code> file you export is the map, and the
+        <code>.feature</code> file is what it produced. The technique is
+        <a class="font-semibold text-brand underline" href={practice}>written up in the development hub</a>; the
+        <a class="font-semibold text-brand underline" href={storyMapper}>story mapper</a> is what picks which story
+        to open, and the <a class="font-semibold text-brand underline" href={portal}>documentation portal</a> holds
+        the product catalogue.
+      </p>
+    </footer>
+  </main>
+</Layout>

@@ -1,0 +1,44 @@
+{{ .Chart.Name }} {{ .Chart.AppVersion }} deployed as release "{{ .Release.Name }}" in namespace "{{ .Release.Namespace }}".
+
+Server-rendered by @astrojs/node (standalone) on port {{ .Values.containerPort }}.
+The board page is server-rendered so the links below stay per-request
+configuration; its island runs in the browser.
+
+Outbound links (browser-facing, resolved per request):
+  Documentation hub  -> {{ .Values.app.docPortalUrl }}
+  The practice       -> {{ .Values.app.practiceUrl }}
+  Story mapper       -> {{ .Values.app.storyMapperUrl }}
+
+This server reads nothing in-cluster. There is no registry call, no ticketing
+adapter, no Secret and no volume — the list above is the whole of this release's
+configuration.
+
+Browse the board:
+{{- if .Values.ingress.enabled }}
+{{- range $host := .Values.ingress.hosts }}
+{{- $scheme := ternary "https" "http" (not (empty $.Values.ingress.tls)) }}
+  {{ $scheme }}://{{ $host.host }}/                     the example mapping board
+  {{ $scheme }}://{{ $host.host }}/dsl                  the .examplemap format
+{{- end }}
+{{- else }}
+  kubectl --namespace {{ .Release.Namespace }} port-forward svc/{{ include "doc-em.fullname" . }} 4323:{{ .Values.service.port }}
+
+  then open http://localhost:4323
+{{- end }}
+
+Verify the release:
+  helm test {{ .Release.Name }} --namespace {{ .Release.Namespace }}
+
+This release stores nothing. A map lives in the .examplemap file the visitor
+exports, and nothing about it reaches this pod. A pod can be deleted at any
+moment without losing work that was already exported. Work that was *not*
+exported lives only in the visitor's tab, which is what the board's unload
+warning is for — and in a session that is the red cards, which the feature file
+cannot carry either.
+
+Reminder: image.tag is pinned with pullPolicy: Never in values-local.yaml, so a
+rebuilt image under the same tag leaves the running pods untouched. After
+rebuilding, force them over:
+  kubectl rollout restart deployment/{{ include "doc-em.fullname" . }} -n {{ .Release.Namespace }}
+
+or just run helm/doc-em/deploy.sh, which does all three steps.

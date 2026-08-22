@@ -1,9 +1,9 @@
 apiVersion: v1
 kind: Pod
 metadata:
-  name: {{ include "doc-sm.fullname" . }}-test-connection
+  name: {{ include "doc-em.fullname" . }}-test-connection
   labels:
-    {{- include "doc-sm.labels" . | nindent 4 }}
+    {{- include "doc-em.labels" . | nindent 4 }}
   annotations:
     helm.sh/hook: test
     helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
@@ -16,15 +16,12 @@ spec:
     #   /healthz   the Node server is serving
     #   /          the board page: its shell, the legend, and the script tag
     #              that loads the island
-    #   /dsl       the format reference, which renders the example story map
-    #              through the same parser the board uses
+    #   /dsl       the format reference, which renders the example map that
+    #              ships as the board's sample
     #
-    # There is no fourth URL. doc-sm owns no database, and its one in-cluster
-    # call — the registry read that fills the product picker — happens while
-    # rendering /, so a 200 there already covers it. Or rather, it does not: the
-    # picker degrades to a text box when the registry is unreachable, by design,
-    # so / answers 200 either way. Proving the registry is up is doc-registry's
-    # own helm test.
+    # There is no fourth URL, and that is a fact about doc-em rather than a gap
+    # in the test. It calls no registry and owns no database, so there is no
+    # integration for a request to prove.
     #
     # What a 200 on / does *not* prove: that the board works. The board is
     # `client:only`, so the server sends an empty island and every card, drag and
@@ -38,6 +35,6 @@ spec:
         - --show-error
         - --output
         - /dev/null
-        - http://{{ include "doc-sm.fullname" . }}:{{ .Values.service.port }}{{ .Values.probes.path }}
-        - http://{{ include "doc-sm.fullname" . }}:{{ .Values.service.port }}/
-        - http://{{ include "doc-sm.fullname" . }}:{{ .Values.service.port }}/dsl
+        - http://{{ include "doc-em.fullname" . }}:{{ .Values.service.port }}{{ .Values.probes.path }}
+        - http://{{ include "doc-em.fullname" . }}:{{ .Values.service.port }}/
+        - http://{{ include "doc-em.fullname" . }}:{{ .Values.service.port }}/dsl

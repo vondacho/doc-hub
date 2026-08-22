@@ -1,0 +1,81 @@
+/**
+ * The map, as the feature file it becomes.
+ *
+ * dev-hub's page on the practice puts it plainly: the map leaves the room as a
+ * Gherkin feature file, and the translation is almost mechanical — three of the
+ * four card colours have a keyword of their own.
+ *
+ *   Story    (yellow) -> Feature:   one per file
+ *   Rule     (blue)   -> Rule:      a real keyword since Gherkin 6
+ *   Example  (green)  -> Example:   same word, same meaning as the card
+ *   Question (red)    -> nothing
+ *
+ * ## Why this is a one-way door
+ *
+ * The fourth colour has no Gherkin, and that is not an oversight in Gherkin: an
+ * open question is not a specification, so it cannot be written as one. Anything
+ * that wrote the red cards into the file — as comments, or as tags — would be
+ * inventing a convention no Cucumber will read and quietly claiming the map is
+ * recoverable from it.
+ *
+ * So this writes and never reads. The `.examplemap` file is what round-trips;
+ * this is the artefact, and the board says as much before it hands it over.
+ *
+ * The steps are deliberately absent. An example's card is one line — "a voucher
+ * that expired yesterday is refused" — and its Given/When/Then are written
+ * afterwards, by whoever picks the story up. Emitting a guessed skeleton would
+ * put words in their mouth and make a real file look finished.
+ */
+
+import type { ExampleMapDocument } from './model.ts';
+
+/** How many questions the file cannot carry. The caller warns with this. */
+export function unwritableQuestions(document: ExampleMapDocument): number {
+	return document.story.questions.length + document.rules.reduce((n, r) => n + r.questions.length, 0);
+}
+
+export function toGherkin(document: ExampleMapDocument): string {
+	const out: string[] = [`Feature: ${document.story.title}`];
+
+	for (const note of document.story.notes) {
+		for (const line of note.split('\n')) out.push(`  ${line}`);
+	}
+
+	for (const rule of document.rules) {
+		out.push('');
+		out.push(`  Rule: ${rule.title}`);
+		for (const note of rule.notes) {
+			for (const line of note.split('\n')) out.push(`    ${line}`);
+		}
+
+		if (rule.examples.length === 0) {
+			// Said rather than skipped: a rule with no examples is the practice's
+			// own warning sign, and a feature file that silently omitted the rule
+			// would hide it at exactly the moment it matters.
+			out.push('');
+			out.push('    # No examples yet — nobody has agreed what this rule means.');
+			continue;
+		}
+
+		for (const example of rule.examples) {
+			out.push('');
+			out.push(`    Example: ${example.title}`);
+			for (const note of example.notes) {
+				for (const line of note.split('\n')) out.push(`      ${line}`);
+			}
+		}
+	}
+
+	return `${out.join('\n')}\n`;
+}
+
+/** `redeem-a-voucher.feature`, from the story rather than the map's title. */
+export function featureFilename(document: ExampleMapDocument): string {
+	const slug = document.story.title
+		.toLowerCase()
+		.replace(/[^a-z0-9]+/g, '-')
+		.replace(/^-+|-+$/g, '')
+		.slice(0, 60)
+		.replace(/-+$/, '');
+	return `${slug === '' ? 'untitled' : slug}.feature`;
+}

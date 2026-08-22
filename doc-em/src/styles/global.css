@@ -1,0 +1,119 @@
+@import 'tailwindcss';
+
+/*
+ * doc-em theme.
+ *
+ * The first block is doc-portal's palette, copied rather than imported: the two
+ * are separate images, deployed separately, and a shared stylesheet would be a
+ * build-time dependency between two components that otherwise have none. Keep
+ * them in step by hand; they are eleven values.
+ *
+ * Dark mode follows the OS, as it does in doc-portal. If either ever grows an
+ * explicit toggle, switch to a `@custom-variant dark` driven by a data-attribute
+ * rather than scattering a second mechanism through the components.
+ */
+
+@theme {
+  --color-ink: oklch(0.24 0.03 255);
+  --color-ink-muted: oklch(0.52 0.03 255);
+  --color-brand: oklch(0.52 0.19 262);
+  --color-brand-strong: oklch(0.44 0.2 262);
+  --color-night: oklch(0.19 0.03 255);
+  --color-night-raised: oklch(0.24 0.03 255);
+
+  /*
+   * Status palette — reserved, and never reused as a decorative colour.
+   *
+   * Carried over from doc-portal unchanged, and unused in doc-em today. It is
+   * here so that the day a card grows a status, the colours it must use are
+   * already the same four the portal uses, rather than a second set invented in
+   * isolation.
+   */
+  --color-good: #0ca30c;
+  --color-warning: #fab219;
+  --color-serious: #ec835a;
+  --color-critical: #d03b3b;
+
+  /*
+   * The four colours of example mapping.
+   *
+   * Yellow story, blue rule, green example, red question — Matt Wynne's, and the
+   * convention on every printed template and every wall this technique has ever
+   * been run on. They are the notation, not a palette: somebody who has run a
+   * session before has to recognise this board without being told, so unlike
+   * doc-em's card colours these were never ours to choose.
+   *
+   * Tinted rather than saturated. A wall of full-strength sticky-note colours is
+   * unreadable on a screen at any size, and the text on these has to be read.
+   * Each is high in lightness and modest in chroma, which keeps dark ink above
+   * 10:1 on all four.
+   *
+   * ## The one collision to watch
+   *
+   * `--color-question` sits near `--color-critical` in hue, and the status
+   * palette above says nothing else may borrow it. This is the exception, and it
+   * is the right one: a red card in example mapping means very nearly what a
+   * critical status means — something is wrong and somebody must act. They are
+   * kept apart by weight instead, the card being far lighter than the status.
+   *
+   * And the rule that travels with the status palette travels here too: colour
+   * is never the only signal. Every card names its kind in its accessible name,
+   * and the legend on the board says what each colour holds.
+   */
+  --color-story: oklch(0.94 0.075 95);
+  --color-story-edge: oklch(0.7 0.12 90);
+  --color-rule: oklch(0.91 0.05 235);
+  --color-rule-edge: oklch(0.62 0.09 235);
+  --color-example: oklch(0.91 0.07 150);
+  --color-example-edge: oklch(0.62 0.11 150);
+  --color-question: oklch(0.89 0.06 25);
+  --color-question-edge: oklch(0.62 0.15 25);
+
+  --color-story-night: oklch(0.35 0.05 95);
+  --color-story-night-edge: oklch(0.52 0.07 95);
+  --color-rule-night: oklch(0.33 0.05 235);
+  --color-rule-night-edge: oklch(0.5 0.07 235);
+  --color-example-night: oklch(0.33 0.05 150);
+  --color-example-night-edge: oklch(0.5 0.08 150);
+  --color-question-night: oklch(0.33 0.06 25);
+  --color-question-night-edge: oklch(0.5 0.1 25);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}
+
+/*
+ * A closed <dialog> is hidden — restated here, as an author rule.
+ *
+ * Browsers already do this in their user-agent stylesheet, but *any* author rule
+ * beats a UA rule regardless of specificity, so a single utility class that sets
+ * `display` on a <dialog> silently pins it open: it renders inline in the page
+ * flow, with no backdrop, visible before it is ever opened and still visible
+ * after close() — which reads as a dialog that cannot be dismissed.
+ *
+ * That is exactly what one `flex` class on the preview dialog did. This rule has
+ * specificity (0,1,1) against a utility's (0,1,0), so it wins and the bug cannot
+ * come back. Lay dialogs out with an inner element.
+ */
+dialog:not([open]) {
+  display: none;
+}
+
+/*
+ * The board is the one place in doc-hub with a horizontal scroll region, and
+ * `position: sticky` inside it only works if no ancestor between the sticky
+ * element and the scroll container has `overflow` set to anything but visible.
+ * This rule is not styling — it is a note to the next person who wonders why the
+ * band rail stopped sticking after they wrapped the grid in a card.
+ */
+.board-scroll {
+  overflow: auto;
+  overscroll-behavior-x: contain;
+}

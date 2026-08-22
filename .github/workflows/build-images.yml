@@ -2,8 +2,8 @@
 # GitHub Container Registry (ghcr.io) attached to this repository.
 #
 # The components are the directories built and published from here:
-# doc-portal (Astro/node), doc-registry (Strapi CMS) and doc-sm (Astro/node,
-# the story mapping board).
+# doc-portal (Astro/node), doc-registry (Strapi CMS), doc-sm (Astro/node, the
+# story mapping board) and doc-em (Astro/node, the example mapping board).
 #
 # doc-registry-db owns a Dockerfile too and is deliberately not built here — it
 # is stock PostgreSQL plus an initdb script. If that ever changes, add it to the
@@ -19,6 +19,7 @@
 #   ghcr.io/vondacho/doc-hub/doc-portal
 #   ghcr.io/vondacho/doc-hub/doc-registry
 #   ghcr.io/vondacho/doc-hub/doc-sm
+#   ghcr.io/vondacho/doc-hub/doc-em
 #
 # They are nested under the repository path so GHCR links each package back to
 # this repo automatically (via the org.opencontainers.image.source label set
@@ -97,6 +98,9 @@ jobs:
             doc-sm:
               - *workflow
               - 'doc-sm/**'
+            doc-em:
+              - *workflow
+              - 'doc-em/**'
 
       - id: select
         env:
@@ -107,7 +111,7 @@ jobs:
           # that every image carries it, whether or not each one changed.
           # Same for an explicit "build everything" dispatch.
           if [ "${{ github.ref_type }}" = 'tag' ] || [ "${{ inputs.all }}" = 'true' ]; then
-            components='["doc-portal","doc-registry","doc-sm"]'
+            components='["doc-portal","doc-registry","doc-sm","doc-em"]'
           else
             # paths-filter emits every matched filter name, including the
             # "workflow" helper the anchors are attached to — drop it, it is
@@ -128,7 +132,7 @@ jobs:
       packages: write
     strategy:
       # Independent images: one failing component should not hide the state of
-      # the other two.
+      # the others.
       fail-fast: false
       matrix:
         component: ${{ fromJSON(needs.changes.outputs.components) }}

@@ -1,7 +1,8 @@
 {{ .Chart.Name }} {{ .Chart.AppVersion }} deployed as release "{{ .Release.Name }}" in namespace "{{ .Release.Namespace }}".
 
 Server-rendered by @astrojs/node (standalone) on port {{ .Values.containerPort }}.
-The board page is prerendered and its island runs in the browser.
+The board page is server-rendered so the links below stay per-request
+configuration; its island runs in the browser.
 
 Outbound links (browser-facing, resolved per request):
   Documentation hub  -> {{ .Values.app.docPortalUrl }}

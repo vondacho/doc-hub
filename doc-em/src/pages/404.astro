@@ -1,0 +1,27 @@
+---
+import Layout from '../layouts/Layout.astro';
+
+export const prerender = true;
+---
+
+<Layout title="Not found — doc-hub example mapping">
+	<main id="main" class="mx-auto w-full max-w-5xl px-6 py-24 text-center">
+		<p class="text-xs font-semibold tracking-[0.16em] text-ink-muted uppercase dark:text-slate-400">404</p>
+		<h1 class="mt-2 text-3xl font-bold">There is no page here</h1>
+		<p class="mx-auto mt-3 max-w-prose text-ink-muted dark:text-slate-400">
+			doc-em has two pages: the board, and the format it reads and writes.
+		</p>
+		<p class="mt-6 flex flex-wrap justify-center gap-3">
+			<a
+				href="/"
+				class="rounded-full bg-brand px-5 py-2.5 font-semibold text-white transition hover:bg-brand-strong focus-visible:outline-2 focus-visible:outline-offset-3 focus-visible:outline-brand motion-reduce:transition-none"
+				>The board</a
+			>
+			<a
+				href="/dsl"
+				class="rounded-full border border-slate-300 px-5 py-2.5 font-semibold transition hover:border-brand hover:text-brand focus-visible:outline-2 focus-visible:outline-offset-3 focus-visible:outline-brand motion-reduce:transition-none dark:border-slate-600 dark:hover:border-sky-400 dark:hover:text-sky-400"
+				>The format</a
+			>
+		</p>
+	</main>
+</Layout>

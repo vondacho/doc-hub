@@ -1,0 +1,110 @@
+---
+import Layout from '../layouts/Layout.astro';
+import { SAMPLE_SOURCE } from '../lib/examplemap/sample';
+import { practiceUrl } from '../lib/links';
+
+export const prerender = true;
+
+const practice = practiceUrl();
+
+const rules: { title: string; body: string }[] = [
+  {
+    title: 'One story, always',
+    body: 'The practice is defined as taking one story, so a map has exactly one. A second `story` line is an error rather than a list: two stories on one map is two sessions, and merging them would hide that. A map with no story line at all is fine — it is a session that has not named its story yet, and the board shows "To be defined".',
+  },
+  {
+    title: 'An example belongs to a rule',
+    body: 'Examples are written under the rule they illustrate, and cannot float. A rule with no examples is legal and is the practice’s own warning sign: nobody has agreed what that rule means yet.',
+  },
+  {
+    title: 'A question hangs on the story or on a rule',
+    body: 'A doubt raised before any rule exists belongs to the story; one raised while discussing a rule sits with that rule. Both are meaningful when you read the finished map — "this rule has three unanswered questions" says something different from "the board has three".',
+  },
+  {
+    title: 'Braces, not indentation',
+    body: 'Whitespace is a formatting choice and never syntax, so a file that has been through a chat window or a different editor still parses.',
+  },
+  {
+    title: 'Notes wrap at 50 characters',
+    body: 'A note is prose. A trailing backslash carries its string onto the next line, and that split is the break — one pair of quotes for the whole note.',
+  },
+  {
+    title: 'Comments do not survive the board',
+    body: 'A // comment is read and discarded. Import a commented file, export it again, and the comments are gone: the board is the source, the file is a render of it.',
+  },
+];
+---
+
+<Layout title="The .examplemap format — doc-hub" description="The text format a doc-hub example map is exported to and imported from.">
+  <main id="main" class="mx-auto w-full max-w-5xl px-6 py-12 sm:py-16">
+    <p class="text-xs font-semibold tracking-[0.16em] text-ink-muted uppercase dark:text-slate-400">
+      doc-hub · example mapping
+    </p>
+    <h1 class="mt-2 text-3xl font-bold sm:text-4xl">The <code>.examplemap</code> format</h1>
+    <p class="mt-3 max-w-prose text-ink-muted dark:text-slate-400">
+      An example map is a text file. It belongs in the repository of the product it describes, next to the
+      feature file it produces. The technique itself is
+      <a class="font-semibold text-brand underline" href={practice}>written up in the development hub</a>.
+    </p>
+
+    <section aria-labelledby="example" class="mt-10">
+      <h2 id="example" class="text-xl font-bold">An example</h2>
+      <div class="mt-3 overflow-x-auto rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-night-raised">
+        <pre class="text-xs leading-relaxed"><code>{SAMPLE_SOURCE}</code></pre>
+      </div>
+      <p class="mt-3 max-w-prose text-sm text-ink-muted dark:text-slate-400">
+        It is deliberately a map you would not estimate yet: two rules carry questions, and
+        <code>"One voucher per basket"</code> has no examples at all.
+      </p>
+    </section>
+
+    <section aria-labelledby="rules" class="mt-12">
+      <h2 id="rules" class="text-xl font-bold">What the format decides for you</h2>
+      <dl class="mt-4 grid gap-5 sm:grid-cols-2">
+        {
+          rules.map((rule) => (
+            <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-night-raised">
+              <dt class="font-semibold">{rule.title}</dt>
+              <dd class="mt-1.5 text-sm text-ink-muted dark:text-slate-400">{rule.body}</dd>
+            </div>
+          ))
+        }
+      </dl>
+    </section>
+
+    <section aria-labelledby="grammar" class="mt-12">
+      <h2 id="grammar" class="text-xl font-bold">The grammar</h2>
+      <div class="mt-3 overflow-x-auto rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-night-raised">
+        <pre class="text-xs leading-relaxed"><code>{`File       = ExampleMap , EOF ;
+ExampleMap = 'examplemap' , String , [ '{' , { Story | Rule | Note } , '}' ] ;
+Story      = 'story'    , String , [ '{' , { Question | Note } , '}' ] ;   (* exactly one *)
+Rule       = 'rule'     , String , [ '{' , { Example | Question | Note } , '}' ] ;
+Example    = 'example'  , String , [ '{' , { Note } , '}' ] ;
+Question   = 'question' , String , [ '{' , { Note } , '}' ] ;
+Note       = 'note'     , String ;
+String     = '"' , { Char | Escape | Splice } , '"' ;
+Escape     = '\\\\' , ( '"' | '\\\\' | 'n' | 't' ) ;
+Splice     = '\\\\' , newline , { space } ;   (* carries the string on; is a break *)
+Comment    = '//' , { Char } ;   (* discarded *)`}</code></pre>
+      </div>
+    </section>
+
+    <section aria-labelledby="gherkin" class="mt-12">
+      <h2 id="gherkin" class="text-xl font-bold">And the Gherkin it writes</h2>
+      <p class="mt-3 max-w-prose text-ink-muted dark:text-slate-400">
+        Three of the four colours have a Gherkin keyword of their own — <code>Feature:</code>,
+        <code>Rule:</code>, <code>Example:</code> — and the fourth has none. An open question is not a
+        specification, so the feature file cannot carry the red cards and the board says so before it writes
+        one. That is why the <code>.examplemap</code> file is the one that round-trips.
+      </p>
+    </section>
+
+    <p class="mt-12">
+      <a
+        href="/"
+        class="rounded-full bg-brand px-5 py-2.5 font-semibold text-white transition hover:bg-brand-strong focus-visible:outline-2 focus-visible:outline-offset-3 focus-visible:outline-brand motion-reduce:transition-none"
+        >Open the board</a
+      >
+    </p>
+  </main>
+</Layout>

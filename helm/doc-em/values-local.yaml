@@ -1,0 +1,49 @@
+# Overrides for a locally built image on a single-node cluster
+# (Rancher Desktop / Docker Desktop).
+#
+#   ./helm/doc-em/deploy.sh
+#
+# or by hand:
+#
+#   cd doc-em && docker build -t doc-em:dev .
+#   helm upgrade --install doc-em helm/doc-em \
+#     -n doc-hub --create-namespace \
+#     -f helm/doc-em/values-local.yaml
+#   kubectl rollout restart deployment/doc-em -n doc-hub
+
+image:
+  repository: doc-em
+  tag: dev
+  # The image is built straight into the node's image store, never pulled.
+  pullPolicy: Never
+
+# Rancher Desktop runs Traefik as the default IngressClass and *.localhost
+# resolves to 127.0.0.1, so the board is reachable from the host browser
+# without a port-forward. Named explicitly here rather than relying on the
+# cluster default.
+ingress:
+  enabled: true
+  className: traefik
+  hosts:
+    - host: doc-em.localhost
+      paths:
+        - path: /
+          pathType: Prefix
+
+# All three are ingress hosts, because all three are links the visitor's
+# browser follows. doc-portal and doc-sm are releases in this same namespace and
+# their own values-local.yaml files enable those hosts; dev-portal is a
+# different hub entirely and may not be running here, in which case the link to
+# the practice simply does not resolve. Nothing on the board depends on any of
+# them — they are links in the chrome, not data.
+app:
+  docPortalUrl: http://doc-portal.localhost
+  practiceUrl: http://dev-portal.localhost/doc/practices/example-mapping/
+  storyMapperUrl: http://doc-sm.localhost
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    memory: 256Mi

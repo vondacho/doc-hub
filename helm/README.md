@@ -10,12 +10,13 @@ monorepo-of-standalone-modules convention as dev-hub, api-hub and model-hub,
 | `doc-registry/` | `doc-registry` Strapi CMS and its admin UI | present |
 | `doc-registry-db/` | `doc-registry-db` PostgreSQL instance | present |
 | `doc-sm/` | `doc-sm` story mapping board | present |
+| `doc-em/` | `doc-em` example mapping board | present |
 
-All four charts are **built from this repo**: `values-local.yaml` pins
+All five charts are **built from this repo**: `values-local.yaml` pins
 `tag: dev` with `pullPolicy: Never`, so the image has to be built into the
 node's image store first — there is nothing to pull.
 
-The ingress is enabled **by default** on the three web components. A browser
+The ingress is enabled **by default** on the four web components. A browser
 frontend nobody can open is not a useful default, and `*.localhost` costs
 nothing on a local cluster. The database has no ingress at all.
 
@@ -62,9 +63,10 @@ and only the first arrow is a hard one.
 ./helm/doc-registry/deploy.sh
 ./helm/doc-portal/deploy.sh         # reads the registry, but starts without it
 ./helm/doc-sm/deploy.sh             # reads the registry for its product picker, but opens without it
+./helm/doc-em/deploy.sh             # reads nothing; install it in any order
 ```
 
-That is the whole thing, and all four scripts are the same script: each builds
+That is the whole thing, and all five scripts are the same script: each builds
 its image with whichever engine Rancher Desktop is configured for, installs the
 release into the `doc-hub` namespace (creating it), restarts the pods onto the
 rebuilt image, waits for the rollout, prints the running pods with their image
@@ -140,13 +142,19 @@ helm test doc-sm -n doc-hub
 open http://doc-sm.localhost
 ```
 
-`doc-sm`'s test fetches `/healthz`, `/` and `/dsl`, and that is the whole list —
-not a thinner test than the portal's eight, but a component with less to check.
-It calls no registry and owns no database, so there is no integration a request
-could prove. Note what a 200 on `/` does *not* prove: the board is `client:only`,
-so the server sends an empty island and every card, drag and export happens in
-the browser. The test claims the route and the assets are served, and nothing
-more.
+```bash
+helm test doc-em -n doc-hub
+open http://doc-em.localhost
+```
+
+Both boards' tests fetch `/healthz`, `/` and `/dsl`, and that is the whole list —
+not a thinner test than the portal's eight, but components with less to check.
+Neither owns a database, and `doc-sm`'s one call degrades to a text box when the
+registry is down, so a 200 on `/` cannot prove it either way; that is
+`doc-registry`'s own test to run. Note what a 200 on `/` does *not* prove: both
+boards are `client:only`, so the server sends an empty island and every card,
+drag and export happens in the browser. The test claims the route and the assets
+are served, and nothing more.
 
 `helm test` fetches one URL per thing that can independently fail — `/healthz`,
 `/`, `/catalog`, `/catalog?q=data`, a product view, one of its section pages,
@@ -194,6 +202,7 @@ Its test asserts more than reachability — it authenticates, and then checks th
 ./helm/doc-registry/uninstall.sh                 # the release, data untouched
 ./helm/doc-registry-db/uninstall.sh              # the release, data kept
 ./helm/doc-sm/uninstall.sh                       # the release; it has no data
+./helm/doc-em/uninstall.sh                       # the release; it has no data
 
 ./helm/doc-registry/uninstall.sh --secret        # and its Strapi secrets
 ./helm/doc-registry-db/uninstall.sh --data       # and every registered product
@@ -397,12 +406,13 @@ lives in their browser tab, which is what the board's unload warning is for. Tha
 is the same position the repo already takes on C4 and events — the model belongs
 in a repository, not in the registry.
 
-**Port 4322**, not the portal's 4321, which leaves 4323 and 4324 for the sibling
-boards `doc-em` and `doc-es`.
+**Port 4322**, not the portal's 4321. `doc-em` took 4323; 4324 is left for
+`doc-es`.
 
-**One hydrated component.** The board page is prerendered and loads a React
-island; every other page is server-rendered HTML with no script. That is the
-only client-side JavaScript in doc-hub, and it is argued at the top of
+**One hydrated component.** The board page is server-rendered — the links in
+its ConfigMap are resolved per request — and loads a React island; every other
+page is server-rendered HTML with no script at all. It and `doc-em` are the only
+client-side JavaScript in doc-hub, and the position is argued at the top of
 `doc-sm/src/components/board/StoryMapBoard.tsx`. The practical consequence for
 this chart is that `helm test` can prove the route and the assets are served and
 nothing further — see Verify above.
@@ -413,10 +423,39 @@ is on, and `/tmp` plus `/app/node_modules/.astro` are mounted exactly as in
 time. doc-sm uses no sessions and writes nothing at run time; the mounts are
 there so the day it does is not a deployment incident.
 
+## Notes on the doc-em chart
+
+`doc-em` is the example mapping board: one story, its rules, the examples under
+each rule and the open questions, read from and written to an `.examplemap` file.
+
+**It has no data and no dependencies at all.** No database, no volume, no Secret
+and — unlike `doc-sm` — no call to anything. Its ConfigMap holds three entries
+and all three are browser-facing links: `doc-portal`, dev-hub's page on the
+practice, and `doc-sm`. Nothing in this chart is an in-cluster address, which is
+the shortest possible statement of what this component does: it is asked for a
+page, and that is the end of the transaction.
+
+So there is no install order to get wrong. Install it before or after everything
+else; the links resolve or they do not, and the board works either way.
+
+**Nothing it holds can be lost by deleting a pod**, because it holds nothing. A
+map lives in the file the visitor exports; work that has not been exported lives
+in their browser tab, which is what the board's unload warning is for. In a
+session that is mostly the red cards — the questions nobody could answer — which
+the Gherkin export cannot carry either, and the board says so before writing one.
+
+**Port 4323**, after `doc-portal`'s 4321 and `doc-sm`'s 4322, leaving 4324 for
+`doc-es`.
+
+**The same two `emptyDir`s, and the same insurance.** `readOnlyRootFilesystem:
+true` with `/tmp` and `/app/node_modules/.astro` mounted, because the Astro node
+adapter bakes a session path in at build time. This component uses no sessions
+and writes nothing at run time.
+
 ## Chart layout
 
-All four charts have the same shape; the registry pair adds what stateful
-components need, and `doc-sm` is `doc-portal` with a shorter ConfigMap.
+All five charts have the same shape; the registry pair adds what stateful
+components need, and the two boards are `doc-portal` with a shorter ConfigMap.
 
 ```
 doc-portal/                     doc-registry/                 doc-registry-db/
@@ -437,10 +476,10 @@ doc-portal/                     doc-registry/                 doc-registry-db/
     tests/test-connection.yaml      tests/test-connection.yaml    tests/test-connection.yaml
 ```
 
-`doc-sm/` is not a fourth column above because it would repeat `doc-portal/`
-line for line — same files, same templates, a shorter `configmap.yaml` and a
-different port. Copy that column when reading it.
+`doc-sm/` and `doc-em/` are not further columns above because each would repeat
+`doc-portal/` line for line — same files, same templates, a shorter
+`configmap.yaml` and a different port. Copy that column twice when reading it.
 
-The three web releases are stateless, so `replicaCount` is free to move in all.
+The four web releases are stateless, so `replicaCount` is free to move in all.
 `doc-registry-db` is the opposite on both counts, and is the only place in this
 repo where that is true.

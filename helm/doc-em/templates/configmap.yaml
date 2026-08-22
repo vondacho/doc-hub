@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "doc-em.fullname" . }}
+  labels:
+    {{- include "doc-em.labels" . | nindent 4 }}
+data:
+  # Read by src/lib/links.ts through process.env at call time.
+  #
+  # All three are **browser-facing links** — the visitor's browser resolves
+  # them, so an in-cluster address would be wrong. Unlike doc-sm's ConfigMap
+  # there is no fourth key here that this server resolves itself, because this
+  # server calls nothing: the map is a file, parsed in the browser that opened
+  # it.
+  DOC_PORTAL_URL: {{ .Values.app.docPortalUrl | quote }}
+  PRACTICE_URL: {{ .Values.app.practiceUrl | quote }}
+  STORY_MAPPER_URL: {{ .Values.app.storyMapperUrl | quote }}
+  {{- range $key, $value := .Values.app.extraConfig }}
+  {{ $key }}: {{ $value | quote }}
+  {{- end }}
