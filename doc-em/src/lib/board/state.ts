@@ -78,9 +78,28 @@ export function ruleOfExample(board: BoardState, exampleId: Id): Rule | undefine
 	return undefined;
 }
 
-/** Every card that has a note, plus the story, which always has something to show. */
+/**
+ * The detail key of the story card.
+ *
+ * The story has no id — see `Story` above — but the expanded-cards set is keyed
+ * by id, so it needs one name to be known by. A literal, exported rather than
+ * spelled twice: the grid and `cardsWithDetail` have to agree on it, and the day
+ * they silently disagree the global notes toggle skips the story and nothing
+ * else looks wrong. Generated ids are prefixed `r`/`e`/`q`, so it cannot collide.
+ */
+export const STORY_DETAIL_KEY: Id = 'story';
+
+/**
+ * Every card that has a note, the story included.
+ *
+ * Not "every card": a card with no notes has no caret and nothing to reveal, so
+ * counting it would make the global toggle claim to have expanded something it
+ * did not. The story is a card like the others here — it is the one the session
+ * is about, but that does not give it notes it has not been written.
+ */
 export function cardsWithDetail(board: BoardState): readonly Id[] {
 	const found: Id[] = [];
+	if (board.story.notes.length > 0) found.push(STORY_DETAIL_KEY);
 	for (const [id, rule] of Object.entries(board.rules)) if (rule.notes.length > 0) found.push(id);
 	for (const [id, card] of Object.entries(board.examples)) if (card.notes.length > 0) found.push(id);
 	for (const [id, card] of Object.entries(board.questions)) if (card.notes.length > 0) found.push(id);

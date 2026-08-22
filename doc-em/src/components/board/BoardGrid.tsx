@@ -23,7 +23,7 @@ import { useDroppable } from '@dnd-kit/core';
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { cardLabel } from '../../lib/examplemap/model.ts';
 import type { BoardAction, QuestionParent } from '../../lib/board/reducer.ts';
-import type { BoardState, Id } from '../../lib/board/state.ts';
+import { STORY_DETAIL_KEY, type BoardState, type Id } from '../../lib/board/state.ts';
 import { Card } from './Card.tsx';
 import type { CardMenuAction } from './CardMenu.tsx';
 import { Icon } from './Icon.tsx';
@@ -127,14 +127,14 @@ export function BoardGrid({
 						className="sticky top-0 z-10 flex flex-wrap items-start gap-[0.4em]"
 					>
 						<Card
-							id="story"
+							id={STORY_DETAIL_KEY}
 							kind="story"
 							title={board.story.title}
 							notes={board.story.notes}
 							fixed
 							data={{ type: 'story' }}
-							detailOpen={expanded.has('story')}
-							onToggleDetail={() => onToggleDetail('story')}
+							detailOpen={expanded.has(STORY_DETAIL_KEY)}
+							onToggleDetail={() => onToggleDetail(STORY_DETAIL_KEY)}
 							onRetitle={(title) => dispatch({ type: 'retitle', kind: 'story', id: '', title })}
 							onNotes={(text) => dispatch({ type: 'setNotes', kind: 'story', id: '', text })}
 							menu={[
