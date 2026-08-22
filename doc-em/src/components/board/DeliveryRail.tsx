@@ -188,9 +188,6 @@ function DeliveryLabel({
 						onChange={(points) => dispatch({ type: 'setDeliveryPoints', id: deliveryId, points })}
 					/>
 				)}
-				{shipsHere && (
-					<span className="text-[0.7em] font-semibold text-brand dark:text-sky-400">story ships</span>
-				)}
 			</div>
 
 			<div className="mt-1 flex gap-0.5 opacity-0 transition group-hover:opacity-100 focus-within:opacity-100 motion-reduce:transition-none">

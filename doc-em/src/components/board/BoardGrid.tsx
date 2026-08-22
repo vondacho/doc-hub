@@ -1,5 +1,6 @@
 /**
- * The board: the story across the top, the rules as columns beneath it.
+ * The board: the timeline down the left, the story across the top of the rest,
+ * and the rules as columns beneath it.
  *
  * The layout is the technique's own, and the practice describes it as an
  * instruction rather than a suggestion — "write the story, write the rules under
@@ -17,6 +18,21 @@
  * delivered — it is answered, usually before anything ships — so it sits in a
  * strip directly under its rule's header, above every band, rather than being
  * given a row it has no business in.
+ *
+ * ## The left column belongs to the timeline, all the way up
+ *
+ * The story card starts at column 2, not column 1. It used to span the full
+ * width, which put the "Deliveries" heading and the first band's label in the
+ * same column as a card that had nothing to do with either — and a band label
+ * has to sit level with the row it names, not underneath a story that spans
+ * over the top of it.
+ *
+ * So column 1 is the rail's for the whole height: an opaque backdrop, a sticky
+ * corner heading, and one label per band. Four z-indexes keep that readable and
+ * each is load-bearing — the corner at 30 sticks in both directions and must
+ * outrank everything, the header band at 5 must sit above the band labels at 4
+ * so they scroll under it vertically, and the rail backdrop at 3 must sit above
+ * the cells so they scroll under it sideways.
  *
  * What is kept from doc-sm, deliberately: the em-based sizing so one font-size
  * scales the whole board, the sticky header that pins where it rests, the
@@ -61,6 +77,18 @@ import { Icon } from './Icon.tsx';
  * zoom level. One number moves the whole board — without a `transform`, which
  * would break the sticky header and confuse dnd-kit's hit-testing.
  */
+/**
+ * The delivery rail's own column, and the reason the story starts at column 2.
+ *
+ * The left edge belongs to the timeline for the whole height of the board: a
+ * band label has to sit level with the row it names, and a story card spanning
+ * over the top of the rail would put the first band's label under the story
+ * rather than beside the cards it applies to.
+ *
+ * Wider than doc-sm's 8.5em because a label here carries more: a title, a
+ * ticket, the sprint/release toggle and the points box.
+ */
+const RAIL = '10.5em';
 const COLUMN = '13em';
 /** Font-size at 100%, in px. Everything on the board is `em` against this. */
 export const BASE_FONT = 20.8;
@@ -147,21 +175,47 @@ export function BoardGrid({
 				<div
 					ref={grid}
 					className="grid min-w-max gap-[0.4em]"
-					style={{
-						gridTemplateColumns: `minmax(7em, max-content) repeat(${columns - 1}, minmax(${COLUMN}, 1fr))`,
-					}}
+					style={{ gridTemplateColumns: `${RAIL} repeat(${columns - 1}, minmax(${COLUMN}, 1fr))` }}
 				>
 					{/* Opaque behind the two header rows: the cards are opaque but the
-					    grid's gaps are not. */}
+					    grid's gaps are not. Starts at column 2 — column 1 is the rail's,
+					    and the corner below paints it. */}
 					<div
 						aria-hidden="true"
-						style={{ gridColumn: '1 / -1', gridRow: `${STORY_ROW} / span 2` }}
+						style={{ gridColumn: '2 / -1', gridRow: `${STORY_ROW} / span 2` }}
 						className="sticky top-0 z-[5] -mb-[0.2em] bg-white pb-[0.2em] dark:bg-night-raised"
 					/>
 
+					{/*
+					 * Opaque behind the rail, for the full height of the board.
+					 *
+					 * The row end is counted, not `-1`.
+					 *
+					 * `-1` names the last line of the *explicit* grid, and this grid
+					 * declares only `grid-template-columns` — every row is implicit. So
+					 * `1 / -1` collapses to a single row, and the backdrop would cover
+					 * the header's height alone, letting every card below it show
+					 * through the left padding on a sideways scroll. The header band
+					 * above gets away with `-1` because the *columns* are explicit.
+					 */}
+					<div
+						aria-hidden="true"
+						style={{ gridColumn: 1, gridRow: `1 / ${FIRST_BAND_ROW + rows.length}` }}
+						className="sticky left-0 z-[3] -mr-[0.2em] bg-white pr-[0.2em] dark:bg-night-raised"
+					/>
+
+					{/* Top-left corner. Sticks in both directions, so it must outrank
+					    both the rail and the header rows. */}
+					<div
+						style={{ gridColumn: 1, gridRow: `${STORY_ROW} / span 2` }}
+						className="sticky top-0 left-0 z-30 rounded-[0.4em] bg-white px-[0.5em] py-[0.25em] text-[0.7em] font-semibold tracking-[0.14em] text-ink-muted uppercase dark:bg-night-raised dark:text-slate-400"
+					>
+						Deliveries
+					</div>
+
 					{/* ---- the story, and the doubts about the story ---- */}
 					<div
-						style={{ gridColumn: '1 / -1', gridRow: STORY_ROW }}
+						style={{ gridColumn: '2 / -1', gridRow: STORY_ROW }}
 						className="sticky top-0 z-10 flex flex-wrap items-start gap-[0.4em]"
 					>
 						<Card

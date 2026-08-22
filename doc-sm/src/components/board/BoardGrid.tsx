@@ -264,7 +264,7 @@ export function BoardGrid({
 					style={{ gridColumn: 1, gridRow: `${ACTIVITY_ROW} / span 2` }}
 					className="sticky top-0 left-0 z-30 rounded-[0.4em] bg-white px-[0.5em] py-[0.25em] text-[0.7em] font-semibold tracking-[0.14em] text-ink-muted uppercase dark:bg-night-raised dark:text-slate-400"
 				>
-					Releases
+					Deliveries
 				</div>
 
 				{/* ---- the backbone ---- */}
