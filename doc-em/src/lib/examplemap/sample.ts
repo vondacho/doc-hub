@@ -12,8 +12,16 @@
  * teach the notation and hide the point of the technique, which is that the
  * shape of the map tells you what to do next.
  *
- * It names a product and a ticket, because the notation for both is otherwise
- * only described on the format page and this is what people copy from. The
+ * It names a product, a ticket and a timeline, because the notation for all
+ * three is otherwise only described on the format page and this is what people
+ * copy from. Two sprints and one release, which is the shape the time axis is
+ * for: the examples land across the sprints, and the story is done at the
+ * release.
+ *
+ * Two of the six examples are left unscheduled on purpose. That is what a real
+ * plan looks like — the cases everyone agreed on have been placed, the rest are
+ * below the line, and "The remaining 20 CHF is not carried" is exactly the kind
+ * of case nobody has committed to yet. The
  * status is `analysing` rather than `ready` for the same reason the map is
  * untidy: a story with an unanswered question against it and a rule with no
  * examples is not ready, and a sample that said so would be teaching the wrong
@@ -37,30 +45,34 @@ examplemap "Redeem a voucher" {
   product "client-onboarding"
   space "CLONB"
 
-  story "Redeem a voucher" #CLONB-42 ~analysing {
+  delivery "Sprint 24" sprint
+  delivery "Sprint 25" sprint
+  delivery "2026.9" release
+
+  story "Redeem a voucher" #CLONB-42 ~analysing @"2026.9" {
     question "Which currencies can a voucher be issued in?"
   }
 
   rule "A voucher must not be expired" {
-    example "A voucher that expired yesterday is refused" {
+    example "A voucher that expired yesterday is refused" @"Sprint 24" {
       given "a voucher SUMMER10 that expired on 2026-08-21"
       given "a basket of 40 CHF"
       when "the voucher is applied"
       then "the voucher is refused"
       then "the basket total is still 40 CHF"
     }
-    example "A voucher expiring today is accepted"
+    example "A voucher expiring today is accepted" @"Sprint 25"
     question "Is expiry checked when it is applied, or when the basket is paid?"
   }
 
   rule "A voucher applies once per basket" {
-    example "Applying the same voucher twice leaves one discount"
+    example "Applying the same voucher twice leaves one discount" @"2026.9"
   }
 
   rule "A voucher cannot take a basket below zero" {
     note "The finance team asked for this in writing. Do not\\
          change it without them."
-    example "A 50 CHF voucher on a 30 CHF basket leaves a total of 0.00 CHF" {
+    example "A 50 CHF voucher on a 30 CHF basket leaves a total of 0.00 CHF" @"Sprint 24" {
       given "a basket of 30 CHF"
       when "a 50 CHF voucher is applied"
       then "the basket total is 0.00 CHF"

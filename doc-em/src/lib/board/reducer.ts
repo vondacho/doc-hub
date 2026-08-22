@@ -14,11 +14,24 @@ import {
 	splitNotes,
 	UNDEFINED_STORY,
 	type CardKind,
+	type DeliveryKind,
 	type StepClause,
 	type StoryStatus,
 } from '../examplemap/model.ts';
 import { nextId } from './convert.ts';
-import type { BoardState, Card, Example, Id, Rule } from './state.ts';
+import {
+	cellKey,
+	cellOfExample,
+	splitCellKey,
+	UNSCHEDULED,
+	type BandId,
+	type BoardState,
+	type Card,
+	type CellKey,
+	type Example,
+	type Id,
+	type Rule,
+} from './state.ts';
 
 /** Where a question hangs. The story, or one rule. */
 export type QuestionParent = { readonly story: true } | { readonly ruleId: Id };
@@ -52,7 +65,20 @@ export type BoardAction =
 	| { type: 'retitle'; kind: CardKind; id: Id; title: string }
 	| { type: 'setNotes'; kind: CardKind; id: Id; text: string }
 	| { type: 'addRule'; index: number }
-	| { type: 'addExample'; ruleId: Id }
+	/** The band is where the `+` was clicked; a new example is born scheduled. */
+	| { type: 'addExample'; ruleId: Id; band: BandId }
+	| { type: 'addDelivery'; kind: DeliveryKind; index: number }
+	| { type: 'retitleDelivery'; id: Id; title: string }
+	| { type: 'setDeliveryKind'; id: Id; kind: DeliveryKind }
+	| { type: 'setDeliveryNotes'; id: Id; text: string }
+	/**
+	 * Delete a band. Its examples are not deleted with it — they fall below the
+	 * line, which is what cancelling a sprint actually does to the work in it.
+	 */
+	| { type: 'removeDelivery'; id: Id }
+	| { type: 'moveDelivery'; id: Id; index: number }
+	/** Which band the story ships in. `null` puts it back to uncommitted. */
+	| { type: 'setStoryRelease'; release: Id | null }
 	/** Open a step line on an example. The line starts empty; the author fills it. */
 	| { type: 'addStep'; exampleId: Id; clause: StepClause }
 	/** Write one step. Blank text deletes the line rather than storing nothing. */
@@ -60,7 +86,8 @@ export type BoardAction =
 	| { type: 'addQuestion'; parent: QuestionParent }
 	| { type: 'remove'; kind: Exclude<CardKind, 'story'>; id: Id }
 	| { type: 'moveRule'; ruleId: Id; index: number }
-	| { type: 'moveExample'; exampleId: Id; fromRuleId: Id; toRuleId: Id; index: number }
+	/** A drag between cells: rule and band may each change, independently. */
+	| { type: 'moveExample'; exampleId: Id; from: CellKey; to: CellKey; index: number }
 	| { type: 'moveQuestion'; questionId: Id; from: QuestionParent; to: QuestionParent; index: number };
 
 /** Actions that open a different document; history.ts clears on these. */
@@ -82,10 +109,13 @@ export function reduce(board: BoardState, action: BoardAction): BoardState {
 				notes: [],
 				// A board always has a story, even a blank one: a session that has
 				// not named its story has not started.
-				story: { title: UNDEFINED_STORY, notes: [], ticket: null, status: DEFAULT_STORY_STATUS, questions: [] },
+				story: { title: UNDEFINED_STORY, notes: [], ticket: null, status: DEFAULT_STORY_STATUS, release: null, questions: [] },
+				deliveryOrder: [],
+				deliveries: {},
 				ruleOrder: [],
 				rules: {},
 				examples: {},
+				cells: {},
 				questions: {},
 			};
 
@@ -123,7 +153,7 @@ export function reduce(board: BoardState, action: BoardAction): BoardState {
 			const id = nextId('r');
 			return {
 				...board,
-				rules: { ...board.rules, [id]: { id, title: 'New rule', notes: [], exampleIds: [], questionIds: [] } },
+				rules: { ...board.rules, [id]: { id, title: 'New rule', notes: [], questionIds: [] } },
 				ruleOrder: insertAt(board.ruleOrder, action.index, id),
 			};
 		}
@@ -132,6 +162,7 @@ export function reduce(board: BoardState, action: BoardAction): BoardState {
 			const rule = board.rules[action.ruleId];
 			if (!rule) return board;
 			const id = nextId('e');
+			const key = cellKey(action.ruleId, action.band);
 			return {
 				...board,
 				examples: {
@@ -141,7 +172,7 @@ export function reduce(board: BoardState, action: BoardAction): BoardState {
 					// title until somebody makes it precise.
 					[id]: { id, title: 'New example', notes: [], given: [], when: [], then: [] },
 				},
-				rules: { ...board.rules, [rule.id]: { ...rule, exampleIds: [...rule.exampleIds, id] } },
+				cells: { ...board.cells, [key]: [...(board.cells[key] ?? []), id] },
 			};
 		}
 
@@ -179,7 +210,52 @@ export function reduce(board: BoardState, action: BoardAction): BoardState {
 		}
 
 		case 'moveExample':
-			return moveExample(board, action.exampleId, action.fromRuleId, action.toRuleId, action.index);
+			return moveExample(board, action.exampleId, action.from, action.to, action.index);
+
+		case 'addDelivery': {
+			const id = nextId('d');
+			const title = freshDeliveryTitle(board, action.kind);
+			return {
+				...board,
+				deliveries: { ...board.deliveries, [id]: { id, title, kind: action.kind, notes: [] } },
+				deliveryOrder: insertAt(board.deliveryOrder, action.index, id),
+			};
+		}
+
+		case 'retitleDelivery': {
+			const delivery = board.deliveries[action.id];
+			const title = action.title.trim();
+			// A band with no name cannot be referred to in the file, so an emptied
+			// title is refused rather than written. Same rule the card titles follow.
+			if (!delivery || title === '' || title === delivery.title) return board;
+			return { ...board, deliveries: { ...board.deliveries, [action.id]: { ...delivery, title } } };
+		}
+
+		case 'setDeliveryKind': {
+			const delivery = board.deliveries[action.id];
+			if (!delivery || delivery.kind === action.kind) return board;
+			return { ...board, deliveries: { ...board.deliveries, [action.id]: { ...delivery, kind: action.kind } } };
+		}
+
+		case 'setDeliveryNotes': {
+			const delivery = board.deliveries[action.id];
+			if (!delivery) return board;
+			const notes = splitNotes(action.text);
+			return { ...board, deliveries: { ...board.deliveries, [action.id]: { ...delivery, notes } } };
+		}
+
+		case 'removeDelivery':
+			return removeDelivery(board, action.id);
+
+		case 'moveDelivery': {
+			const reordered = moveWithin(board.deliveryOrder, action.id, action.index);
+			return reordered === board.deliveryOrder ? board : { ...board, deliveryOrder: reordered };
+		}
+
+		case 'setStoryRelease':
+			return action.release === board.story.release
+				? board
+				: { ...board, story: { ...board.story, release: action.release } };
 
 		case 'moveQuestion':
 			return moveQuestion(board, action.questionId, action.from, action.to, action.index);
@@ -312,23 +388,31 @@ function remove(board: BoardState, kind: Exclude<CardKind, 'story'>, id: Id): Bo
 
 		const rules = { ...board.rules };
 		delete rules[id];
+
+		// The rule's examples live in its column of cells, one per band, so both
+		// the cards and the cells that held them go.
 		const examples = { ...board.examples };
-		for (const exampleId of rule.exampleIds) delete examples[exampleId];
+		const cells = { ...board.cells };
+		for (const [key, ids] of Object.entries(board.cells)) {
+			if (splitCellKey(key).ruleId !== id) continue;
+			for (const exampleId of ids) delete examples[exampleId];
+			delete cells[key];
+		}
+
 		const questions = { ...board.questions };
 		for (const questionId of rule.questionIds) delete questions[questionId];
 
-		return { ...board, rules, examples, questions, ruleOrder: board.ruleOrder.filter((r) => r !== id) };
+		return { ...board, rules, examples, cells, questions, ruleOrder: board.ruleOrder.filter((r) => r !== id) };
 	}
 
 	if (kind === 'example') {
 		if (!board.examples[id]) return board;
 		const examples = { ...board.examples };
 		delete examples[id];
-		return {
-			...board,
-			examples,
-			rules: mapRules(board, (rule) => ({ ...rule, exampleIds: rule.exampleIds.filter((e) => e !== id) })),
-		};
+		const key = cellOfExample(board, id);
+		const cells = { ...board.cells };
+		if (key !== undefined) cells[key] = (cells[key] ?? []).filter((e) => e !== id);
+		return { ...board, examples, cells };
 	}
 
 	if (!board.questions[id]) return board;
@@ -342,25 +426,90 @@ function remove(board: BoardState, kind: Exclude<CardKind, 'story'>, id: Id): Bo
 	};
 }
 
-function moveExample(board: BoardState, id: Id, fromId: Id, toId: Id, index: number): BoardState {
-	const from = board.rules[fromId];
-	const to = board.rules[toId];
-	if (!from || !to || !from.exampleIds.includes(id)) return board;
+/**
+ * A drag from one cell to another — which is how an example is both re-filed
+ * under a different rule and scheduled into a different sprint.
+ *
+ * One operation for both, because on this board they are one gesture. Moving
+ * sideways changes which rule an example illustrates; moving down changes when
+ * it ships; moving diagonally does both, and there is no reading under which
+ * that should need two undo steps.
+ */
+function moveExample(board: BoardState, id: Id, from: CellKey, to: CellKey, index: number): BoardState {
+	const source = board.cells[from];
+	if (!source?.includes(id)) return board;
 
-	if (fromId === toId) {
-		const reordered = moveWithin(from.exampleIds, id, index);
-		if (reordered === from.exampleIds) return board;
-		return { ...board, rules: { ...board.rules, [fromId]: { ...from, exampleIds: reordered } } };
+	// The target rule must exist; the target band need not be a real delivery,
+	// because UNSCHEDULED is a band and is not in `deliveries`.
+	const { ruleId } = splitCellKey(to);
+	if (!board.rules[ruleId]) return board;
+
+	if (from === to) {
+		const reordered = moveWithin(source, id, index);
+		return reordered === source ? board : { ...board, cells: { ...board.cells, [from]: reordered } };
 	}
 
 	return {
 		...board,
-		rules: {
-			...board.rules,
-			[fromId]: { ...from, exampleIds: from.exampleIds.filter((e) => e !== id) },
-			[toId]: { ...to, exampleIds: insertAt(to.exampleIds, index, id) },
+		cells: {
+			...board.cells,
+			[from]: source.filter((e) => e !== id),
+			[to]: insertAt(board.cells[to] ?? [], index, id),
 		},
 	};
+}
+
+/**
+ * Delete a band, and let the work in it fall below the line.
+ *
+ * Not delete the work with it. Cancelling a sprint does not cancel what was
+ * planned into it — that work goes back to being agreed and unscheduled, which
+ * is exactly what the unscheduled band means. Deleting the cards too would make
+ * removing a band the most destructive control on the board, and it would be
+ * destructive in a way nobody expects from a row header.
+ *
+ * The story falls back to uncommitted the same way if it shipped in this band.
+ */
+function removeDelivery(board: BoardState, id: Id): BoardState {
+	if (!board.deliveries[id]) return board;
+
+	const deliveries = { ...board.deliveries };
+	delete deliveries[id];
+
+	const cells = { ...board.cells };
+	for (const [key, ids] of Object.entries(board.cells)) {
+		const { ruleId, band } = splitCellKey(key);
+		if (band !== id) continue;
+		delete cells[key];
+		if (ids.length === 0) continue;
+		const target = cellKey(ruleId, UNSCHEDULED);
+		cells[target] = [...(cells[target] ?? []), ...ids];
+	}
+
+	return {
+		...board,
+		deliveries,
+		deliveryOrder: board.deliveryOrder.filter((d) => d !== id),
+		cells,
+		story: board.story.release === id ? { ...board.story, release: null } : board.story,
+	};
+}
+
+/**
+ * `Sprint 3`, or the next number after the sprints that already exist.
+ *
+ * A new band needs a title that is not already taken, because titles are how the
+ * file refers to a band and duplicates are a parse error. Counting the existing
+ * ones of the same kind gets the obvious answer nearly always, and the author
+ * renames it when it does not.
+ */
+function freshDeliveryTitle(board: BoardState, kind: DeliveryKind): string {
+	const taken = new Set(Object.values(board.deliveries).map((delivery) => delivery.title));
+	const stem = kind === 'sprint' ? 'Sprint' : 'Release';
+	for (let n = Object.values(board.deliveries).filter((d) => d.kind === kind).length + 1; ; n += 1) {
+		const candidate = `${stem} ${n}`;
+		if (!taken.has(candidate)) return candidate;
+	}
 }
 
 /**

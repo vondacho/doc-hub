@@ -3,8 +3,14 @@
  *
  * The same shape as doc-sm's, and a good deal shorter, because the technique is
  * smaller: four card kinds, one story, and examples that belong to a rule. There
- * is no release axis and no persona — those belong to the map that picks which
- * story to open, not to the session that opens it.
+ * is no persona — that belongs to the map that picks which story to open, not to
+ * the session that opens it.
+ *
+ * There *is* a release axis, which there was not when this parser was written.
+ * `delivery` lines declare it in timeline order, and `@` places the story and
+ * each example on it — the same sigil doc-sm uses for the same job. Like
+ * doc-sm's, the reference is resolved in phase 2, so a delivery may be declared
+ * after the example that ships in it.
  *
  * There is a ticket, though, and exactly one. The story under discussion is a
  * story in somebody's tracker, and `#id ~status` after its title is how the file
@@ -20,11 +26,15 @@
 import { tokenize, type Token, type TokenKind } from './lexer.ts';
 import {
 	DEFAULT_STORY_STATUS,
+	DELIVERY_KINDS,
 	emptyStory,
+	isDeliveryKind,
 	isStoryStatus,
 	STEP_CLAUSES,
 	STORY_STATUSES,
 	wrapNote,
+	type DeliveryKind,
+	type DeliveryNode,
 	type ExampleMapDocument,
 	type ExampleNode,
 	type QuestionNode,
@@ -66,6 +76,24 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 	};
 	const advance = (): Token => tokens[Math.min(position++, tokens.length - 1)]!;
 	const atDeclaration = (): boolean => at('keyword') && peek().value !== 'examplemap';
+
+	/*
+	 * Every `@delivery` written anywhere in the file, with where it was written.
+	 *
+	 * Phase 2 of doc-sm's design, done without doc-sm's second tree. There, a
+	 * story's release has to be *rewritten* once the releases are known, so the
+	 * parser builds raw nodes and `resolve` converts them. Here the stored value
+	 * is the delivery's title — the same string the reference is written with —
+	 * so there is nothing to rewrite and the node can be built on the spot.
+	 *
+	 * What still cannot be decided until the end is whether the reference names
+	 * anything, because a `delivery` line may appear after the example that ships
+	 * in it. So the check is deferred and only the *position* has to be carried,
+	 * which is what this list is: enough to report at the right caret, and no
+	 * more.
+	 */
+	const references: { name: string; token: Token; what: string }[] = [];
+	const deliveries: { node: DeliveryNode; token: Token }[] = [];
 
 	const problemAt = (token: Token, message: string, hint?: string): void =>
 		report(problems, { message, line: token.line, column: token.column, length: token.length, hint });
@@ -186,9 +214,24 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 			synchronize();
 			return true;
 		}
+		// `@delivery` is the only annotation an example takes. It carries no ticket
+		// and no status: an example is not a thing the tracker knows about, it is
+		// what makes the story true.
+		let delivery: string | null = null;
+		while (at('at')) {
+			const sigil = advance();
+			const name = parseReference(sigil, 'this example', 'a delivery');
+			if (name === null) continue;
+			if (delivery !== null) {
+				problemAt(sigil, 'This example names two deliveries.', 'An example ships once.');
+				continue;
+			}
+			delivery = name;
+		}
+
 		const notes: string[] = [];
 		const steps: Record<StepClause, string[]> = { given: [], when: [], then: [] };
-		examples.push({ title, notes, given: steps.given, when: steps.when, then: steps.then });
+		examples.push({ title, notes, delivery, given: steps.given, when: steps.when, then: steps.then });
 		parseBody('example', () => parseStep(steps) || parseNote(notes));
 		return true;
 	}
@@ -251,24 +294,26 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 	 * correct, and each may appear once. A repeat is an error rather than a
 	 * last-one-wins, because a repeat means a bad merge.
 	 */
-	function parseStoryAnnotations(): { ticket: string | null; status: StoryStatus } {
+	function parseStoryAnnotations(): {
+		ticket: string | null;
+		status: StoryStatus;
+		release: string | null;
+	} {
 		let ticket: string | null = null;
 		let status: StoryStatus | null = null;
+		let release: string | null = null;
 
 		while (at('at') || at('hash') || at('tilde')) {
 			const sigil = advance();
 
-			// `@` is doc-sm's release sigil, and a hand-written map is quite likely
-			// to arrive carrying one. Naming what it means there is more use than
-			// "unexpected character" — the author knows the notation, just not that
-			// this map has no bands.
 			if (sigil.kind === 'at') {
-				problemAt(
-					sigil,
-					'An example map has no releases.',
-					'`@` puts a story in a band on a story map. An example map is one story, so there is nothing to band.',
-				);
-				if (at('ident') || at('string')) advance();
+				const name = parseReference(sigil, 'the story', 'a release');
+				if (name === null) continue;
+				if (release !== null) {
+					problemAt(sigil, 'This story names two deliveries.', 'A story ships once.');
+					continue;
+				}
+				release = name;
 				continue;
 			}
 
@@ -314,8 +359,67 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 			status = word.value;
 		}
 
-		// Unlinked, and nothing said about it yet.
-		return { ticket, status: status ?? DEFAULT_STORY_STATUS };
+		// Unlinked, unscheduled, and nothing said about it yet.
+		return { ticket, status: status ?? DEFAULT_STORY_STATUS, release };
+	}
+
+	/**
+	 * One `@delivery` reference: the name, recorded for phase 2 to check.
+	 *
+	 * Bare when the scanner reads it as one token, quoted when it does not —
+	 * `@MVP` and `@"Sprint 1"` are the same reference written two ways, exactly as
+	 * doc-sm spells its releases.
+	 *
+	 * Returns `null` when there was nothing usable after the sigil, and the caller
+	 * carries on: an example with a malformed reference is still an example, and
+	 * the rest of the card is still worth reading.
+	 */
+	function parseReference(sigil: Token, owner: string, expected: string): string | null {
+		if (!at('ident') && !at('string')) {
+			problemAt(
+				sigil,
+				`Expected a delivery name after \`@\`, found ${describe(peek())}.`,
+				`Write @Sprint1, or @"Sprint 1" when the name has spaces in it.`,
+			);
+			return null;
+		}
+		const name = advance();
+		references.push({ name: name.value, token: sigil, what: `${owner} ships in ${expected}` });
+		return name.value;
+	}
+
+	/**
+	 * `delivery "Sprint 1" sprint` — one band of the timeline.
+	 *
+	 * The kind is required rather than defaulted. A defaulted kind would make the
+	 * common case shorter and the *meaning* of a bare `delivery` line depend on
+	 * which default was chosen months ago; two words is a small price for a line
+	 * that reads as what it is.
+	 */
+	function parseDelivery(): boolean {
+		if (!at('keyword', 'delivery')) return false;
+		const keyword = advance();
+		const title = expectString('delivery', 'A delivery is quoted: delivery "Sprint 1" sprint');
+		if (title === undefined) {
+			synchronize();
+			return true;
+		}
+
+		let kind: DeliveryKind = 'sprint';
+		if (!at('keyword') || !isDeliveryKind(peek().value)) {
+			problemAt(
+				peek(),
+				`Expected ${DELIVERY_KINDS.join(' or ')} after the delivery's name, found ${describe(peek())}.`,
+				'A delivery says which it is: delivery "1.0" release',
+			);
+		} else {
+			kind = advance().value as DeliveryKind;
+		}
+
+		const notes: string[] = [];
+		deliveries.push({ node: { title, kind, notes }, token: keyword });
+		parseBody('delivery', () => parseNote(notes));
+		return true;
 	}
 
 	/**
@@ -334,10 +438,10 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 			return true;
 		}
 
-		const { ticket, status } = parseStoryAnnotations();
+		const { ticket, status, release } = parseStoryAnnotations();
 		const notes: string[] = [];
 		const questions: QuestionNode[] = [];
-		const node: StoryNode = { title, notes, ticket, status, questions };
+		const node: StoryNode = { title, notes, ticket, status, release, questions };
 		parseBody('story', () => parseQuestion(questions) || parseNote(notes));
 
 		if (state.token !== null) {
@@ -404,6 +508,7 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 						'A ticketing space is quoted: space "CLONB"',
 						'The ticketing space is declared twice. A ticket is raised into one space.',
 					) ||
+					parseDelivery() ||
 					parseStory(story) ||
 					parseRule(rules) ||
 					parseNote(notes),
@@ -424,11 +529,15 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 			if (!at('eof') && !at('keyword', 'examplemap')) advance();
 		}
 
+		// Phase 2: what only makes sense once the whole file has been read.
+		resolveDeliveries();
+
 		return {
 			title,
 			product: product.value,
 			space: space.value,
 			notes: [...notes],
+			deliveries: deliveries.map((entry) => entry.node),
 			// A map with no `story` line is not an error: it is a session that has
 			// not named its story yet, which is exactly what a fresh board is.
 			story: story.value ?? emptyStory(),
@@ -436,9 +545,54 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 		};
 	}
 
+	/**
+	 * The two checks that need the whole file: duplicate bands, dangling
+	 * references.
+	 *
+	 * **Duplicate titles are an error**, and that decision is what licenses
+	 * storing a reference as a title at all. If two bands could be called
+	 * "Sprint 1" then `@"Sprint 1"` would not name one of them, and every reader
+	 * — this parser, the board, a person — would have to guess. The two decisions
+	 * stand or fall together.
+	 *
+	 * **A reference to a delivery that was never declared is an error** rather
+	 * than a silent drop. Dropping it would quietly unschedule somebody's work and
+	 * the export would then make that permanent, which is the one failure mode a
+	 * round-tripping format must not have. It is reported at the `@`, and the hint
+	 * lists what was actually declared — a misspelling is the usual cause, and the
+	 * fix is then visible without leaving the message.
+	 */
+	function resolveDeliveries(): void {
+		const seen = new Map<string, Token>();
+		for (const { node, token } of deliveries) {
+			const first = seen.get(node.title);
+			if (first !== undefined) {
+				problemAt(
+					token,
+					`Two deliveries are called ${JSON.stringify(node.title)}.`,
+					`Already declared on line ${first.line}. \`@\` names a delivery by its title, so titles have to be unique.`,
+				);
+				continue;
+			}
+			seen.set(node.title, token);
+		}
+
+		for (const reference of references) {
+			if (seen.has(reference.name)) continue;
+			const known = [...seen.keys()];
+			problemAt(
+				reference.token,
+				`No delivery is called ${JSON.stringify(reference.name)}, but ${reference.what}.`,
+				known.length === 0
+					? 'Declare it first: delivery "Sprint 1" sprint'
+					: `Declared: ${known.map((title) => JSON.stringify(title)).join(', ')}.`,
+			);
+		}
+	}
+
 	return { parseFile };
 }
 
 function blank(title: string): ExampleMapDocument {
-	return { title, product: null, space: null, notes: [], story: emptyStory(), rules: [] };
+	return { title, product: null, space: null, notes: [], deliveries: [], story: emptyStory(), rules: [] };
 }

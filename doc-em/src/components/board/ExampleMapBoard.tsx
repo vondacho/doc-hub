@@ -40,7 +40,7 @@ import { cardClass } from '../../lib/board/kinds.ts';
 import { reduce, resetsHistory, type BoardAction, type QuestionParent } from '../../lib/board/reducer.ts';
 import { cardsWithDetail, emptyBoard, type BoardState, type Id } from '../../lib/board/state.ts';
 import { featureFilename, toGherkin, unwritableQuestions } from '../../lib/examplemap/gherkin.ts';
-import { cardLabel, type CardKind } from '../../lib/examplemap/model.ts';
+import { cardLabel, deliveryKindLabel, type CardKind } from '../../lib/examplemap/model.ts';
 import { parse } from '../../lib/examplemap/parser.ts';
 import { ExampleMapParseError, type Problem } from '../../lib/examplemap/problems.ts';
 import { SAMPLE_SOURCE } from '../../lib/examplemap/sample.ts';
@@ -92,7 +92,14 @@ export default function ExampleMapBoard({
 	const [zoomIndex, setZoomIndex] = useState(DEFAULT_ZOOM_INDEX);
 	const [fullscreen, setFullscreen] = useState(false);
 	const [expanded, setExpanded] = useState<ReadonlySet<Id>>(() => new Set());
-	const [dragging, setDragging] = useState<{ kind: CardKind; title: string } | null>(null);
+	/**
+	 * What is currently under the cursor, for the drag overlay.
+	 *
+	 * `kind` is a card kind, or `delivery` for a band being reordered — the
+	 * overlay paints a card in its own colour, and a band has no card colour
+	 * because it is not a card.
+	 */
+	const [dragging, setDragging] = useState<{ kind: CardKind | 'delivery'; title: string } | null>(null);
 	const stage = useRef<HTMLDivElement>(null);
 
 	const dispatch = useCallback((action: BoardAction) => {
@@ -260,7 +267,12 @@ export default function ExampleMapBoard({
 		const type = args.active.data.current?.type;
 		const containers = args.droppableContainers.filter((container) => {
 			const data = container.data.current;
+			// A rule reorders among rules and a band among bands: both are sortable
+			// against their own kind and against nothing else. Without this a rule
+			// being dragged sideways would happily collide with the cells beneath
+			// it, which are much larger targets.
 			if (type === 'rule') return data?.type === 'rule';
+			if (type === 'delivery') return data?.type === 'delivery';
 			return data?.accepts === type || data?.type === type;
 		});
 		return closestCenter({ ...args, droppableContainers: containers });
@@ -268,10 +280,16 @@ export default function ExampleMapBoard({
 
 	const onDragStart = useCallback(
 		(event: DragStartEvent) => {
-			const type = event.active.data.current?.type as CardKind | undefined;
+			const type = event.active.data.current?.type as CardKind | 'delivery' | undefined;
 			const id = String(event.active.id);
 			const title =
-				type === 'rule' ? board.rules[id]?.title : type === 'example' ? board.examples[id]?.title : board.questions[id]?.title;
+				type === 'rule'
+					? board.rules[id]?.title
+					: type === 'example'
+						? board.examples[id]?.title
+						: type === 'delivery'
+							? board.deliveries[id]?.title
+							: board.questions[id]?.title;
 			setDragging(type === undefined || title === undefined ? null : { kind: type, title });
 		},
 		[board],
@@ -293,16 +311,27 @@ export default function ExampleMapBoard({
 				return;
 			}
 
+			if (activeData?.type === 'delivery') {
+				const index = board.deliveryOrder.indexOf(overId);
+				if (index !== -1) dispatch({ type: 'moveDelivery', id: activeId, index });
+				return;
+			}
+
 			if (activeData?.type === 'example') {
-				const fromRuleId = String(activeData.ruleId);
-				const toRuleId = String(overData?.ruleId ?? fromRuleId);
-				const target = board.rules[toRuleId]?.exampleIds ?? [];
+				// The drop is either on a cell (its own `cell` datum) or on another
+				// example, whose datum names the cell it is in. Both resolve to a
+				// cell key, which is the only thing the reducer needs — rule and band
+				// are both encoded in it, so a sideways, downward or diagonal drag is
+				// the same call.
+				const from = String(activeData.cell);
+				const to = String(overData?.cell ?? from);
+				const target = board.cells[to] ?? [];
 				const index = target.indexOf(overId);
 				dispatch({
 					type: 'moveExample',
 					exampleId: activeId,
-					fromRuleId,
-					toRuleId,
+					from,
+					to,
 					index: index === -1 ? target.length : index,
 				});
 				return;
@@ -369,6 +398,8 @@ export default function ExampleMapBoard({
 				onPreview={() => setPreviewing(true)}
 				onLoadSample={() => load(SAMPLE_SOURCE)}
 				onAddRule={() => dispatch({ type: 'addRule', index: board.ruleOrder.length })}
+				onAddSprint={() => dispatch({ type: 'addDelivery', kind: 'sprint', index: board.deliveryOrder.length })}
+				onAddRelease={() => dispatch({ type: 'addDelivery', kind: 'release', index: board.deliveryOrder.length })}
 				onUndo={() => send({ type: 'undo' })}
 				onRedo={() => send({ type: 'redo' })}
 				zoom={zoom}
@@ -422,7 +453,14 @@ export default function ExampleMapBoard({
 						{dragging && (
 							<div
 								style={{ fontSize: `${BASE_FONT * zoom}px` }}
-								className={`rounded-[0.4em] border px-[0.55em] py-[0.4em] text-[1em] shadow-lg ${cardClass[dragging.kind]}`}
+								className={`rounded-[0.4em] border px-[0.55em] py-[0.4em] text-[1em] shadow-lg ${
+									// A band has no card colour, because it is not a card. It
+									// drags as a plain opaque label, which is also how it looks
+									// at rest in the rail.
+									dragging.kind === 'delivery'
+										? 'border-slate-300 bg-white font-semibold dark:border-slate-600 dark:bg-night-raised'
+										: cardClass[dragging.kind]
+								}`}
 							>
 								{dragging.title}
 							</div>
@@ -438,5 +476,8 @@ function nameOf(board: BoardState, id: string): string {
 	if (board.rules[id]) return `${cardLabel.rule} ${board.rules[id]!.title}`;
 	if (board.examples[id]) return `${cardLabel.example} ${board.examples[id]!.title}`;
 	if (board.questions[id]) return `${cardLabel.question} ${board.questions[id]!.title}`;
+	// A band is not a card, and the announcement should not call it one.
+	const delivery = board.deliveries[id];
+	if (delivery) return `${deliveryKindLabel[delivery.kind]} ${delivery.title}`;
 	return 'the card';
 }

@@ -100,6 +100,50 @@ export const clauseKeyword: Record<StepClause, string> = {
 };
 
 /**
+ * A sprint or a release — the two kinds of delivery, and the whole time axis.
+ *
+ * One type with a kind rather than two types, because a sprint *is* a release in
+ * every way this board cares about: it is a dated thing that work is committed
+ * to, it sits at a point on a timeline, and cards are placed in it. The only
+ * difference is scale, and scale is a word, not a structure.
+ *
+ * What the kinds are for is reading. A board with four sprints and one release
+ * says something a board with five equal bands does not — that four of them are
+ * steps towards the fifth. The story ships in the release; its examples ship in
+ * the sprints along the way.
+ */
+export type DeliveryKind = 'sprint' | 'release';
+
+export const DELIVERY_KINDS: readonly DeliveryKind[] = ['sprint', 'release'];
+
+export const deliveryKindLabel: Record<DeliveryKind, string> = {
+	sprint: 'Sprint',
+	release: 'Release',
+};
+
+export function isDeliveryKind(value: unknown): value is DeliveryKind {
+	return typeof value === 'string' && (DELIVERY_KINDS as readonly string[]).includes(value);
+}
+
+/**
+ * One band of the board: a sprint or a release, and the work placed in it.
+ *
+ * **Declaration order is timeline order**, top to bottom. There is no date field
+ * and no index, for the reason doc-sm gives about its releases: an explicit
+ * ordinal is a second copy of a fact the list already states, and the copy is
+ * what drifts. A board is re-ordered by moving a band, not by editing a number.
+ *
+ * No dates, either. A date on a sprint would be the one thing here that goes
+ * stale on its own, and it would make the file wrong rather than merely old. The
+ * tracker holds the calendar; this holds the sequence.
+ */
+export interface DeliveryNode {
+	readonly title: string;
+	readonly kind: DeliveryKind;
+	readonly notes: readonly string[];
+}
+
+/**
  * A concrete case illustrating a rule.
  *
  * The title is the card as it is written on the wall — one line, in the room's
@@ -123,6 +167,30 @@ export const clauseKeyword: Record<StepClause, string> = {
 export interface ExampleNode {
 	readonly title: string;
 	readonly notes: readonly string[];
+	/**
+	 * The delivery this example ships in, by declared **title**, or `null` for one
+	 * nobody has committed to yet.
+	 *
+	 * A title rather than an index or an id, because the title is what the file
+	 * writes after `@`. That is only sound because duplicate delivery titles are a
+	 * parse error — the two decisions stand or fall together, so they are
+	 * documented together (see resolve() in parser.ts).
+	 *
+	 * `null` is the below-the-line band: examples that are agreed and not yet
+	 * scheduled. Absence is the encoding — there is no `@none` sentinel to spell
+	 * wrong — and it is an ordinary state rather than a missing value. Most
+	 * examples are born there.
+	 *
+	 * ## Why this hangs on the example and not the rule
+	 *
+	 * Because the example is the unit that ships. A rule is a constraint, and a
+	 * constraint is not delivered in a sprint; the concrete cases that satisfy it
+	 * are, one at a time, and a rule is finished when the last of them lands. That
+	 * is what makes an example the smallest thing on this board with business
+	 * value attached — and it is why the time axis crosses the rules rather than
+	 * ordering them.
+	 */
+	readonly delivery: string | null;
 	readonly given: readonly string[];
 	readonly when: readonly string[];
 	readonly then: readonly string[];
@@ -188,6 +256,16 @@ export interface StoryNode {
 	 * answer wins, and this is what was last heard from it.
 	 */
 	readonly status: StoryStatus;
+	/**
+	 * The delivery this story ships in, by declared title, or `null` when nobody
+	 * has committed to one.
+	 *
+	 * Expected to name a **release** rather than a sprint — the story is the whole
+	 * of what the session is about, and it is done when every example under it is
+	 * done. Naming a sprint is allowed and flagged on the board rather than
+	 * refused here; see `scheduleWarnings`.
+	 */
+	readonly release: string | null;
 	/** Questions raised before any rule existed: doubts about the story itself. */
 	readonly questions: readonly QuestionNode[];
 }
@@ -224,6 +302,15 @@ export interface ExampleMapDocument {
 	 */
 	readonly space: string | null;
 	readonly notes: readonly string[];
+	/**
+	 * The time axis, in order, earliest first.
+	 *
+	 * Empty is the ordinary state for a map that has not been scheduled — an
+	 * example mapping session produces rules and examples, and deciding when they
+	 * ship is a different conversation on a different day. A board with no
+	 * deliveries shows no bands at all rather than one empty one.
+	 */
+	readonly deliveries: readonly DeliveryNode[];
 	readonly story: StoryNode;
 	readonly rules: readonly RuleNode[];
 }
@@ -318,6 +405,7 @@ export function emptyDocument(title = 'Untitled example map'): ExampleMapDocumen
 		product: null,
 		space: null,
 		notes: [],
+		deliveries: [],
 		story: emptyStory(),
 		rules: [],
 	};
@@ -332,9 +420,8 @@ export function emptyDocument(title = 'Untitled example map'): ExampleMapDocumen
  * `StoryNode` cannot leave one of them behind.
  */
 export function emptyStory(title = UNDEFINED_STORY): StoryNode {
-	return { title, notes: [], ticket: null, status: DEFAULT_STORY_STATUS, questions: [] };
+	return { title, notes: [], ticket: null, status: DEFAULT_STORY_STATUS, release: null, questions: [] };
 }
-
 
 /**
  * How wide a line of note text may be before it is broken.

@@ -7,10 +7,16 @@
  * understood". So: one story spanning the width, its own questions beside it,
  * then a column per rule holding that rule's examples and then its questions.
  *
- * Simpler than doc-sm's grid, and for a real reason rather than by omission:
- * there is no second axis. A story map has releases crossing steps and needs a
- * two-dimensional cell; an example map has one story, and everything else hangs
- * off a rule.
+ * It used to be simpler than doc-sm's grid, on the argument that there was no
+ * second axis. Deliveries are that second axis. A rule is still the column an
+ * example belongs to; a sprint is now the row it ships in, and the cell where
+ * the two meet is the whole statement of "this case, under that rule, in that
+ * sprint".
+ *
+ * Questions are the one thing that stayed out of the grid. A question is not
+ * delivered — it is answered, usually before anything ships — so it sits in a
+ * strip directly under its rule's header, above every band, rather than being
+ * given a row it has no business in.
  *
  * What is kept from doc-sm, deliberately: the em-based sizing so one font-size
  * scales the whole board, the sticky header that pins where it rests, the
@@ -31,8 +37,20 @@ import {
 	type StoryStatus,
 } from '../../lib/examplemap/model.ts';
 import type { BoardAction, QuestionParent } from '../../lib/board/reducer.ts';
-import { STORY_DETAIL_KEY, type BoardState, type Example, type Id } from '../../lib/board/state.ts';
+import {
+	bands,
+	cellKey,
+	examplesIn,
+	splitCellKey,
+	STORY_DETAIL_KEY,
+	UNSCHEDULED,
+	type BandId,
+	type BoardState,
+	type Example,
+	type Id,
+} from '../../lib/board/state.ts';
 import { Card } from './Card.tsx';
+import { DeliveryRail } from './DeliveryRail.tsx';
 import { StoryMeta } from './StoryMeta.tsx';
 import { ExampleSteps } from './ExampleSteps.tsx';
 import type { CardMenuAction } from './CardMenu.tsx';
@@ -49,7 +67,10 @@ export const BASE_FONT = 20.8;
 
 const STORY_ROW = 1;
 const RULE_ROW = 2;
-const CARDS_ROW = 3;
+/** Questions hang off the rule, above the timeline, and take one row. */
+const QUESTION_ROW = 3;
+/** The first band. Every delivery adds a row, and below-the-line is the last. */
+const FIRST_BAND_ROW = 4;
 
 export function BoardGrid({
 	board,
@@ -103,7 +124,12 @@ export function BoardGrid({
 		return () => observer.disconnect();
 	}, []);
 
-	const columns = Math.max(1, board.ruleOrder.length);
+	// Column 1 is the delivery rail, which claims it itself; the rules follow it.
+	// A rule at index `i` is therefore in column `i + 2`, and that offset is
+	// written once here rather than as a `+ 2` at each place that needs it.
+	const columnOfRule = (index: number): number => index + 2;
+	const columns = Math.max(1, board.ruleOrder.length) + 1;
+	const rows = bands(board);
 
 	return (
 		<div
@@ -121,7 +147,9 @@ export function BoardGrid({
 				<div
 					ref={grid}
 					className="grid min-w-max gap-[0.4em]"
-					style={{ gridTemplateColumns: `repeat(${columns}, minmax(${COLUMN}, 1fr))` }}
+					style={{
+						gridTemplateColumns: `minmax(7em, max-content) repeat(${columns - 1}, minmax(${COLUMN}, 1fr))`,
+					}}
 				>
 					{/* Opaque behind the two header rows: the cards are opaque but the
 					    grid's gaps are not. */}
@@ -160,10 +188,15 @@ export function BoardGrid({
 								},
 								{ label: 'Ask a question about the story', separated: true, run: () => dispatch({ type: 'addQuestion', parent: { story: true } }) },
 								...statusActions(dispatch, board.story.status, board.story.ticket !== null),
+								...releaseActions(board, dispatch),
 							]}
 							className="min-w-[16em] flex-1"
 						>
-							<StoryMeta ticket={board.story.ticket} status={board.story.status} />
+							<StoryMeta
+								ticket={board.story.ticket}
+								status={board.story.status}
+								release={board.story.release === null ? null : (board.deliveries[board.story.release]?.title ?? null)}
+							/>
 						</Card>
 
 						<QuestionStrip
@@ -196,7 +229,7 @@ export function BoardGrid({
 									onNotes={(text) => dispatch({ type: 'setNotes', kind: 'rule', id: ruleId, text })}
 									menu={ruleMenu(board, dispatch, ruleId, index)}
 									className="sticky z-10"
-									style={{ gridColumn: index + 1, gridRow: RULE_ROW, top: ruleTop }}
+									style={{ gridColumn: columnOfRule(index), gridRow: RULE_ROW, top: ruleTop }}
 								/>
 							);
 						})}
@@ -209,29 +242,63 @@ export function BoardGrid({
 							type="button"
 							onClick={() => dispatch({ type: 'addRule', index: 0 })}
 							aria-label="Add the first rule"
-							style={{ gridColumn: 1, gridRow: RULE_ROW }}
+							style={{ gridColumn: columnOfRule(0), gridRow: RULE_ROW }}
 							className="flex items-center justify-center rounded-[0.4em] border border-dashed border-slate-300 px-2 py-[0.4em] text-ink-muted hover:border-brand hover:text-brand focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand dark:border-slate-600 dark:text-slate-400 dark:hover:border-sky-400 dark:hover:text-sky-400"
 						>
 							<Icon name="plus" className="h-[1em] w-[1em]" />
 						</button>
 					)}
 
-					{/* ---- the examples and questions under each rule ---- */}
+					{/* ---- the timeline down the left ---- */}
+					<DeliveryRail board={board} dispatch={dispatch} firstRow={FIRST_BAND_ROW} />
+
+					{/* ---- the questions on each rule, above every band ---- */}
 					{board.ruleOrder.map((ruleId, index) => {
 						const rule = board.rules[ruleId];
 						if (!rule) return null;
 						return (
-							<RuleColumn
-								key={`col-${ruleId}`}
+							<div
+								key={`q-${ruleId}`}
+								style={{ gridColumn: columnOfRule(index), gridRow: QUESTION_ROW }}
+								className="group/q flex flex-col gap-[0.3em]"
+							>
+								<QuestionStrip
+									board={board}
+									dispatch={dispatch}
+									parent={{ ruleId }}
+									ids={rule.questionIds}
+									expanded={expanded}
+									onToggleDetail={onToggleDetail}
+									stacked
+								/>
+								<div className="flex gap-1 opacity-0 transition group-hover/q:opacity-100 focus-within:opacity-100 motion-reduce:transition-none">
+									<Add
+										label={`Ask a question about ${rule.title}`}
+										onClick={() => dispatch({ type: 'addQuestion', parent: { ruleId } })}
+									>
+										Question
+									</Add>
+								</div>
+							</div>
+						);
+					})}
+
+					{/* ---- one cell per rule per band ---- */}
+					{board.ruleOrder.flatMap((ruleId, index) =>
+						rows.map((band, bandIndex) => (
+							<ExampleCell
+								key={`cell-${ruleId}-${band}`}
 								board={board}
 								dispatch={dispatch}
-								rule={ruleId}
-								column={index + 1}
+								ruleId={ruleId}
+								band={band}
+								column={columnOfRule(index)}
+								row={FIRST_BAND_ROW + bandIndex}
 								expanded={expanded}
 								onToggleDetail={onToggleDetail}
 							/>
-						);
-					})}
+						)),
+					)}
 				</div>
 			</div>
 		</div>
@@ -239,42 +306,57 @@ export function BoardGrid({
 }
 
 /**
- * One rule's column: its examples, then its questions.
+ * One cell: the examples of one rule that ship in one band.
  *
- * Examples first because that is the order they are written, and because the
- * question is usually what stopped the examples. A rule showing questions and no
- * examples is the practice's own warning sign, and it should look like one.
+ * The drop target *is* the schedule. Dragging a card from the "Sprint 2" row to
+ * the "Sprint 1" row is how an example is brought forward, and dragging it
+ * sideways is how it is re-filed under a different rule — the same gesture, one
+ * action, one undo step. Nothing on the card itself records where it is; see the
+ * note at the top of src/lib/board/state.ts for why that is the whole point.
+ *
+ * Every cell exists in the DOM even when it is empty, unlike the `cells` record
+ * which only holds the ones with something in them. An empty cell is a drop
+ * target and a place to click `+`, so it has to be there; it is one dashed
+ * rectangle and costs nothing.
  */
-function RuleColumn({
+function ExampleCell({
 	board,
 	dispatch,
-	rule: ruleId,
+	ruleId,
+	band,
 	column,
+	row,
 	expanded,
 	onToggleDetail,
 }: {
 	board: BoardState;
 	dispatch: (action: BoardAction) => void;
-	rule: Id;
+	ruleId: Id;
+	band: BandId;
 	column: number;
+	row: number;
 	expanded: ReadonlySet<Id>;
 	onToggleDetail: (id: Id) => void;
 }) {
 	const rule = board.rules[ruleId];
-	const { setNodeRef, isOver } = useDroppable({ id: `examples:${ruleId}`, data: { accepts: 'example', ruleId } });
+	const key = cellKey(ruleId, band);
+	const { setNodeRef, isOver } = useDroppable({ id: `cell:${key}`, data: { accepts: 'example', cell: key } });
 	if (!rule) return null;
+
+	const ids = examplesIn(board, ruleId, band);
+	const where = band === UNSCHEDULED ? 'below the line' : (board.deliveries[band]?.title ?? 'this band');
 
 	return (
 		<div
 			ref={setNodeRef}
-			style={{ gridColumn: column, gridRow: CARDS_ROW }}
-			className={`group/col flex min-h-[4em] flex-col gap-[0.3em] rounded-[0.4em] border border-dashed p-[0.3em] transition-colors motion-reduce:transition-none ${
+			style={{ gridColumn: column, gridRow: row }}
+			className={`group/cell flex min-h-[3em] flex-col gap-[0.3em] rounded-[0.4em] border border-dashed p-[0.3em] transition-colors motion-reduce:transition-none ${
 				isOver ? 'border-brand bg-brand/5 dark:border-sky-400 dark:bg-sky-400/10' : 'border-slate-200 dark:border-slate-700'
 			}`}
 		>
-			<ul aria-label={`Examples for ${rule.title}`} className="flex flex-col gap-[0.3em]">
-				<SortableContext items={[...rule.exampleIds]} strategy={verticalListSortingStrategy}>
-					{rule.exampleIds.map((id, index) => {
+			<ul aria-label={`Examples for ${rule.title} in ${where}`} className="flex flex-col gap-[0.3em]">
+				<SortableContext items={[...ids]} strategy={verticalListSortingStrategy}>
+					{ids.map((id, index) => {
 						const card = board.examples[id];
 						if (!card) return null;
 						return (
@@ -284,8 +366,8 @@ function RuleColumn({
 									kind="example"
 									title={card.title}
 									notes={card.notes}
-									position={`${index + 1} of ${rule.exampleIds.length} under "${rule.title}"`}
-									data={{ type: 'example', ruleId }}
+									position={`${index + 1} of ${ids.length} under "${rule.title}", ${where}`}
+									data={{ type: 'example', cell: key }}
 									detailOpen={expanded.has(id)}
 									onToggleDetail={() => onToggleDetail(id)}
 									onRetitle={(title) => dispatch({ type: 'retitle', kind: 'example', id, title })}
@@ -299,7 +381,7 @@ function RuleColumn({
 											}
 										/>
 									}
-									menu={exampleMenu(dispatch, id, card)}
+									menu={exampleMenu(board, dispatch, id, card, key)}
 								/>
 							</li>
 						);
@@ -307,27 +389,18 @@ function RuleColumn({
 				</SortableContext>
 			</ul>
 
-			<QuestionStrip
-				board={board}
-				dispatch={dispatch}
-				parent={{ ruleId }}
-				ids={rule.questionIds}
-				expanded={expanded}
-				onToggleDetail={onToggleDetail}
-				stacked
-			/>
-
-			<div className="flex gap-1 opacity-0 transition group-hover/col:opacity-100 focus-within:opacity-100 motion-reduce:transition-none">
-				<Add label={`Add an example to ${rule.title}`} onClick={() => dispatch({ type: 'addExample', ruleId })}>
+			<div className="flex gap-1 opacity-0 transition group-hover/cell:opacity-100 focus-within:opacity-100 motion-reduce:transition-none">
+				<Add
+					label={`Add an example to ${rule.title} in ${where}`}
+					onClick={() => dispatch({ type: 'addExample', ruleId, band })}
+				>
 					Example
-				</Add>
-				<Add label={`Ask a question about ${rule.title}`} onClick={() => dispatch({ type: 'addQuestion', parent: { ruleId } })}>
-					Question
 				</Add>
 			</div>
 		</div>
 	);
 }
+
 
 function QuestionStrip({
 	board,
@@ -384,6 +457,40 @@ function QuestionStrip({
 			</SortableContext>
 		</ul>
 	);
+}
+
+/**
+ * Which delivery the story ships in.
+ *
+ * Every band is offered, not only the releases. A story that ships in a sprint
+ * is unusual rather than impossible — a small one genuinely does — and the board
+ * says so in the readings instead of making the choice unavailable. Refusing it
+ * here would mean the file could express something the board could not, which is
+ * the one asymmetry a round-tripping tool must not have.
+ *
+ * Empty when there are no bands: "ship this in nothing" is not a decision, and a
+ * menu section with one disabled item in it is worse than no section.
+ */
+function releaseActions(board: BoardState, dispatch: (action: BoardAction) => void): CardMenuAction[] {
+	if (board.deliveryOrder.length === 0) return [];
+
+	const actions: CardMenuAction[] = board.deliveryOrder
+		.filter((id) => id !== board.story.release)
+		.map((id, position) => ({
+			label: `Ship in ${board.deliveries[id]?.title ?? 'it'}`,
+			separated: position === 0,
+			run: () => dispatch({ type: 'setStoryRelease', release: id }),
+		}));
+
+	if (board.story.release !== null) {
+		actions.push({
+			label: 'Not scheduled yet',
+			separated: actions.length === 0,
+			run: () => dispatch({ type: 'setStoryRelease', release: null }),
+		});
+	}
+
+	return actions;
 }
 
 /**
@@ -452,9 +559,11 @@ function addNote(
  * step, only a second `Given`.
  */
 function exampleMenu(
+	board: BoardState,
 	dispatch: (action: BoardAction) => void,
 	id: Id,
 	example: Example,
+	cell: string,
 ): CardMenuAction[] {
 	const clause = (name: StepClause): CardMenuAction => {
 		const written = example[name].filter((step) => step.trim() !== '').length;
@@ -469,12 +578,50 @@ function exampleMenu(
 	return [
 		...STEP_CLAUSES.map(clause),
 		addNote(dispatch, 'example', id, example.notes),
+		...scheduleActions(board, dispatch, id, cell),
 		{
 			label: 'Delete this example',
 			separated: true,
 			run: () => dispatch({ type: 'remove', kind: 'example', id }),
 		},
 	];
+}
+
+/**
+ * Move this example to another band, without a mouse.
+ *
+ * Drag is never the only way to do anything on this board, and scheduling is the
+ * one operation where that matters most: a plan is edited far more often than it
+ * is drawn, frequently by somebody reading it back rather than the person who
+ * made it.
+ *
+ * The band it is already in is left out — an item that does nothing is one more
+ * thing to read past.
+ */
+function scheduleActions(
+	board: BoardState,
+	dispatch: (action: BoardAction) => void,
+	id: Id,
+	cell: string,
+): CardMenuAction[] {
+	const { ruleId, band } = splitCellKey(cell);
+	return bands(board)
+		.filter((candidate) => candidate !== band)
+		.map((candidate, position) => ({
+			label:
+				candidate === UNSCHEDULED
+					? 'Move below the line'
+					: `Deliver in ${board.deliveries[candidate]?.title ?? 'it'}`,
+			separated: position === 0,
+			run: () =>
+				dispatch({
+					type: 'moveExample',
+					exampleId: id,
+					from: cell,
+					to: cellKey(ruleId, candidate),
+					index: examplesIn(board, ruleId, candidate).length,
+				}),
+		}));
 }
 
 /** A question's menu. Examples have their own — see `exampleMenu`. */
@@ -513,7 +660,14 @@ function ruleMenu(
 			run: index < last ? () => dispatch({ type: 'moveRule', ruleId: id, index: index + 1 }) : undefined,
 			disabledReason: index < last ? undefined : 'It is already last.',
 		},
-		{ label: 'Add an example', separated: true, run: () => dispatch({ type: 'addExample', ruleId: id }) },
+		{
+			// Below the line, because an example that has just been thought of has
+			// not been planned into anything. The cell `+` buttons are how one is
+			// created already scheduled.
+			label: 'Add an example',
+			separated: true,
+			run: () => dispatch({ type: 'addExample', ruleId: id, band: UNSCHEDULED }),
+		},
 		{ label: 'Ask a question about it', run: () => dispatch({ type: 'addQuestion', parent: { ruleId: id } }) },
 		addNote(dispatch, 'rule', id, rule?.notes ?? []),
 		{ label: 'Add a rule after it', separated: true, run: () => dispatch({ type: 'addRule', index: index + 1 }) },

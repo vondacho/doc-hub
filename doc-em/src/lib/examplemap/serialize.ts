@@ -11,7 +11,9 @@
  * | ------------------------------------------ | ---------------------------------- |
  * | Map title                                  | Comments — every one of them       |
  * | Product and ticketing space                | Blank lines                        |
- * | The story, its ticket and its status       | A `~open` status (it is the default) |
+ * | Deliveries, in timeline order              | A `~open` status (it is the default) |
+ * | Which delivery the story and each example ship in |                             |
+ * | The story, its ticket and its status       |                                    |
  * | Rules, in order                            | Indentation width and style        |
  * | Examples under each rule, in order         | `{ }` on an empty card (omitted)   |
  * | Questions under each rule, in order        |                                    |
@@ -30,6 +32,7 @@ import {
 	DEFAULT_STORY_STATUS,
 	STEP_CLAUSES,
 	wrapNote,
+	type DeliveryNode,
 	type ExampleMapDocument,
 	type ExampleNode,
 	type QuestionNode,
@@ -56,6 +59,12 @@ export function serialize(document: ExampleMapDocument): string {
 	if (document.space !== null) out.push(`${INDENT}space ${quote(document.space)}`);
 	if (document.product !== null || document.space !== null) out.push('');
 
+	// The timeline before anything placed on it, so a reader meets the bands
+	// before the first `@` that names one. It is also the order the parser is
+	// happiest in, though it does not require it.
+	for (const delivery of document.deliveries) emitDelivery(out, INDENT, delivery);
+	if (document.deliveries.length > 0) out.push('');
+
 	for (const note of document.notes) emitNote(out, INDENT, note);
 
 	// The story first, always: it is what the session is about, and a map that
@@ -77,9 +86,17 @@ export function serialize(document: ExampleMapDocument): string {
 		out.push('');
 		emitCard(out, INDENT, 'rule', rule.title, rule.notes, (inner) => {
 			for (const example of rule.examples) {
-				emitCard(out, inner, 'example', example.title, example.notes, (deepest) => {
-					emitSteps(out, deepest, example);
-				});
+				emitCard(
+					out,
+					inner,
+					'example',
+					example.title,
+					example.notes,
+					(deepest) => {
+						emitSteps(out, deepest, example);
+					},
+					deliveryAnnotation(example),
+				);
 			}
 			emitQuestions(out, inner, rule.questions);
 		});
@@ -128,7 +145,31 @@ function storyAnnotations(story: StoryNode): string {
 	const parts: string[] = [];
 	if (story.ticket !== null) parts.push(`#${identOrString(story.ticket)}`);
 	if (story.ticket !== null || story.status !== DEFAULT_STORY_STATUS) parts.push(`~${story.status}`);
+	if (story.release !== null) parts.push(`@${identOrString(story.release)}`);
 	return parts.length === 0 ? '' : ` ${parts.join(' ')}`;
+}
+
+/**
+ * `@Sprint1` on an example, or nothing for one nobody has scheduled.
+ *
+ * Nothing, and not `@none`: the below-the-line band is the absence of a
+ * reference, so there is no sentinel to spell wrong and no way for an
+ * unscheduled example to read as scheduled to something odd.
+ */
+function deliveryAnnotation(example: ExampleNode): string {
+	return example.delivery === null ? '' : ` @${identOrString(example.delivery)}`;
+}
+
+/** `delivery "Sprint 1" sprint`, with a body only when it carries a note. */
+function emitDelivery(out: string[], indent: string, delivery: DeliveryNode): void {
+	const head = `${indent}delivery ${quote(delivery.title)} ${delivery.kind}`;
+	if (delivery.notes.length === 0) {
+		out.push(head);
+		return;
+	}
+	out.push(`${head} {`);
+	for (const note of delivery.notes) emitNote(out, indent + INDENT, note);
+	out.push(`${indent}}`);
 }
 
 /**
@@ -167,9 +208,10 @@ function emitCard(
 	notes: readonly string[],
 	children: ((inner: string) => void) | undefined,
 	/**
-	 * What follows the title on the head line — the story's `#ticket ~status`,
-	 * and nothing else. Last and optional so the three call sites that have no
-	 * annotations do not each have to pass an empty string past a callback.
+	 * What follows the title on the head line — the story's `#ticket ~status
+	 * @release`, or an example's `@delivery`. Last and optional so the call sites
+	 * with no annotations do not each have to pass an empty string past a
+	 * callback.
 	 */
 	annotations = '',
 ): void {

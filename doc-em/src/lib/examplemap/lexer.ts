@@ -57,6 +57,12 @@ export const EXAMPLEMAP_KEYWORDS: ReadonlySet<string> = new Set([
 	// both are optional; see ExampleMapDocument in model.ts.
 	'product',
 	'space',
+	// The time axis. `sprint` and `release` are the two kinds a `delivery` line
+	// may declare, and are keywords rather than free text so a typo is caught
+	// where it is written instead of becoming a third kind nobody notices.
+	'delivery',
+	'sprint',
+	'release',
 	'story',
 	'rule',
 	'example',

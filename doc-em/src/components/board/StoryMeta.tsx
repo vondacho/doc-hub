@@ -58,7 +58,16 @@ const STATUS_CLASS: Record<StoryStatus, string> = {
 	closed: 'border-transparent bg-ink/10 text-ink-muted line-through dark:bg-white/15 dark:text-slate-400',
 };
 
-export function StoryMeta({ ticket, status }: { ticket: string | null; status: StoryStatus }) {
+export function StoryMeta({
+	ticket,
+	status,
+	release,
+}: {
+	ticket: string | null;
+	status: StoryStatus;
+	/** The band the story ships in, already resolved to a title. */
+	release: string | null;
+}) {
 	return (
 		<div className="mt-[0.3em] flex flex-wrap items-center gap-[0.3em]">
 			{ticket !== null && (
@@ -80,6 +89,18 @@ export function StoryMeta({ ticket, status }: { ticket: string | null; status: S
 			>
 				{storyStatusLabel[status]}
 			</span>
+			{/*
+			 * Shown only when there is one, like the ticket and unlike the status.
+			 * An unscheduled story is the ordinary state of a map that has just been
+			 * written, and a "not scheduled" chip on every fresh board would be
+			 * noise pretending to be information. The rail already says where the
+			 * story ships when it does.
+			 */}
+			{release !== null && (
+				<span className="rounded-full border border-brand/50 px-[0.4em] py-px text-[0.66em] font-semibold whitespace-nowrap text-brand dark:border-sky-400/50 dark:text-sky-400">
+					ships in {release}
+				</span>
+			)}
 		</div>
 	);
 }

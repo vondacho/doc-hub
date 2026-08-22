@@ -93,11 +93,38 @@ saw above the cards:
 | 6 or more blue cards | the story is probably too big, and usually splits along its rules |
 | a blue card with no green | nobody has agreed what that rule means yet |
 | 5 or more green on one blue | that rule is often really two rules |
+| the story ships in a sprint | usually a mis-schedule: a story is delivered in a release, with sprints as the steps towards it |
+| an example scheduled after the story ships | contradictory — the story would be done before the thing that makes it true |
 | few cards, nothing open | the story looks ready — the outcome the session is for |
 
 They are readings, not verdicts. Each one names the count and the cards it is
 talking about, so a person can disagree with it out loud. The thresholds are
 named constants at the top of `src/lib/board/reading.ts` for the same reason.
+
+## The time dimension
+
+Deliveries are the rows: a `sprint` or a `release`, in the order they happen. The
+story ships in a release; the examples under each rule ship in the sprints along
+the way, and the cell where a rule meets a band is the whole statement of "this
+case, under that rule, in that sprint".
+
+The unit is deliberate. **An example is the smallest thing on this board with
+business value attached** — a rule is a constraint, and a constraint is not
+delivered in a sprint; the concrete cases that satisfy it are, one at a time, and
+a rule is finished when the last of them lands. That is why the axis crosses the
+rules rather than ordering them.
+
+Questions stay out of the grid. A question is not delivered, it is answered, so
+it sits in a strip under its rule's header above every band.
+
+Dragging a card sideways re-files it under another rule, downwards reschedules
+it, and diagonally does both — one gesture, one action, one undo step. Nothing on
+the card records where it is: the cell *is* the assignment, and the `@delivery`
+in the file is derived from it on the way out. The argument for that is at the
+top of `src/lib/board/state.ts`.
+
+Nothing here carries a date. The tracker holds the calendar; this holds the
+sequence.
 
 ## The formal language on an example card
 
@@ -194,19 +221,23 @@ examplemap "Redeem a voucher" {
   product "client-onboarding"
   space "CLONB"
 
-  story "Redeem a voucher" #CLONB-42 ~analysing {
+  delivery "Sprint 24" sprint
+  delivery "Sprint 25" sprint
+  delivery "2026.9" release
+
+  story "Redeem a voucher" #CLONB-42 ~analysing @"2026.9" {
     question "Which currencies can a voucher be issued in?"
   }
 
   rule "A voucher must not be expired" {
-    example "A voucher that expired yesterday is refused" {
+    example "A voucher that expired yesterday is refused" @"Sprint 24" {
       given "a voucher SUMMER10 that expired on 2026-08-21"
       given "a basket of 40 CHF"
       when "the voucher is applied"
       then "the voucher is refused"
       then "the basket total is still 40 CHF"
     }
-    example "A voucher expiring today is accepted"
+    example "A voucher expiring today is accepted" @"Sprint 25"
     question "Is expiry checked when it is applied, or when the basket is paid?"
   }
 
@@ -224,16 +255,20 @@ examplemap "Redeem a voucher" {
 
 ```ebnf
 File       = ExampleMap , EOF ;
-ExampleMap = 'examplemap' , String , [ '{' , { Product | Space | Story | Rule | Note } , '}' ] ;
+ExampleMap = 'examplemap' , String ,
+             [ '{' , { Product | Space | Delivery | Story | Rule | Note } , '}' ] ;
 Product    = 'product'  , String ;   (* at most one *)
 Space      = 'space'    , String ;   (* at most one *)
-Story      = 'story'    , String , { Ticket | Status } ,
+Delivery   = 'delivery' , String , ( 'sprint' | 'release' ) ,
+             [ '{' , { Note } , '}' ] ;   (* order is timeline order *)
+Story      = 'story'    , String , { Ticket | Status | Ships } ,
              [ '{' , { Question | Note } , '}' ] ;   (* exactly one *)
 Ticket     = '#' , ( Ident | String ) ;   (* at most one *)
 Status     = '~' , ( 'open' | 'analysing' | 'ready'
                    | 'in-progress' | 'done' | 'closed' ) ;   (* at most one *)
+Ships      = '@' , ( Ident | String ) ;   (* names a Delivery *)
 Rule       = 'rule'     , String , [ '{' , { Example | Question | Note } , '}' ] ;
-Example    = 'example'  , String , [ '{' , { Step | Note } , '}' ] ;
+Example    = 'example'  , String , [ Ships ] , [ '{' , { Step | Note } , '}' ] ;
 Step       = ( 'given' | 'when' | 'then' ) , String ;   (* each repeatable *)
 Question   = 'question' , String , [ '{' , { Note } , '}' ] ;
 Note       = 'note'     , String ;
@@ -246,6 +281,26 @@ Comment    = '//' , { Char } ;
 What the grammar decides, each of which the source states its reason for:
 
 - **One story.** A second is an error, not a list.
+- **Declaration order is timeline order.** `delivery` lines are the time axis,
+  earliest first, with no date field and no index: a date is the one thing here
+  that would go stale on its own, and an index is a second copy of what the list
+  already says. A sprint and a release are the same structure — the word is for
+  reading, and "four sprints and a release" says something five equal bands do
+  not.
+- **The story ships in a release, its examples in the sprints before it.** `@`
+  places a card on the timeline. An example is the smallest unit on this board
+  with business value attached, which is why the axis *crosses* the rules rather
+  than ordering them: a rule is a constraint and a constraint is not delivered,
+  the concrete cases that satisfy it are.
+- **No `@` means below the line** — agreed, not committed to. Absence is the
+  encoding; there is no `@none` to spell wrong. Deleting a band drops its
+  examples back there rather than deleting them, because cancelling a sprint does
+  not cancel the work planned into it.
+- **A duplicate band title is an error, a late example is a warning.** The first
+  because `@` names a band by its title, so a duplicate makes every reference to
+  it meaningless. The second because you move the release first and the examples
+  after, and a parser that refused that intermediate state would make replanning
+  impossible in the tool that exists to plan.
 - **Only the story carries a ticket.** `#id` and `~status` may follow its title
   in either order; rules, examples and questions take neither. Breaking a story
   down does not produce more tickets — that is the difference between this board
@@ -286,9 +341,10 @@ What the grammar decides, each of which the source states its reason for:
 
 ### What round-trips
 
-Preserved: the title, the product and space, the story with its ticket and
-status, the rules in order, their examples and questions in order, every note,
-and every step.
+Preserved: the title, the product and space, the deliveries in timeline order,
+the story with its ticket, status and release, the rules in order, their examples
+and questions in order with the delivery each ships in, every note, and every
+step.
 
 Normalised: the order steps were typed in, and `~open` on an unlinked story,
 which is the default and is omitted. Dropped: a step line opened from the menu
@@ -415,6 +471,9 @@ control.
   not be allowed to become a third copy. `Card.tsx`, `CardMenu.tsx`, `Icon.tsx`
   and `IconButton.tsx` are a second, weaker candidate — they diverged here to
   drop the persona row and to make the ticket read-only, so extracting them means
-  a props union rather than a move.
+  a props union rather than a move. `DeliveryRail.tsx` is the newest instance and
+  the most quietly duplicated: it is doc-sm's `BandRail.tsx` with a kind toggle
+  added, and the sticky/opaque/z-index rules in its header comment are the same
+  three bugs solved twice.
 - **No tests.** Matching the rest of the repo, which has none and no runner. The
   fixed-point property above is what a suite would assert first.
