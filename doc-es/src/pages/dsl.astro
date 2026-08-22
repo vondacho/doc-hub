@@ -1,0 +1,118 @@
+---
+import Layout from '../layouts/Layout.astro';
+import { SAMPLE_SOURCE } from '../lib/eventstorm/sample';
+import { practiceUrl } from '../lib/links';
+
+export const prerender = true;
+
+const practice = practiceUrl();
+
+/*
+ * `code` spans are written with backticks and split here rather than rendered
+ * from markdown. A markdown dependency for eleven inline spans would be the
+ * heaviest thing in this component, and `set:html` on prose that is edited by
+ * hand is exactly how a stray tag stops being caught by `astro check`.
+ */
+const spans = (text: string): readonly string[] => text.split('`');
+
+const rules: { title: string; body: string }[] = [
+  {
+    title: 'One storm, and one wall',
+    body: 'A file holds one `eventstorm` block. A second is an error rather than a merge: two walls in one file is almost always a bad paste. A storm always has at least one `phase`, even when nobody has named one — the practice starts with paper on a wall, and the board needs somewhere to put the first note.',
+  },
+  {
+    title: 'The keyword is the colour',
+    body: 'A card is written with the keyword of its kind — `event`, `actor`, `system`, `hotspot`, `opportunity` — and there is no separate colour or type annotation. A card whose keyword said one thing and whose annotation said another would be a state the file could express and the board could not.',
+  },
+  {
+    title: 'Declaration order is time',
+    body: 'Left to right, and top to bottom inside a phase. There is no index and no timestamp: an ordinal is a second copy of what the list already says, and the copy is what drifts. Reorder the wall by moving a note, not by editing a number.',
+  },
+  {
+    title: 'A phase is a stretch of wall, not a bounded context',
+    body: 'The practice’s last step is finding the seams — clusters that share a language and change together. A `phase` is where you record one once the room agrees, and naming it a context would be claiming the workshop’s output before the workshop has produced it. Phases do not nest: the wall is a line.',
+  },
+  {
+    title: 'Cards may be written before any phase',
+    body: 'Chaotic exploration produces a heap of events long before anybody agrees where one stretch of wall ends. So a card is legal at the top level, and every such card is gathered into one unnamed phase on import. Export then writes that phase out explicitly — the one place this format normalises rather than renders.',
+  },
+  {
+    title: 'Only Big Picture is implemented',
+    body: 'Event storming runs at three levels, each adding elements to the one before. This board has the Big Picture five. Process modelling’s `command`, `policy` and read model, and software design’s `aggregate`, are not offered yet — a card you can place and cannot mean anything by is worse than one that is not there. They are additive when they come.',
+  },
+  {
+    title: 'Braces, not indentation',
+    body: 'Whitespace is a formatting choice and never syntax, so a file that has been through a chat window or a different editor still parses.',
+  },
+  {
+    title: 'Notes wrap at 50 characters',
+    body: 'A note is prose. A trailing backslash carries its string onto the next line, and that split is the break — one pair of quotes for the whole note.',
+  },
+  {
+    title: 'Comments do not survive the board',
+    body: 'A // comment is read and discarded. Import a commented file, export it again, and the comments are gone: the board is the source, the file is a render of it.',
+  },
+];
+---
+
+<Layout title="The .eventstorm format — doc-hub" description="The text format a doc-hub event storm is exported to and imported from.">
+  <main id="main" class="mx-auto w-full max-w-5xl px-6 py-10">
+    <header>
+      <p class="text-xs font-semibold tracking-[0.16em] text-ink-muted uppercase dark:text-slate-400">
+        doc-hub · event storming
+      </p>
+      <h1 class="mt-2 text-3xl font-bold sm:text-4xl">The <code>.eventstorm</code> format</h1>
+      <p class="mt-3 max-w-prose text-ink-muted dark:text-slate-400">
+        Plain text, and the file the board reads and writes. The technique itself is
+        <a class="font-semibold text-brand underline" href={practice}>written up in the development hub</a>.
+      </p>
+    </header>
+
+    <section aria-labelledby="example" class="mt-10">
+      <h2 id="example" class="text-xl font-bold">An example</h2>
+      <div class="mt-3 overflow-x-auto rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-night-raised">
+        <pre class="text-xs leading-relaxed"><code>{SAMPLE_SOURCE}</code></pre>
+      </div>
+      <p class="mt-3 max-w-prose text-sm text-ink-muted dark:text-slate-400">
+        It is deliberately a wall you would not call finished: there is a hotspot nobody has resolved
+        and an opportunity nobody has acted on, which is what a wall looks like at the end of a session.
+      </p>
+    </section>
+
+    <section aria-labelledby="rules" class="mt-12">
+      <h2 id="rules" class="text-xl font-bold">What the format decides for you</h2>
+      <dl class="mt-4 grid gap-5 sm:grid-cols-2">
+        {
+          rules.map((rule) => (
+            <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-night-raised">
+              <dt class="font-semibold">
+                {spans(rule.title).map((part, index) => (index % 2 === 0 ? part : <code>{part}</code>))}
+              </dt>
+              <dd class="mt-1.5 text-sm text-ink-muted dark:text-slate-400">
+                {spans(rule.body).map((part, index) => (index % 2 === 0 ? part : <code>{part}</code>))}
+              </dd>
+            </div>
+          ))
+        }
+      </dl>
+    </section>
+
+    <section aria-labelledby="grammar" class="mt-12">
+      <h2 id="grammar" class="text-xl font-bold">The grammar</h2>
+      <div class="mt-3 overflow-x-auto rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-night-raised">
+        <pre class="text-xs leading-relaxed"><code>{`File       = EventStorm , EOF ;
+EventStorm = 'eventstorm' , String ,
+             [ '{' , { Product | Phase | Card | Note } , '}' ] ;
+Product    = 'product'  , String ;   (* at most one *)
+Phase      = 'phase'    , String , [ '{' , { Card | Note } , '}' ] ;
+Card       = Kind , String , [ '{' , { Note } , '}' ] ;
+Kind       = 'event' | 'actor' | 'system' | 'hotspot' | 'opportunity' ;
+Note       = 'note'     , String ;
+String     = '"' , { Char | Escape | Splice } , '"' ;
+Escape     = '\\\\' , ( '"' | '\\\\' | 'n' | 't' ) ;
+Splice     = '\\\\' , newline , { space } ;   (* carries the string on; is a break *)
+Comment    = '//' , { Char } ;   (* discarded *)`}</code></pre>
+      </div>
+    </section>
+  </main>
+</Layout>
