@@ -72,6 +72,23 @@ export interface Delivery {
 	readonly id: Id;
 	readonly title: string;
 	readonly kind: DeliveryKind;
+	/**
+	 * The band's ticket in the tracker, exactly as that system spells it.
+	 *
+	 * Read-only here, like the story's — see `DeliveryNode.ticket` in
+	 * examplemap/model.ts. No reducer action writes it, which is what makes that
+	 * guarantee structural rather than a rule somebody has to remember.
+	 */
+	readonly ticket: string | null;
+	/**
+	 * The sprint's size in story points, or null for one nobody has sized.
+	 *
+	 * Sprints only — see `DeliveryNode.points` in examplemap/model.ts for why a
+	 * release is not sized, and for why this is a flat field rather than a
+	 * discriminated union. Editable here, unlike the ticket beside it: an estimate
+	 * is decided in the room, not issued by the tracker.
+	 */
+	readonly points: number | null;
 	readonly notes: readonly string[];
 }
 

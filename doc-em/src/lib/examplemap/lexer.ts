@@ -63,6 +63,10 @@ export const EXAMPLEMAP_KEYWORDS: ReadonlySet<string> = new Set([
 	'delivery',
 	'sprint',
 	'release',
+	// How big a band is. A keyword rather than a fourth sigil: `#`, `~` and `@`
+	// are taken, and `points 13` reads as what it is where `*13` would have to be
+	// looked up.
+	'points',
 	'story',
 	'rule',
 	'example',

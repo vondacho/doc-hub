@@ -11,7 +11,7 @@
  * | ------------------------------------------ | ---------------------------------- |
  * | Map title                                  | Comments — every one of them       |
  * | Product and ticketing space                | Blank lines                        |
- * | Deliveries, in timeline order              | A `~open` status (it is the default) |
+ * | Deliveries, with tickets and sprint sizes  | A `~open` status (it is the default) |
  * | Which delivery the story and each example ship in |                             |
  * | The story, its ticket and its status       |                                    |
  * | Rules, in order                            | Indentation width and style        |
@@ -160,9 +160,18 @@ function deliveryAnnotation(example: ExampleNode): string {
 	return example.delivery === null ? '' : ` @${identOrString(example.delivery)}`;
 }
 
-/** `delivery "Sprint 1" sprint`, with a body only when it carries a note. */
+/**
+ * `delivery "Sprint 1" sprint #CLONB-S24 points 13`, with a body only for a note.
+ *
+ * The `kind === 'sprint'` guard on the points is not belt-and-braces. It is the
+ * one place that makes an unparseable export unreachable: only a sprint may be
+ * sized, so a release that somehow held a number writes a file that still reads
+ * back rather than one the parser will reject on the next import.
+ */
 function emitDelivery(out: string[], indent: string, delivery: DeliveryNode): void {
-	const head = `${indent}delivery ${quote(delivery.title)} ${delivery.kind}`;
+	const ticket = delivery.ticket === null ? '' : ` #${identOrString(delivery.ticket)}`;
+	const points = delivery.kind === 'sprint' && delivery.points !== null ? ` points ${delivery.points}` : '';
+	const head = `${indent}delivery ${quote(delivery.title)} ${delivery.kind}${ticket}${points}`;
 	if (delivery.notes.length === 0) {
 		out.push(head);
 		return;

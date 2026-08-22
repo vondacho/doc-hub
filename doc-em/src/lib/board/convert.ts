@@ -55,7 +55,14 @@ export function toBoard(document: ExampleMapDocument): BoardState {
 	const bandOf = new Map<string, Id>();
 	for (const delivery of document.deliveries) {
 		const id = nextId('d');
-		deliveries[id] = { id, title: delivery.title, kind: delivery.kind, notes: [...delivery.notes] };
+		deliveries[id] = {
+			id,
+			title: delivery.title,
+			kind: delivery.kind,
+			ticket: delivery.ticket,
+			points: delivery.points,
+			notes: [...delivery.notes],
+		};
 		deliveryOrder.push(id);
 		bandOf.set(delivery.title, id);
 	}
@@ -139,7 +146,17 @@ export function toDocument(board: BoardState): ExampleMapDocument {
 		notes: [...board.notes],
 		deliveries: board.deliveryOrder.flatMap((id) => {
 			const delivery = board.deliveries[id];
-			return delivery ? [{ title: delivery.title, kind: delivery.kind, notes: [...delivery.notes] }] : [];
+			return delivery
+				? [
+						{
+							title: delivery.title,
+							kind: delivery.kind,
+							ticket: delivery.ticket,
+							points: delivery.points,
+							notes: [...delivery.notes],
+						},
+					]
+				: [];
 		}),
 		story: {
 			title: board.story.title,

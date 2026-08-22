@@ -123,6 +123,18 @@ the card records where it is: the cell *is* the assignment, and the `@delivery`
 in the file is derived from it on the way out. The argument for that is at the
 top of `src/lib/board/state.ts`.
 
+Each band carries its own tracker id — a sprint is a real object over there, not
+just a word on this board. It is shown on the rail and set only in the file, the
+same rule the story's id follows.
+
+Sprints also carry a size in story points, edited in the rail. That one *is*
+editable on the board: an estimate is decided in the room while the conversation
+is happening, where an id is issued elsewhere and only recorded here. Releases
+are not sized — a release is delivered by the sprints before it — so the field is
+absent on those rows rather than disabled, the parser refuses `points` on a
+release, and changing a sized sprint into one clears the estimate so the export
+cannot produce a file that will not read back.
+
 Nothing here carries a date. The tracker holds the calendar; this holds the
 sequence.
 
@@ -221,9 +233,9 @@ examplemap "Redeem a voucher" {
   product "client-onboarding"
   space "CLONB"
 
-  delivery "Sprint 24" sprint
-  delivery "Sprint 25" sprint
-  delivery "2026.9" release
+  delivery "Sprint 24" sprint #CLONB-S24 points 13
+  delivery "Sprint 25" sprint #CLONB-S25 points 8
+  delivery "2026.9" release #CLONB-R9
 
   story "Redeem a voucher" #CLONB-42 ~analysing @"2026.9" {
     question "Which currencies can a voucher be issued in?"
@@ -260,7 +272,9 @@ ExampleMap = 'examplemap' , String ,
 Product    = 'product'  , String ;   (* at most one *)
 Space      = 'space'    , String ;   (* at most one *)
 Delivery   = 'delivery' , String , ( 'sprint' | 'release' ) ,
+             { Ticket | Points } ,
              [ '{' , { Note } , '}' ] ;   (* order is timeline order *)
+Points     = 'points'   , Integer ;   (* sprints only; at most one *)
 Story      = 'story'    , String , { Ticket | Status | Ships } ,
              [ '{' , { Question | Note } , '}' ] ;   (* exactly one *)
 Ticket     = '#' , ( Ident | String ) ;   (* at most one *)
@@ -287,6 +301,17 @@ What the grammar decides, each of which the source states its reason for:
   already says. A sprint and a release are the same structure — the word is for
   reading, and "four sprints and a release" says something five equal bands do
   not.
+- **A band carries a ticket of its own.** A sprint has a number in the tracker
+  and a release has a version, so `delivery "Sprint 24" sprint #CLONB-S24` says
+  which. Set in the file and read-only on the board, the same rule the story's id
+  follows and for the same reason. No `~status` on a band: its lifecycle belongs
+  to the tracker, and caching it would be claiming to know something never asked.
+- **Only a sprint is sized.** `points 13` is a sprint's estimate in story
+  points; a release takes none, and writing one is an error rather than a value
+  quietly dropped — a release is delivered by the sprints before it, so sizing it
+  would state a competing number for the same work. Unlike the `#id` beside it
+  this is editable on the board, because an estimate is decided in the room
+  rather than issued by the tracker. `0` and omitted are different answers.
 - **The story ships in a release, its examples in the sprints before it.** `@`
   places a card on the timeline. An example is the smallest unit on this board
   with business value attached, which is why the axis *crosses* the rules rather
@@ -341,8 +366,8 @@ What the grammar decides, each of which the source states its reason for:
 
 ### What round-trips
 
-Preserved: the title, the product and space, the deliveries in timeline order,
-the story with its ticket, status and release, the rules in order, their examples
+Preserved: the title, the product and space, the deliveries in timeline order
+with their tickets and sprint sizes, the story with its ticket, status and release, the rules in order, their examples
 and questions in order with the delivery each ships in, every note, and every
 step.
 

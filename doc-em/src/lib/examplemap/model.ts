@@ -140,6 +140,68 @@ export function isDeliveryKind(value: unknown): value is DeliveryKind {
 export interface DeliveryNode {
 	readonly title: string;
 	readonly kind: DeliveryKind;
+	/**
+	 * The ticket this band is in the tracker — a Jira version or sprint id, or
+	 * whatever the connected system calls the thing work is committed to.
+	 *
+	 * A band is a real object over there, not just a word on this board: a sprint
+	 * has a number, a release has a version, and both are things you can open. So
+	 * it carries an id for the same reason the story does, spelled the same way
+	 * and owned by the same system.
+	 *
+	 * Held whole rather than composed from the map's `space`, for the story's
+	 * reason: the tracker issues this identifier and doc-em does not, so building
+	 * half of it here would mean inventing part of a name somebody else owns.
+	 *
+	 * `null` means not linked, which is the state every band starts in — one added
+	 * from the toolbar is a plan, and a plan exists before a tracker knows about
+	 * it.
+	 *
+	 * **Editable in the DSL and nowhere else**, exactly like the story's. The rail
+	 * shows it and will not let it be typed over: a mistyped id silently points a
+	 * whole sprint's worth of examples at the wrong thing, with no symptom on the
+	 * board. Changing it is an edit to the file, where it is deliberate and shows
+	 * up in a diff.
+	 */
+	readonly ticket: string | null;
+	/**
+	 * How big this sprint is, in story points, or `null` for one nobody has sized.
+	 *
+	 * **Sprints only.** A release is a date somebody committed to, and the work
+	 * inside it is the sprints that lead there — so sizing it would either
+	 * double-count those sprints or state a second, competing number for the same
+	 * work. `points` on a `release` is a parse error rather than a value that is
+	 * quietly ignored, and three things keep the two in step: the parser refuses
+	 * it, changing a band to a release clears it, and the serializer will not
+	 * write it. The last of those is what makes an unparseable export
+	 * unreachable rather than merely unlikely.
+	 *
+	 * A flat field rather than a `kind`-discriminated union. The union would make
+	 * the invalid state unrepresentable, which is the stronger guarantee, but it
+	 * would put a narrowing branch in front of every read of every *other* field
+	 * on this type — title, ticket, notes — to buy an invariant that is enforced
+	 * in three cheap places already. Worth revisiting if a second sprint-only
+	 * field ever appears.
+	 *
+	 * The band's own estimate, not a sum of what is in it. doc-em does not
+	 * estimate examples — the practice does not ask anyone to, and a board that
+	 * put a number on every green card would be inviting a different meeting than
+	 * the one it is for. This is the number a team commits to for a sprint, put
+	 * where the sprint is.
+	 *
+	 * **Editable on the board and in the file**, unlike the `ticket` above it. The
+	 * two are different kinds of fact: the id is issued by the tracker and doc-em
+	 * only records it, while the size is decided in the room and changes while the
+	 * conversation is still happening. That is the same line the story's `status`
+	 * and `ticket` fall on either side of.
+	 *
+	 * A non-negative integer. The scale teams actually use is Fibonacci — 1, 2, 3,
+	 * 5, 8 — so halves buy nothing, and admitting them would mean either quoting
+	 * the number in the file or teaching the scanner about `.` for a case nobody
+	 * has. `0` is allowed and is a real answer: a sprint that carries no estimable
+	 * work is not the same as one nobody has sized.
+	 */
+	readonly points: number | null;
 	readonly notes: readonly string[];
 }
 

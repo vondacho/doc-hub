@@ -70,6 +70,8 @@ export type BoardAction =
 	| { type: 'addDelivery'; kind: DeliveryKind; index: number }
 	| { type: 'retitleDelivery'; id: Id; title: string }
 	| { type: 'setDeliveryKind'; id: Id; kind: DeliveryKind }
+	/** Size a sprint. `null` un-sizes it, which is not the same as sizing it 0. */
+	| { type: 'setDeliveryPoints'; id: Id; points: number | null }
 	| { type: 'setDeliveryNotes'; id: Id; text: string }
 	/**
 	 * Delete a band. Its examples are not deleted with it — they fall below the
@@ -217,7 +219,12 @@ export function reduce(board: BoardState, action: BoardAction): BoardState {
 			const title = freshDeliveryTitle(board, action.kind);
 			return {
 				...board,
-				deliveries: { ...board.deliveries, [id]: { id, title, kind: action.kind, notes: [] } },
+				// No ticket: a band added here is a plan, and a plan exists before the
+				// tracker knows about it. Linking one is an edit to the file.
+				deliveries: {
+					...board.deliveries,
+					[id]: { id, title, kind: action.kind, ticket: null, points: null, notes: [] },
+				},
 				deliveryOrder: insertAt(board.deliveryOrder, action.index, id),
 			};
 		}
@@ -234,7 +241,24 @@ export function reduce(board: BoardState, action: BoardAction): BoardState {
 		case 'setDeliveryKind': {
 			const delivery = board.deliveries[action.id];
 			if (!delivery || delivery.kind === action.kind) return board;
-			return { ...board, deliveries: { ...board.deliveries, [action.id]: { ...delivery, kind: action.kind } } };
+			// Only a sprint is sized, so becoming a release drops the estimate. The
+			// alternative is a hidden number that reappears if the band is switched
+			// back — which is worse than losing it, because nobody would know it was
+			// still there, and the file cannot express it either way.
+			const points = action.kind === 'sprint' ? delivery.points : null;
+			return {
+				...board,
+				deliveries: { ...board.deliveries, [action.id]: { ...delivery, kind: action.kind, points } },
+			};
+		}
+
+		case 'setDeliveryPoints': {
+			const delivery = board.deliveries[action.id];
+			if (!delivery || delivery.kind !== 'sprint' || delivery.points === action.points) return board;
+			return {
+				...board,
+				deliveries: { ...board.deliveries, [action.id]: { ...delivery, points: action.points } },
+			};
 		}
 
 		case 'setDeliveryNotes': {

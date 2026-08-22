@@ -16,7 +16,10 @@
  * three is otherwise only described on the format page and this is what people
  * copy from. Two sprints and one release, which is the shape the time axis is
  * for: the examples land across the sprints, and the story is done at the
- * release.
+ * release. Each band carries its own tracker id, because a sprint is a real
+ * object over there and the notation for saying so is otherwise invisible. The
+ * two sprints are sized and the release is not, which is the rule rather than a
+ * gap in the example: a release is delivered by the sprints before it.
  *
  * Two of the six examples are left unscheduled on purpose. That is what a real
  * plan looks like — the cases everyone agreed on have been placed, the rest are
@@ -45,9 +48,9 @@ examplemap "Redeem a voucher" {
   product "client-onboarding"
   space "CLONB"
 
-  delivery "Sprint 24" sprint
-  delivery "Sprint 25" sprint
-  delivery "2026.9" release
+  delivery "Sprint 24" sprint #CLONB-S24 points 13
+  delivery "Sprint 25" sprint #CLONB-S25 points 8
+  delivery "2026.9" release #CLONB-R9
 
   story "Redeem a voucher" #CLONB-42 ~analysing @"2026.9" {
     question "Which currencies can a voucher be issued in?"

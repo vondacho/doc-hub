@@ -25,7 +25,7 @@
 
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { deliveryKindLabel, type DeliveryKind } from '../../lib/examplemap/model.ts';
 import type { BoardAction } from '../../lib/board/reducer.ts';
 import type { BoardState, Id } from '../../lib/board/state.ts';
@@ -142,11 +142,33 @@ function DeliveryLabel({
 					onClick={() => setEditing(true)}
 					aria-label={`${deliveryKindLabel[delivery.kind]} ${delivery.title}, band ${index + 1} of ${
 						board.deliveryOrder.length
-					}${shipsHere ? '. The story ships here.' : ''}`}
+					}${delivery.ticket === null ? '' : `, ticket ${delivery.ticket}`}${
+						shipsHere ? '. The story ships here.' : ''
+					}`}
 					className="block w-full cursor-grab text-left text-[0.95em] font-semibold break-words focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand active:cursor-grabbing"
 				>
 					{delivery.title}
 				</button>
+			)}
+
+			{/*
+			 * The tracker's id for this band, shown and not editable — the same rule
+			 * the story's follows, and for the same reason: a mistyped id here
+			 * silently re-points a whole sprint's worth of examples, with no symptom
+			 * on the board. It is set by editing the `.examplemap` file, where the
+			 * change is deliberate and reviewable.
+			 *
+			 * Hidden when there is none. A band that no tracker knows about is the
+			 * ordinary state of a plan, and an empty slot on every row would be noise
+			 * pretending to be information.
+			 *
+			 * Not focusable, so the title above it stays the one tab stop on a row
+			 * that already has four controls.
+			 */}
+			{delivery.ticket !== null && (
+				<p aria-hidden="true" className="mt-[0.1em] font-mono text-[0.7em] text-ink-muted dark:text-slate-400">
+					{delivery.ticket}
+				</p>
 			)}
 
 			<div className="mt-[0.15em] flex flex-wrap items-center gap-[0.3em]">
@@ -155,6 +177,17 @@ function DeliveryLabel({
 					title={delivery.title}
 					onChange={(kind) => dispatch({ type: 'setDeliveryKind', id: deliveryId, kind })}
 				/>
+				{/* Sprints only. A release is delivered by the sprints before it, so
+				    sizing it would state a second number for the same work — and the
+				    file cannot say it either. Absent rather than disabled: a control
+				    that is never usable on this kind of row is not a control. */}
+				{delivery.kind === 'sprint' && (
+					<PointsField
+						points={delivery.points}
+						title={delivery.title}
+						onChange={(points) => dispatch({ type: 'setDeliveryPoints', id: deliveryId, points })}
+					/>
+				)}
 				{shipsHere && (
 					<span className="text-[0.7em] font-semibold text-brand dark:text-sky-400">story ships</span>
 				)}
@@ -187,6 +220,69 @@ function DeliveryLabel({
 				/>
 			</div>
 		</div>
+	);
+}
+
+/**
+ * How big this sprint is, in story points.
+ *
+ * A plain number box, committed on blur like every other field on this board,
+ * which keeps a change to one undo step. Empty means unsized, and unsized is not
+ * zero: a sprint carrying no estimable work is a different statement from one
+ * nobody has looked at, and the file distinguishes them too.
+ *
+ * `inputMode="numeric"` rather than `type="number"`: the spinner arrows are
+ * useless on a Fibonacci scale — nobody wants to step from 8 to 9 — and they
+ * steal horizontal space from a rail that has little to spare. Non-digits are
+ * dropped as they are typed, so there is no invalid state to report and no error
+ * message to write.
+ *
+ * The unit lives in the label rather than in the box, so the number stays the
+ * only thing that has to be read.
+ */
+function PointsField({
+	points,
+	title,
+	onChange,
+}: {
+	points: number | null;
+	title: string;
+	onChange: (points: number | null) => void;
+}) {
+	const id = useId();
+	const [draft, setDraft] = useState(points === null ? '' : String(points));
+
+	// Follows an import, an undo, or the kind being switched away and back.
+	const [seen, setSeen] = useState(points);
+	if (seen !== points) {
+		setSeen(points);
+		setDraft(points === null ? '' : String(points));
+	}
+
+	const commit = (value: string) => {
+		const trimmed = value.trim();
+		onChange(trimmed === '' ? null : Number(trimmed));
+	};
+
+	return (
+		<span className="flex items-center gap-[0.2em]">
+			<input
+				id={id}
+				value={draft}
+				inputMode="numeric"
+				placeholder="—"
+				aria-label={`Story points for ${title}`}
+				onChange={(event) => setDraft(event.target.value.replace(/\D/g, ''))}
+				onBlur={(event) => commit(event.target.value)}
+				onKeyDown={(event) => {
+					if (event.key === 'Enter') event.currentTarget.blur();
+				}}
+				className="w-[2.6em] rounded-sm border border-slate-300 bg-transparent px-[0.25em] py-px text-center text-[0.7em] tabular-nums focus-visible:border-brand focus-visible:outline-2 focus-visible:outline-brand dark:border-slate-600"
+			/>
+			<label htmlFor={id} className="text-[0.66em] text-ink-muted dark:text-slate-400">
+				pts
+			</label>
+		</span>
 	);
 }
 

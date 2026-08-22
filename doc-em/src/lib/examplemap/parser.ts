@@ -416,8 +416,69 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 			kind = advance().value as DeliveryKind;
 		}
 
+		// `#ticket` and `points N` after the kind, in either order. A band takes no
+		// `~status` — where a sprint is in its own lifecycle is the tracker's
+		// business, and a board that cached it would be claiming to know something
+		// it never asks about. It takes no `@` either: a delivery is a point on the
+		// timeline, not a thing placed on one.
+		let ticket: string | null = null;
+		let points: number | null = null;
+
+		while (at('hash') || at('keyword', 'points')) {
+			if (at('hash')) {
+				const sigil = advance();
+				if (!at('ident') && !at('string')) {
+					problemAt(
+						sigil,
+						`Expected a ticket id after \`#\`, found ${describe(peek())}.`,
+						'Write the id the ticketing system issued: #CLONB-S24',
+					);
+					continue;
+				}
+				const value = advance().value;
+				if (ticket !== null) {
+					problemAt(sigil, 'This delivery names two tickets.', 'A delivery links to one ticket.');
+					continue;
+				}
+				ticket = value;
+				continue;
+			}
+
+			const word = advance();
+
+			// A release is a date, and the work in it is the sprints leading there.
+			// Sizing it would either double-count those or state a competing number
+			// for the same work — so this is refused rather than ignored.
+			if (kind !== 'sprint') {
+				problemAt(
+					word,
+					'Only a sprint is sized in story points.',
+					'A release is delivered by the sprints before it; size those instead.',
+				);
+				if (at('ident')) advance();
+				continue;
+			}
+
+			if (!at('ident') || !/^\d+$/.test(peek().value)) {
+				problemAt(
+					word,
+					`Expected a whole number of story points, found ${describe(peek())}.`,
+					'Points are a non-negative whole number: points 13',
+				);
+				if (at('ident') || at('string')) advance();
+				continue;
+			}
+
+			const value = Number(advance().value);
+			if (points !== null) {
+				problemAt(word, 'This sprint is sized twice.', 'A sprint has one estimate.');
+				continue;
+			}
+			points = value;
+		}
+
 		const notes: string[] = [];
-		deliveries.push({ node: { title, kind, notes }, token: keyword });
+		deliveries.push({ node: { title, kind, ticket, points, notes }, token: keyword });
 		parseBody('delivery', () => parseNote(notes));
 		return true;
 	}
