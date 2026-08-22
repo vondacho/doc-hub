@@ -13,7 +13,8 @@
  * | Product and ticketing space                | Blank lines                        |
  * | Deliveries, with tickets and sprint sizes  | A `~open` status (it is the default) |
  * | Which delivery the story and each example ship in |                             |
- * | The story, its ticket and its status       |                                    |
+ * | The story, its ticket and its status       | An unwritten need clause (omitted)  |
+ * | The story's as / want / so, when written   |                                    |
  * | Rules, in order                            | Indentation width and style        |
  * | Examples under each rule, in order         | `{ }` on an empty card (omitted)   |
  * | Questions under each rule, in order        |                                    |
@@ -77,6 +78,7 @@ export function serialize(document: ExampleMapDocument): string {
 		document.story.title,
 		document.story.notes,
 		(inner) => {
+			emitNeed(out, inner, document.story);
 			emitQuestions(out, inner, document.story.questions);
 		},
 		storyAnnotations(document.story),
@@ -194,6 +196,27 @@ function emitDelivery(out: string[], indent: string, delivery: DeliveryNode): vo
 function identOrString(id: string): string {
 	// Must match the lexer's IDENT_START / IDENT_PART.
 	return /^[A-Za-z0-9_][A-Za-z0-9_-]*$/.test(id) ? id : quote(id);
+}
+
+/**
+ * The story's need, one clause per line, in the order the sentence reads.
+ *
+ * Written before the questions rather than after, because the need is what the
+ * story *is* and a question is a doubt about it. A file that listed the doubts
+ * first would read backwards.
+ *
+ * Unwritten clauses are omitted, not written empty. `want ""` asserts nothing
+ * and re-imports as the same nothing, and a card showing three blank clauses is
+ * indistinguishable from one nobody has started.
+ *
+ * Not wrapped to the note measure. A clause is one clause of one sentence and
+ * the parser collapses whitespace inside it, so breaking it across lines would
+ * be a formatting choice the reader cannot see and the parser then undoes.
+ */
+function emitNeed(out: string[], indent: string, story: StoryNode): void {
+	if (story.persona !== null) out.push(`${indent}as ${quote(story.persona)}`);
+	if (story.want !== null) out.push(`${indent}want ${quote(story.want)}`);
+	if (story.soThat !== null) out.push(`${indent}so ${quote(story.soThat)}`);
 }
 
 function emitQuestions(out: string[], indent: string, questions: readonly QuestionNode[]): void {

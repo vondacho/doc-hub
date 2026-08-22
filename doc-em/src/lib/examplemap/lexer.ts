@@ -68,6 +68,11 @@ export const EXAMPLEMAP_KEYWORDS: ReadonlySet<string> = new Set([
 	// looked up.
 	'points',
 	'story',
+	// The formal story language, on the story card: as a <persona>, I want
+	// <want>, so that <outcome>. The same three words doc-sm uses.
+	'as',
+	'want',
+	'so',
 	'rule',
 	'example',
 	'question',

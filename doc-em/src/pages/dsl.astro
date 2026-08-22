@@ -23,6 +23,14 @@ const rules: { title: string; body: string }[] = [
     body: 'The practice is defined as taking one story, so a map has exactly one. A second `story` line is an error rather than a list: two stories on one map is two sessions, and merging them would hide that. A map with no story line at all is fine — it is a session that has not named its story yet, and the board shows "To be defined".',
   },
   {
+    title: 'The story states its need',
+    body: '`as` / `want` / `so` — the formal story language, modelled in three fields rather than written as prose in a note. The title says what to build and the need says why anyone should; the `so` clause is the half that gets dropped first and missed most, and a session spends its whole length interrogating that sentence. All three are optional and independently so — a room that has agreed the persona but not the outcome is an ordinary state.',
+  },
+  {
+    title: 'The persona is free text here, and a reference in doc-sm',
+    body: 'There, a story may only name a persona its own activity lists, so the board offers exactly those and a name from outside the cast is refused. There is no cast on this board: example mapping takes one story that some other conversation already chose, and a map that had to declare its personas before naming one would be inventing structure the technique does not have. So the card edits all three clauses as text, with no dropdown to offer choices that do not exist.',
+  },
+  {
     title: 'The story carries the ticket, and it is the only thing that does',
     body: 'A `#id` and a `~status` may follow the story’s title, in either order: `story "Redeem a voucher" #CLONB-42 ~ready`. Rules, examples and questions take neither. Breaking a story down does not produce more tickets — that is the difference between this board and the story map next door, where every row is a level in the tracker.',
   },
@@ -159,7 +167,10 @@ Delivery   = 'delivery' , String , ( 'sprint' | 'release' ) ,
              [ '{' , { Note } , '}' ] ;   (* order is timeline order *)
 Points     = 'points'   , Integer ;   (* sprints only; at most one *)
 Story      = 'story'    , String , { Ticket | Status | Ships } ,
-             [ '{' , { Question | Note } , '}' ] ;   (* exactly one *)
+             [ '{' , { As | Want | So | Question | Note } , '}' ] ;   (* exactly one *)
+As         = 'as'       , String ;   (* who the story is for; at most one *)
+Want       = 'want'     , String ;   (* what they want; at most one *)
+So         = 'so'       , String ;   (* the outcome; at most one *)
 Ticket     = '#' , ( Ident | String ) ;   (* at most one *)
 Status     = '~' , ( 'open' | 'analysing' | 'ready'
                    | 'in-progress' | 'done' | 'closed' ) ;   (* at most one *)

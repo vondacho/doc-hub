@@ -254,6 +254,43 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 	}
 
 	/**
+	 * One clause of the story's need: `as`, `want` or `so`.
+	 *
+	 * Whitespace inside is collapsed, which is what makes a clause spelled across
+	 * two lines with a trailing backslash read back as one line of prose. Each
+	 * clause is one clause of one sentence, so a break inside it would be a break
+	 * in the middle of the sentence the card composes.
+	 *
+	 * A repeat is an error rather than a last-one-wins. A story written for two
+	 * personas is two stories, and an example mapping session that produced one
+	 * has found something worth stopping for.
+	 */
+	function parseClause(
+		word: 'as' | 'want' | 'so',
+		need: { persona: string | null; want: string | null; soThat: string | null },
+		field: 'persona' | 'want' | 'soThat',
+		hint: string,
+	): boolean {
+		if (!at('keyword', word)) return false;
+		const keyword = advance();
+		const value = expectString(word, hint);
+		if (value === undefined) {
+			synchronize();
+			return true;
+		}
+		if (need[field] !== null) {
+			problemAt(
+				keyword,
+				`This story states \`${word}\` twice.`,
+				'A story is written for one person, wanting one thing, for one reason.',
+			);
+			return true;
+		}
+		need[field] = value.replace(/\s+/g, ' ').trim();
+		return true;
+	}
+
+	/**
 	 * `product "client-onboarding"` — at most one per map.
 	 *
 	 * A second one is an error rather than a last-one-wins overwrite: a map is
@@ -502,8 +539,35 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 		const { ticket, status, release } = parseStoryAnnotations();
 		const notes: string[] = [];
 		const questions: QuestionNode[] = [];
-		const node: StoryNode = { title, notes, ticket, status, release, questions };
-		parseBody('story', () => parseQuestion(questions) || parseNote(notes));
+		const need: { persona: string | null; want: string | null; soThat: string | null } = {
+			persona: null,
+			want: null,
+			soThat: null,
+		};
+
+		// The clauses are read before the node is built, so a `want` written after
+		// a question still lands on the story — the body has no order.
+		parseBody(
+			'story',
+			() =>
+				parseClause('as', need, 'persona', 'Who the story is for, quoted: as "Support engineer"') ||
+				parseClause('want', need, 'want', 'What they want, quoted: want "to redeem a voucher at checkout"') ||
+				parseClause('so', need, 'soThat', 'The outcome, quoted: so "the discount comes off the basket"') ||
+				parseQuestion(questions) ||
+				parseNote(notes),
+		);
+
+		const node: StoryNode = {
+			title,
+			notes,
+			ticket,
+			status,
+			release,
+			persona: need.persona,
+			want: need.want,
+			soThat: need.soThat,
+			questions,
+		};
 
 		if (state.token !== null) {
 			problemAt(

@@ -143,6 +143,15 @@ export interface Story {
 	 * and no second copy to disagree with.
 	 */
 	readonly release: Id | null;
+	/**
+	 * The three clauses of the need, exactly as the file holds them.
+	 *
+	 * Free text, all three — see `StoryNode.persona` in examplemap/model.ts for
+	 * why the persona is typed here and chosen from a list in doc-sm.
+	 */
+	readonly persona: string | null;
+	readonly want: string | null;
+	readonly soThat: string | null;
 	readonly questions: readonly Id[];
 }
 
@@ -179,7 +188,17 @@ export function emptyBoard(title = 'Untitled example map', story = UNDEFINED_STO
 		product: null,
 		space: null,
 		notes: [],
-		story: { title: story, notes: [], ticket: null, status: DEFAULT_STORY_STATUS, release: null, questions: [] },
+		story: {
+			title: story,
+			notes: [],
+			ticket: null,
+			status: DEFAULT_STORY_STATUS,
+			release: null,
+			persona: null,
+			want: null,
+			soThat: null,
+			questions: [],
+		},
 		deliveryOrder: [],
 		deliveries: {},
 		ruleOrder: [],
@@ -256,14 +275,22 @@ export const STORY_DETAIL_KEY: Id = 'story';
 /**
  * Every card that has a note, the story included.
  *
- * Not "every card": a card with no notes has no caret and nothing to reveal, so
- * counting it would make the global toggle claim to have expanded something it
- * did not. The story is a card like the others here — it is the one the session
- * is about, but that does not give it notes it has not been written.
+ * Not "every card": a rule or a question with no notes has no caret and nothing
+ * to reveal, so counting it would make the global toggle claim to have expanded
+ * something it did not.
+ *
+ * The story and the examples are the exceptions, and for the same reason: both
+ * have something to show that nobody has typed — the story its need, an example
+ * its Given/When/Then — rendered as a muted template. A card whose caret is
+ * always there must always be counted here.
  */
 export function cardsWithDetail(board: BoardState): readonly Id[] {
 	const found: Id[] = [];
-	if (board.story.notes.length > 0) found.push(STORY_DETAIL_KEY);
+	// The story, always. It carries its need now, and `needLines` renders the
+	// three clauses as a muted template even when none is written — so the card
+	// always has a caret, and this has to agree with that or the global toggle
+	// silently skips the one card the session is about.
+	found.push(STORY_DETAIL_KEY);
 	for (const [id, rule] of Object.entries(board.rules)) if (rule.notes.length > 0) found.push(id);
 	// Every example, written steps or not: an example always has a scenario to
 	// show, even if that scenario is still the Given/When/Then template. This is

@@ -12,6 +12,10 @@
  * teach the notation and hide the point of the technique, which is that the
  * shape of the map tells you what to do next.
  *
+ * It states its need — as a … I want … so that … — because that is the sentence
+ * an example mapping session spends its length interrogating, and a sample whose
+ * story was a bare title would suggest the board had no place to put it.
+ *
  * It names a product, a ticket and a timeline, because the notation for all
  * three is otherwise only described on the format page and this is what people
  * copy from. Two sprints and one release, which is the shape the time axis is
@@ -53,6 +57,9 @@ examplemap "Redeem a voucher" {
   delivery "2026.9" release #CLONB-R9
 
   story "Redeem a voucher" #CLONB-42 ~analysing @"2026.9" {
+    as "Returning customer"
+    want "to apply a voucher code at checkout"
+    so "I pay the price I was promised"
     question "Which currencies can a voucher be issued in?"
   }
 

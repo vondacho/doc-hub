@@ -13,6 +13,7 @@ import {
 	DEFAULT_STORY_STATUS,
 	splitNotes,
 	UNDEFINED_STORY,
+	type NeedField,
 	type CardKind,
 	type DeliveryKind,
 	type StepClause,
@@ -62,6 +63,14 @@ export type BoardAction =
 	 * action that changes it and no component that could offer one by mistake.
 	 */
 	| { type: 'setStoryStatus'; status: StoryStatus }
+	/**
+	 * Write one clause of the story's need. Blank text clears it.
+	 *
+	 * Cleared rather than stored as `""`, because the file distinguishes them: an
+	 * omitted clause is one nobody has written, and there is no way to spell an
+	 * empty one. Storing `""` would make the board hold a state the format cannot.
+	 */
+	| { type: 'setStoryNeed'; field: NeedField; text: string }
 	| { type: 'retitle'; kind: CardKind; id: Id; title: string }
 	| { type: 'setNotes'; kind: CardKind; id: Id; text: string }
 	| { type: 'addRule'; index: number }
@@ -111,7 +120,17 @@ export function reduce(board: BoardState, action: BoardAction): BoardState {
 				notes: [],
 				// A board always has a story, even a blank one: a session that has
 				// not named its story has not started.
-				story: { title: UNDEFINED_STORY, notes: [], ticket: null, status: DEFAULT_STORY_STATUS, release: null, questions: [] },
+				story: {
+					title: UNDEFINED_STORY,
+					notes: [],
+					ticket: null,
+					status: DEFAULT_STORY_STATUS,
+					release: null,
+					persona: null,
+					want: null,
+					soThat: null,
+					questions: [],
+				},
 				deliveryOrder: [],
 				deliveries: {},
 				ruleOrder: [],
@@ -138,6 +157,13 @@ export function reduce(board: BoardState, action: BoardAction): BoardState {
 			// field returns the space to null rather than storing "".
 			const space = action.space === null || action.space.trim() === '' ? null : action.space.trim();
 			return space === board.space ? board : { ...board, space };
+		}
+
+		case 'setStoryNeed': {
+			const text = action.text.replace(/\s+/g, ' ').trim();
+			const value = text === '' ? null : text;
+			if (board.story[action.field] === value) return board;
+			return { ...board, story: { ...board.story, [action.field]: value } };
 		}
 
 		case 'setStoryStatus':

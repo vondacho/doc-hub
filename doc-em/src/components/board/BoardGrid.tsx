@@ -68,6 +68,7 @@ import {
 import { Card } from './Card.tsx';
 import { DeliveryRail } from './DeliveryRail.tsx';
 import { StoryMeta } from './StoryMeta.tsx';
+import { StoryNeed } from './StoryNeed.tsx';
 import { ExampleSteps } from './ExampleSteps.tsx';
 import type { CardMenuAction } from './CardMenu.tsx';
 import { Icon } from './Icon.tsx';
@@ -227,6 +228,13 @@ export function BoardGrid({
 							data={{ type: 'story' }}
 							detailOpen={expanded.has(STORY_DETAIL_KEY)}
 							onToggleDetail={() => onToggleDetail(STORY_DETAIL_KEY)}
+							detailName="the need"
+							detailContent={
+								<StoryNeed
+									story={board.story}
+									onClause={(field, text) => dispatch({ type: 'setStoryNeed', field, text })}
+								/>
+							}
 							onRetitle={(title) => dispatch({ type: 'retitle', kind: 'story', id: '', title })}
 							onNotes={(text) => dispatch({ type: 'setNotes', kind: 'story', id: '', text })}
 							menu={[

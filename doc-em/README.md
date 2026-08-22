@@ -275,6 +275,9 @@ examplemap "Redeem a voucher" {
   delivery "2026.9" release #CLONB-R9
 
   story "Redeem a voucher" #CLONB-42 ~analysing @"2026.9" {
+    as "Returning customer"
+    want "to apply a voucher code at checkout"
+    so "I pay the price I was promised"
     question "Which currencies can a voucher be issued in?"
   }
 
@@ -313,7 +316,10 @@ Delivery   = 'delivery' , String , ( 'sprint' | 'release' ) ,
              [ '{' , { Note } , '}' ] ;   (* order is timeline order *)
 Points     = 'points'   , Integer ;   (* sprints only; at most one *)
 Story      = 'story'    , String , { Ticket | Status | Ships } ,
-             [ '{' , { Question | Note } , '}' ] ;   (* exactly one *)
+             [ '{' , { As | Want | So | Question | Note } , '}' ] ;   (* exactly one *)
+As         = 'as'       , String ;   (* who the story is for; at most one *)
+Want       = 'want'     , String ;   (* what they want; at most one *)
+So         = 'so'       , String ;   (* the outcome; at most one *)
 Ticket     = '#' , ( Ident | String ) ;   (* at most one *)
 Status     = '~' , ( 'open' | 'analysing' | 'ready'
                    | 'in-progress' | 'done' | 'closed' ) ;   (* at most one *)
@@ -363,6 +369,15 @@ What the grammar decides, each of which the source states its reason for:
   it meaningless. The second because you move the release first and the examples
   after, and a parser that refused that intermediate state would make replanning
   impossible in the tool that exists to plan.
+- **The story states its need**, in the formal story language: `as` / `want` /
+  `so`, three fields rather than prose in a note. The title says what to build
+  and the need says why anyone should — and the `so` clause is the half that gets
+  dropped first and missed most. All three are optional and independently so.
+- **The persona is free text here**, where `doc-sm` resolves it against the
+  cast its activity declares. There is no cast on this board: example mapping
+  takes one story some other conversation already chose, so the card edits all
+  three clauses as text and offers no dropdown. Everything else about the three
+  fields is `doc-sm`'s, including the sentence they compose to.
 - **Only the story carries a ticket.** `#id` and `~status` may follow its title
   in either order; rules, examples and questions take neither. Breaking a story
   down does not produce more tickets — that is the difference between this board
@@ -404,7 +419,8 @@ What the grammar decides, each of which the source states its reason for:
 ### What round-trips
 
 Preserved: the title, the product and space, the deliveries in timeline order
-with their tickets and sprint sizes, the story with its ticket, status and release, the rules in order, their examples
+with their tickets and sprint sizes, the story with its ticket, status, release
+and need, the rules in order, their examples
 and questions in order with the delivery each ships in, every note, and every
 step.
 

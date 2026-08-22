@@ -328,6 +328,37 @@ export interface StoryNode {
 	 * refused here; see `scheduleWarnings`.
 	 */
 	readonly release: string | null;
+	/**
+	 * The need behind the title, in the formal story language: as a <persona>,
+	 * I want <want>, so that <soThat>.
+	 *
+	 * Modelled in three fields rather than written as prose in a note, because
+	 * each of the three is a different kind of thing, and because the `so that`
+	 * clause is the half that gets dropped first and missed most. A story with a
+	 * title and no need is a to-do item that has forgotten what it was for — and
+	 * an example mapping session spends its whole length asking what a story
+	 * actually means, so the answer belongs on the card being discussed.
+	 *
+	 * All three are optional and independently so. A board opens with none of
+	 * them, and a session that has agreed the persona but not the outcome is an
+	 * ordinary state rather than an incomplete one.
+	 *
+	 * ## The persona is free text here, and a reference in doc-sm
+	 *
+	 * There, a story may only name a persona its own activity lists, so the
+	 * board offers exactly those and the parser rejects any other — the cast is
+	 * declared once and cannot drift.
+	 *
+	 * There is no cast on this board. Example mapping takes one story that some
+	 * other conversation already chose, and a map that had to declare its
+	 * personas before naming one would be asking the room to invent a structure
+	 * the technique does not have. So it is a string somebody types, and the
+	 * card edits it as text rather than offering a list of choices that do not
+	 * exist.
+	 */
+	readonly persona: string | null;
+	readonly want: string | null;
+	readonly soThat: string | null;
 	/** Questions raised before any rule existed: doubts about the story itself. */
 	readonly questions: readonly QuestionNode[];
 }
@@ -482,7 +513,98 @@ export function emptyDocument(title = 'Untitled example map'): ExampleMapDocumen
  * `StoryNode` cannot leave one of them behind.
  */
 export function emptyStory(title = UNDEFINED_STORY): StoryNode {
-	return { title, notes: [], ticket: null, status: DEFAULT_STORY_STATUS, release: null, questions: [] };
+	return {
+		title,
+		notes: [],
+		ticket: null,
+		status: DEFAULT_STORY_STATUS,
+		release: null,
+		persona: null,
+		want: null,
+		soThat: null,
+		questions: [],
+	};
+}
+
+/**
+ * The three clauses, as the card draws them: one line each.
+ *
+ * A line per clause rather than one composed sentence, because the DSL models
+ * them as three fields and the card should show what the file holds. It is also
+ * what makes them individually editable — a sentence can only be replaced whole,
+ * where three lines can each be corrected on their own.
+ *
+ * Each line wraps on its own. `prefix` is fixed prose the reader never edits;
+ * `value` is the part that is theirs. A clause nobody has written yet still
+ * produces a line, shown muted, so the shape of a need is visible before
+ * anybody has typed into it — the same way an example card shows its
+ * Given/When/Then template.
+ *
+ * Ported from doc-sm's model, where the same three lines mean the same three
+ * things. Only the persona differs, and it differs in the component rather than
+ * here: see `StoryNode.persona`.
+ */
+export type NeedField = 'persona' | 'want' | 'soThat';
+
+export interface NeedLine {
+	readonly field: NeedField;
+	readonly prefix: string;
+	readonly value: string | null;
+	/** Shown, muted, when the clause has not been written yet. */
+	readonly placeholder: string;
+	/** Trailing punctuation, so the three read as one sentence when all are there. */
+	readonly suffix: string;
+}
+
+export function needLines(story: {
+	persona: string | null;
+	want: string | null;
+	soThat: string | null;
+}): readonly NeedLine[] {
+	return [
+		{
+			field: 'persona',
+			prefix: `As ${article(story.persona ?? 'a')} `,
+			value: story.persona,
+			placeholder: 'somebody',
+			suffix: ',',
+		},
+		{ field: 'want', prefix: 'I want ', value: story.want, placeholder: 'something', suffix: ',' },
+		{
+			field: 'soThat',
+			prefix: 'so that ',
+			value: story.soThat,
+			placeholder: 'some outcome',
+			suffix: '.',
+		},
+	];
+}
+
+/**
+ * The need, as one sentence, or null when nothing has been said about it.
+ *
+ * Composed rather than stored, so the three fields stay the single record of it
+ * and cannot disagree with a cached sentence. Partial needs compose to partial
+ * sentences: a story that names a persona and a want but no outcome reads as far
+ * as it has been thought through, which is more honest than hiding it until
+ * somebody fills in the third box.
+ */
+export function composeNeed(story: {
+	persona: string | null;
+	want: string | null;
+	soThat: string | null;
+}): string | null {
+	const clauses: string[] = [];
+	if (story.persona !== null) clauses.push(`As ${article(story.persona)} ${story.persona}`);
+	if (story.want !== null) clauses.push(`I want ${story.want}`);
+	if (story.soThat !== null) clauses.push(`so that ${story.soThat}`);
+	if (clauses.length === 0) return null;
+	return `${clauses.join(', ')}.`;
+}
+
+/** "a" or "an". Small, and its absence is the kind of thing that reads as sloppy. */
+function article(word: string): string {
+	return /^[aeiou]/i.test(word.trim()) ? 'an' : 'a';
 }
 
 /**
