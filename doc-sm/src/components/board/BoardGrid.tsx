@@ -91,6 +91,7 @@ export function BoardGrid({
 	ticketingConfigured,
 	zoom,
 	fullscreen,
+	documentKey,
 	expanded,
 	onToggleDetail,
 }: {
@@ -104,6 +105,16 @@ export function BoardGrid({
 	/** 1 is 100%. Scales the whole board; see the note on RAIL above. */
 	zoom: number;
 	fullscreen: boolean;
+	/**
+	 * Bumped whenever a different document is opened.
+	 *
+	 * A new map is read from its top-left corner, so the board scrolls back there
+	 * rather than keeping wherever the previous one had been dragged to. It is a
+	 * counter and not the board itself: scrolling must *not* be reset by an
+	 * ordinary edit, or moving a card at the right-hand end of a wide board would
+	 * throw the view back to the start every time.
+	 */
+	documentKey: number;
 	/** Cards whose detail is open. Everything not in here is collapsed. */
 	expanded: ReadonlySet<Id>;
 	onToggleDetail: (id: Id) => void;
@@ -125,7 +136,19 @@ export function BoardGrid({
 	 * ResizeObserver keeps it right through zooming, expanding a card's detail,
 	 * and anything else that changes the backbone's height.
 	 */
+	const scroller = useRef<HTMLDivElement>(null);
 	const grid = useRef<HTMLDivElement>(null);
+
+	// Before paint, so a freshly opened map never flashes at the old offset.
+	useLayoutEffect(() => {
+		const element = scroller.current;
+		if (!element) return;
+		element.scrollLeft = 0;
+		element.scrollTop = 0;
+	}, [documentKey]);
+	// Only the step row needs measuring now: it pins below the activity row, whose
+	// height depends on zoom, on the ticket line, and on whether its detail is
+	// open. Everything else pins at a true zero.
 	const [stepTop, setStepTop] = useState(0);
 
 	useLayoutEffect(() => {
@@ -136,7 +159,13 @@ export function BoardGrid({
 			const style = getComputedStyle(element);
 			const first = Number.parseFloat(style.gridTemplateRows.split(' ')[0] ?? '');
 			const gap = Number.parseFloat(style.rowGap) || 0;
-			if (Number.isFinite(first)) setStepTop(first + gap);
+			if (!Number.isFinite(first)) return;
+			const next = first + gap;
+			// Only on a real change. A ResizeObserver that sets state on every
+			// callback can re-enter through its own re-render, and the browser
+			// reports that as "ResizeObserver loop completed with undelivered
+			// notifications" rather than as anything useful.
+			setStepTop((was) => (was === next ? was : next));
 		};
 
 		measure();
@@ -149,16 +178,32 @@ export function BoardGrid({
 		band === UNASSIGNED ? 'Below the line' : board.releases[band]?.title ?? 'Unknown';
 
 	return (
+		/*
+		 * The padded, bordered box is *outside* the scroll area.
+		 *
+		 * Every scrolling bug on this board came from padding inside the
+		 * scrollport: a sticky row pins to the scrollport's edge, so any padding
+		 * beyond that edge is a strip nothing can reach — cards scrolled through
+		 * it, and pinning the rows past it made them slide by exactly that much
+		 * instead. Each fix compensated for the padding somewhere else, and each
+		 * one only moved the seam.
+		 *
+		 * With the padding out here the scrollport starts at the content: every
+		 * sticky offset is a true 0, nothing exists above or left of the pinned
+		 * rows, and the breathing room never scrolls because it is not in the
+		 * scroll area at all.
+		 */
 		<div
-			className={`board-scroll relative border border-slate-200 bg-white dark:border-slate-700 dark:bg-night-raised ${
-				fullscreen ? 'min-h-0 flex-1 rounded-xl p-3' : 'rounded-2xl p-3'
+			className={`relative border border-slate-200 bg-white dark:border-slate-700 dark:bg-night-raised ${
+				fullscreen ? 'flex min-h-0 flex-1 flex-col rounded-xl p-4' : 'rounded-2xl p-3'
 			}`}
+		>
+		<div
+			ref={scroller}
+			className={`board-scroll ${fullscreen ? 'min-h-0 flex-1' : ''}`}
 			style={{
 				// A bounded height is what gives `position: sticky` a scroll
-				// container to stick within. Without it the rail and the header rows
-				// stick to the page, which on a long board is not what anyone means.
-				// In fullscreen the wrapper is already the viewport, so the board
-				// takes all of it.
+				// container to stick within.
 				maxHeight: fullscreen ? '100%' : '75vh',
 				// The one number the whole board is measured against.
 				fontSize: `${BASE_FONT * zoom}px`,
@@ -184,7 +229,33 @@ export function BoardGrid({
 				<div
 					aria-hidden="true"
 					style={{ gridColumn: '1 / -1', gridRow: `${ACTIVITY_ROW} / span 2` }}
-					className="sticky top-0 z-[5] -m-[0.2em] bg-white dark:bg-night-raised"
+					className="sticky top-0 z-[5] -mb-[0.2em] bg-white pb-[0.2em] dark:bg-night-raised"
+				/>
+
+				{/*
+				    The same band again, turned ninety degrees: an opaque column
+				    behind the rail so the cards scrolling sideways do not appear in
+				    the grid's left padding, beyond where the rail can reach.
+
+				    z-3, one below the rail: the rail's labels paint on it, and it
+				    paints on the cards.
+				*/}
+				<div
+					aria-hidden="true"
+					/*
+					 * The row end is counted, not `-1`.
+					 *
+					 * `-1` names the last line of the *explicit* grid, and this grid
+					 * declares only `grid-template-columns` — every row is implicit.
+					 * So `1 / -1` collapsed to a single row and the band covered only
+					 * the header's height, letting every card below it show through
+					 * the left padding on a sideways scroll.
+					 *
+					 * The header band above gets away with `1 / -1` because the
+					 * *columns* are explicit.
+					 */
+					style={{ gridColumn: 1, gridRow: `1 / ${FIRST_BAND_ROW + bands.length}` }}
+					className="sticky left-0 z-[3] -mr-[0.2em] bg-white pr-[0.2em] dark:bg-night-raised"
 				/>
 
 				{/* Top-left corner. Sticks in both directions, so it must outrank
@@ -380,6 +451,7 @@ export function BoardGrid({
 					}),
 				)}
 			</div>
+		</div>
 		</div>
 	);
 }

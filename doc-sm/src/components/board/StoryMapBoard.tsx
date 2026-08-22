@@ -148,6 +148,8 @@ export default function StoryMapBoard({
 	const [dirty, setDirty] = useState(false);
 	const [previewing, setPreviewing] = useState(false);
 	const [ticketError, setTicketError] = useState<string | null>(null);
+	// Counts documents, not edits: see the note on BoardGrid's documentKey.
+	const [documentKey, setDocumentKey] = useState(0);
 	const [publishing, setPublishing] = useState(false);
 	const [zoomIndex, setZoomIndex] = useState(DEFAULT_ZOOM_INDEX);
 	/**
@@ -183,6 +185,7 @@ export default function StoryMapBoard({
 			const next = toBoard(parse(source));
 			setProblems([]);
 			send({ type: 'import', board: next });
+			setDocumentKey((n) => n + 1);
 			setDirty(false);
 		} catch (error) {
 			if (!(error instanceof StoryMapParseError)) throw error;
@@ -697,6 +700,7 @@ export default function StoryMapBoard({
 							ticketingConfigured={ticketingConfigured}
 							zoom={zoom}
 							fullscreen={fullscreen}
+							documentKey={documentKey}
 							expanded={expanded}
 							onToggleDetail={toggleDetail}
 						/>

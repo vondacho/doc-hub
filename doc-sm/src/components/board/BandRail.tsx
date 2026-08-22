@@ -7,6 +7,12 @@
  * cards scroll visibly through it, which looks like a rendering bug and makes
  * the labels unreadable exactly when they matter.
  *
+ * It sits at z-4, which is a narrow gap on purpose: above the story cards, so
+ * they scroll *under* it sideways, and below the header band at z-5, so the
+ * band labels scroll *under the backbone* vertically. It used to be z-20 — above
+ * the header — and a release sliding up appeared over the strip above the
+ * "Releases" title, which is the one place nothing should ever be drawn.
+ *
  * Below-the-line is rendered *outside* the SortableContext. It is not a release:
  * it cannot be renamed, cannot be deleted, and is always last, so it must not be
  * pickable — dragging it above a release would be asking the board to represent
@@ -46,7 +52,7 @@ export function BandRail({
 
 			<div
 				style={{ gridColumn: 1, gridRow: firstRow + board.releaseOrder.length }}
-				className="sticky left-0 z-20 rounded-[0.4em] bg-white px-[0.5em] py-[0.4em] dark:bg-night-raised"
+				className="sticky left-0 z-[4] rounded-[0.4em] bg-white px-[0.5em] py-[0.4em] dark:bg-night-raised"
 			>
 				<p className="text-[0.95em] font-semibold">Below the line</p>
 				<p className="mt-[0.15em] text-[0.75em] text-ink-muted dark:text-slate-400">
@@ -102,7 +108,7 @@ function BandLabel({
 				transition,
 				opacity: isDragging ? 0.35 : undefined,
 			}}
-			className="group sticky left-0 z-20 rounded-[0.4em] bg-white px-[0.5em] py-[0.4em] dark:bg-night-raised"
+			className="group sticky left-0 z-[4] rounded-[0.4em] bg-white px-[0.5em] py-[0.4em] dark:bg-night-raised"
 		>
 			{editing ? (
 				<input
