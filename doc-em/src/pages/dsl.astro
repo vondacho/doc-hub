@@ -23,6 +23,22 @@ const rules: { title: string; body: string }[] = [
     body: 'The practice is defined as taking one story, so a map has exactly one. A second `story` line is an error rather than a list: two stories on one map is two sessions, and merging them would hide that. A map with no story line at all is fine — it is a session that has not named its story yet, and the board shows "To be defined".',
   },
   {
+    title: 'The story carries the ticket, and it is the only thing that does',
+    body: 'A `#id` and a `~status` may follow the story’s title, in either order: `story "Redeem a voucher" #CLONB-42 ~ready`. Rules, examples and questions take neither. Breaking a story down does not produce more tickets — that is the difference between this board and the story map next door, where every row is a level in the tracker.',
+  },
+  {
+    title: 'The id is set here, and only here',
+    body: 'The board shows the ticket id and will not let you retype it. An example mapping session refines a story; it does not re-address one, and a mistyped id silently points a whole map of rules at somebody else’s ticket. Changing it is an edit to this file, where it is deliberate and shows up in a diff. The `~status` beside it is the opposite: that is what a session changes, so it is one click on the card menu as well as a word here.',
+  },
+  {
+    title: 'A status is a cache, never the truth',
+    body: 'The ticketing system owns it. `~open` is what an unlinked story reads as — a placeholder meaning nothing has been said yet, not a claim — and it is omitted on export for exactly that reason. A linked story always writes its status, because there the value is an answer rather than the absence of one.',
+  },
+  {
+    title: '`product` is a shortname; `space` defaults to it',
+    body: 'The product is the `slug` doc-registry assigns, not the display name — a map that recorded "Client Onboarding" would stop matching its product the day somebody fixed the capitalisation. `space` is the ticketing container, a Jira project key or whatever your tracker calls one; leave it out and the product shortname stands in. They come apart often enough to be separate: a key of `CLONB` against a product of `client-onboarding` is ordinary.',
+  },
+  {
     title: 'An example belongs to a rule',
     body: 'Examples are written under the rule they illustrate, and cannot float. A rule with no examples is legal and is the practice’s own warning sign: nobody has agreed what that rule means yet.',
   },
@@ -102,8 +118,14 @@ const rules: { title: string; body: string }[] = [
       <h2 id="grammar" class="text-xl font-bold">The grammar</h2>
       <div class="mt-3 overflow-x-auto rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-night-raised">
         <pre class="text-xs leading-relaxed"><code>{`File       = ExampleMap , EOF ;
-ExampleMap = 'examplemap' , String , [ '{' , { Story | Rule | Note } , '}' ] ;
-Story      = 'story'    , String , [ '{' , { Question | Note } , '}' ] ;   (* exactly one *)
+ExampleMap = 'examplemap' , String , [ '{' , { Product | Space | Story | Rule | Note } , '}' ] ;
+Product    = 'product'  , String ;   (* at most one *)
+Space      = 'space'    , String ;   (* at most one *)
+Story      = 'story'    , String , { Ticket | Status } ,
+             [ '{' , { Question | Note } , '}' ] ;   (* exactly one *)
+Ticket     = '#' , ( Ident | String ) ;   (* at most one *)
+Status     = '~' , ( 'open' | 'analysing' | 'ready'
+                   | 'in-progress' | 'done' | 'closed' ) ;   (* at most one *)
 Rule       = 'rule'     , String , [ '{' , { Example | Question | Note } , '}' ] ;
 Example    = 'example'  , String , [ '{' , { Step | Note } , '}' ] ;
 Step       = ( 'given' | 'when' | 'then' ) , String ;   (* each repeatable *)

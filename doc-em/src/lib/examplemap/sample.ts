@@ -12,6 +12,13 @@
  * teach the notation and hide the point of the technique, which is that the
  * shape of the map tells you what to do next.
  *
+ * It names a product and a ticket, because the notation for both is otherwise
+ * only described on the format page and this is what people copy from. The
+ * status is `analysing` rather than `ready` for the same reason the map is
+ * untidy: a story with an unanswered question against it and a rule with no
+ * examples is not ready, and a sample that said so would be teaching the wrong
+ * thing about what the board is for.
+ *
  * Two of the five examples carry Given/When/Then and the rest are titles alone,
  * which is also deliberate. That is what a real map looks like an hour after the
  * session: the cards everyone agreed on have been made precise, and the others
@@ -27,7 +34,10 @@ export const SAMPLE_SOURCE = `// Example map exported by doc-em.
 // is the source, this file is a render of it.
 
 examplemap "Redeem a voucher" {
-  story "Redeem a voucher" {
+  product "client-onboarding"
+  space "CLONB"
+
+  story "Redeem a voucher" #CLONB-42 ~analysing {
     question "Which currencies can a voucher be issued in?"
   }
 

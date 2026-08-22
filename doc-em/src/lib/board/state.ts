@@ -10,7 +10,14 @@
  * are regenerated on every import; nothing outside this tab refers to them.
  */
 
-import { hasSteps, type CardKind, type StepClause } from '../examplemap/model.ts';
+import {
+	DEFAULT_STORY_STATUS,
+	hasSteps,
+	UNDEFINED_STORY,
+	type CardKind,
+	type StepClause,
+	type StoryStatus,
+} from '../examplemap/model.ts';
 
 export type { CardKind, StepClause };
 export type Id = string;
@@ -50,11 +57,18 @@ export interface Rule extends Card {
 export interface Story {
 	readonly title: string;
 	readonly notes: readonly string[];
+	/** The linked ticket, exactly as the tracker spells it. Read-only here. */
+	readonly ticket: string | null;
+	readonly status: StoryStatus;
 	readonly questions: readonly Id[];
 }
 
 export interface BoardState {
 	readonly title: string;
+	/** The registered product's shortname, or null for a map about no product. */
+	readonly product: string | null;
+	/** The stated ticketing space; null falls back to the product shortname. */
+	readonly space: string | null;
 	readonly notes: readonly string[];
 	readonly story: Story;
 	readonly ruleOrder: readonly Id[];
@@ -63,11 +77,13 @@ export interface BoardState {
 	readonly questions: Readonly<Record<Id, Card>>;
 }
 
-export function emptyBoard(title = 'Untitled example map', story = 'To be defined'): BoardState {
+export function emptyBoard(title = 'Untitled example map', story = UNDEFINED_STORY): BoardState {
 	return {
 		title,
+		product: null,
+		space: null,
 		notes: [],
-		story: { title: story, notes: [], questions: [] },
+		story: { title: story, notes: [], ticket: null, status: DEFAULT_STORY_STATUS, questions: [] },
 		ruleOrder: [],
 		rules: {},
 		examples: {},

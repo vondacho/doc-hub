@@ -63,7 +63,7 @@ and only the first arrow is a hard one.
 ./helm/doc-registry/deploy.sh
 ./helm/doc-portal/deploy.sh         # reads the registry, but starts without it
 ./helm/doc-sm/deploy.sh             # reads the registry for its product picker, but opens without it
-./helm/doc-em/deploy.sh             # reads nothing; install it in any order
+./helm/doc-em/deploy.sh             # reads the registry for its product picker, but opens without it
 ```
 
 That is the whole thing, and all five scripts are the same script: each builds
@@ -428,15 +428,21 @@ there so the day it does is not a deployment incident.
 `doc-em` is the example mapping board: one story, its rules, the examples under
 each rule and the open questions, read from and written to an `.examplemap` file.
 
-**It has no data and no dependencies at all.** No database, no volume, no Secret
-and — unlike `doc-sm` — no call to anything. Its ConfigMap holds three entries
-and all three are browser-facing links: `doc-portal`, dev-hub's page on the
-practice, and `doc-sm`. Nothing in this chart is an in-cluster address, which is
-the shortest possible statement of what this component does: it is asked for a
-page, and that is the end of the transaction.
+**It has no data and one dependency.** No database, no volume and no Secret. Its
+ConfigMap holds four browser-facing links — `doc-portal`, dev-hub's page on the
+practice, the registry's admin UI and `doc-sm` — and one in-cluster address,
+`REGISTRY_API_URL`, which the board page reads on every request to fill its
+product picker.
 
-So there is no install order to get wrong. Install it before or after everything
-else; the links resolve or they do not, and the board works either way.
+That is the only call this component makes, and — unlike `doc-sm` — there is no
+`TICKETING_API_URL` beside it. doc-em records which ticket the story is and what
+state it is in; it never issues one, so it holds no tracker address and no
+credentials.
+
+So there is still no install order to get wrong. An unreachable registry costs
+the picker, not the board: the product field degrades to a text box that says
+why, and everything else opens as usual. Install it before or after everything
+else.
 
 **Nothing it holds can be lost by deleting a pod**, because it holds nothing. A
 map lives in the file the visitor exports; work that has not been exported lives

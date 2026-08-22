@@ -10,7 +10,8 @@
  * | Preserved                                  | Not preserved                      |
  * | ------------------------------------------ | ---------------------------------- |
  * | Map title                                  | Comments — every one of them       |
- * | The story, and its questions               | Blank lines                        |
+ * | Product and ticketing space                | Blank lines                        |
+ * | The story, its ticket and its status       | A `~open` status (it is the default) |
  * | Rules, in order                            | Indentation width and style        |
  * | Examples under each rule, in order         | `{ }` on an empty card (omitted)   |
  * | Questions under each rule, in order        |                                    |
@@ -25,7 +26,15 @@
  * re-import" safe.
  */
 
-import { STEP_CLAUSES, wrapNote, type ExampleMapDocument, type ExampleNode, type QuestionNode } from './model.ts';
+import {
+	DEFAULT_STORY_STATUS,
+	STEP_CLAUSES,
+	wrapNote,
+	type ExampleMapDocument,
+	type ExampleNode,
+	type QuestionNode,
+	type StoryNode,
+} from './model.ts';
 
 const INDENT = '  ';
 
@@ -40,14 +49,29 @@ export function serialize(document: ExampleMapDocument): string {
 	const out: string[] = [BANNER];
 
 	out.push(`examplemap ${quote(document.title)} {`);
+
+	// What the map is about, before what it says — the same order the board
+	// reads top to bottom, and the order a reader scanning the file expects.
+	if (document.product !== null) out.push(`${INDENT}product ${quote(document.product)}`);
+	if (document.space !== null) out.push(`${INDENT}space ${quote(document.space)}`);
+	if (document.product !== null || document.space !== null) out.push('');
+
 	for (const note of document.notes) emitNote(out, INDENT, note);
 
 	// The story first, always: it is what the session is about, and a map that
 	// listed its rules before naming its story would read backwards.
 	if (document.notes.length > 0) out.push('');
-	emitCard(out, INDENT, 'story', document.story.title, document.story.notes, (inner) => {
-		emitQuestions(out, inner, document.story.questions);
-	});
+	emitCard(
+		out,
+		INDENT,
+		'story',
+		document.story.title,
+		document.story.notes,
+		(inner) => {
+			emitQuestions(out, inner, document.story.questions);
+		},
+		storyAnnotations(document.story),
+	);
 
 	for (const rule of document.rules) {
 		out.push('');
@@ -87,6 +111,41 @@ function emitSteps(out: string[], indent: string, example: ExampleNode): void {
 	}
 }
 
+/**
+ * The story's `#ticket ~status`, or as much of it as is worth writing.
+ *
+ * An unlinked story writes neither. `~open` is omitted too, because it is the
+ * default and a file that spelled it on every map would be saying "nothing has
+ * been decided" in words on every line where nothing has been decided — noise
+ * that a reader learns to skip, which is the worst thing a field can become.
+ * Omission and `~open` parse back to the same story, so nothing is lost.
+ *
+ * A status *is* written for a linked story even when it is `open`, since there
+ * the value is a cached answer from the ticketing system rather than an absence
+ * of one, and those are different facts.
+ */
+function storyAnnotations(story: StoryNode): string {
+	const parts: string[] = [];
+	if (story.ticket !== null) parts.push(`#${identOrString(story.ticket)}`);
+	if (story.ticket !== null || story.status !== DEFAULT_STORY_STATUS) parts.push(`~${story.status}`);
+	return parts.length === 0 ? '' : ` ${parts.join(' ')}`;
+}
+
+/**
+ * A ticket id bare when the scanner will read it back as one token, quoted when
+ * it will not.
+ *
+ * `#CLONB-42` is what a tracker issues and what everyone writes by hand, so it
+ * is what the exporter emits. But nothing stops a tracker from issuing an id
+ * with a slash or a space in it, and writing that bare would produce a file this
+ * parser cannot read — so those are quoted instead of being emitted as something
+ * that will not round-trip.
+ */
+function identOrString(id: string): string {
+	// Must match the lexer's IDENT_START / IDENT_PART.
+	return /^[A-Za-z0-9_][A-Za-z0-9_-]*$/.test(id) ? id : quote(id);
+}
+
 function emitQuestions(out: string[], indent: string, questions: readonly QuestionNode[]): void {
 	for (const question of questions) {
 		emitCard(out, indent, 'question', question.title, question.notes, undefined);
@@ -107,8 +166,14 @@ function emitCard(
 	title: string,
 	notes: readonly string[],
 	children: ((inner: string) => void) | undefined,
+	/**
+	 * What follows the title on the head line — the story's `#ticket ~status`,
+	 * and nothing else. Last and optional so the three call sites that have no
+	 * annotations do not each have to pass an empty string past a callback.
+	 */
+	annotations = '',
 ): void {
-	const head = `${indent}${keyword} ${quote(title)}`;
+	const head = `${indent}${keyword} ${quote(title)}${annotations}`;
 	const inner = indent + INDENT;
 
 	// The head is written last, once it is known whether there is a body — so a

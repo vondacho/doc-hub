@@ -29,9 +29,14 @@ source of truth.
 
 Nothing about a map reaches this server. The board is `client:only`, so the
 parser, the reducer, the readings and both exporters run in the tab that opened
-it. This component makes no outbound call of any kind: unlike `doc-sm` it has no
-registry to read and no ticketing adapter to raise anything against, and its
-chart accordingly has no Secret and no in-cluster address.
+it.
+
+This component makes one outbound call, and it is not about your map: the board
+page reads the list of registered products from `doc-registry` so the product
+picker has something to offer. The map itself is never sent anywhere. Unlike
+`doc-sm` there is still no ticketing adapter to raise anything against — doc-em
+records which ticket the story is and what state it is in, and never issues one —
+so the chart has no Secret.
 
 The corollary, and the reason the page warns before unload: work that was never
 exported existed only in that tab.
@@ -186,7 +191,10 @@ chat window or a different editor still parses.
 // Example map exported by doc-em.
 
 examplemap "Redeem a voucher" {
-  story "Redeem a voucher" {
+  product "client-onboarding"
+  space "CLONB"
+
+  story "Redeem a voucher" #CLONB-42 ~analysing {
     question "Which currencies can a voucher be issued in?"
   }
 
@@ -216,8 +224,14 @@ examplemap "Redeem a voucher" {
 
 ```ebnf
 File       = ExampleMap , EOF ;
-ExampleMap = 'examplemap' , String , [ '{' , { Story | Rule | Note } , '}' ] ;
-Story      = 'story'    , String , [ '{' , { Question | Note } , '}' ] ;   (* exactly one *)
+ExampleMap = 'examplemap' , String , [ '{' , { Product | Space | Story | Rule | Note } , '}' ] ;
+Product    = 'product'  , String ;   (* at most one *)
+Space      = 'space'    , String ;   (* at most one *)
+Story      = 'story'    , String , { Ticket | Status } ,
+             [ '{' , { Question | Note } , '}' ] ;   (* exactly one *)
+Ticket     = '#' , ( Ident | String ) ;   (* at most one *)
+Status     = '~' , ( 'open' | 'analysing' | 'ready'
+                   | 'in-progress' | 'done' | 'closed' ) ;   (* at most one *)
 Rule       = 'rule'     , String , [ '{' , { Example | Question | Note } , '}' ] ;
 Example    = 'example'  , String , [ '{' , { Step | Note } , '}' ] ;
 Step       = ( 'given' | 'when' | 'then' ) , String ;   (* each repeatable *)
@@ -232,6 +246,25 @@ Comment    = '//' , { Char } ;
 What the grammar decides, each of which the source states its reason for:
 
 - **One story.** A second is an error, not a list.
+- **Only the story carries a ticket.** `#id` and `~status` may follow its title
+  in either order; rules, examples and questions take neither. Breaking a story
+  down does not produce more tickets — that is the difference between this board
+  and `doc-sm`, where each of three rows is a level in the tracker.
+- **The id is editable here and nowhere else.** The board shows it read-only. A
+  session refines a story rather than re-addressing one, and a mistyped id
+  silently re-homes a whole map of rules with no symptom on screen; an edit to
+  the file is deliberate and shows up in a diff. The `~status` beside it is the
+  opposite case — that is what a session changes, so it is also one click on the
+  card menu.
+- **A status is a cache, never the truth.** The ticketing system owns it. `~open`
+  is what an unlinked story reads as — a placeholder, not a claim — and is
+  omitted on export for that reason; a linked story always writes its status,
+  because there it is an answer rather than the absence of one.
+- **`product` is a shortname, `space` falls back to it.** The product is
+  doc-registry's `slug`, not the display name, so a map does not stop matching
+  its product the day somebody fixes the capitalisation. Omit `space` and the
+  shortname stands in; state it when the tracker's key differs, which is
+  ordinary.
 - **An example belongs to a rule** and cannot float. A rule with no examples is
   legal, and is the practice's own warning sign.
 - **`given`, `when` and `then` each repeat**, and there is no `and` keyword. See
@@ -253,11 +286,13 @@ What the grammar decides, each of which the source states its reason for:
 
 ### What round-trips
 
-Preserved: the title, the story, the rules in order, their examples and
-questions in order, every note, and every step.
+Preserved: the title, the product and space, the story with its ticket and
+status, the rules in order, their examples and questions in order, every note,
+and every step.
 
-Normalised: the order steps were typed in. Dropped: a step line opened from the
-menu and never written — on the board it is a placeholder waiting for words, and
+Normalised: the order steps were typed in, and `~open` on an unlinked story,
+which is the default and is omitted. Dropped: a step line opened from the menu
+and never written — on the board it is a placeholder waiting for words, and
 `given ""` in a file asserts nothing.
 
 Lost: comments, blank lines and your indentation. Export emits two-space indent
@@ -275,13 +310,16 @@ its line, column and a hint. **A failed import leaves the board untouched.**
 
 ## Configuration
 
-Three variables, and all three are browser-facing links. There is no in-cluster
-address here at all, because this server calls nothing.
+Five variables. Four are browser-facing links, resolved by the visitor's
+browser; `REGISTRY_API_URL` is the one this server resolves itself, and it must
+be an in-cluster address rather than an ingress host.
 
 | Variable | Default | Used by |
 |---|---|---|
 | `DOC_PORTAL_URL` | `http://doc-portal.localhost` | the board's footer |
 | `PRACTICE_URL` | `http://dev-portal.localhost/doc/practices/example-mapping/` | the header and `/dsl` |
+| `REGISTRY_URL` | `http://doc-registry.localhost` | the "register one" links beside the product picker |
+| `REGISTRY_API_URL` | `http://localhost:1337` | the product picker's list, read per request |
 | `STORY_MAPPER_URL` | `http://doc-sm.localhost` | the footer — the board upstream of this one |
 | `HOST` / `PORT` | `0.0.0.0` / `4323` | the standalone `@astrojs/node` server |
 | `NODE_ENV`, `NODE_OPTIONS` | `production`, unset | Dockerfile / chart |
@@ -339,8 +377,9 @@ build-only ones — the built server entry imports the React renderer even thoug
 ```
 
 then <http://doc-em.localhost>. The chart is `helm/doc-em`, structurally a copy
-of `helm/doc-sm` minus everything that existed for the registry and the
-ticketing adapter.
+of `helm/doc-sm` minus everything that existed for the ticketing adapter — the
+registry entries are the same two, because the product picker is the same
+control.
 
 ## What is not built
 
@@ -351,17 +390,31 @@ ticketing adapter.
 - **No persistence and no sharing.** If maps ever need to be shared rather than
   committed, that is a conversation about where the file lives, not a reason to
   put an example map in Strapi.
-- **No card ids in the file.** Same position as `doc-sm`, for the same reason,
-  and the lexer reserves `#` the same way.
+- **No card ids in the file.** Same position as `doc-sm`, for the same reason.
+  `#` is spelled the same way in both and means the same thing in both: a ticket
+  the tracker issued, never a card this board invented.
+- **No ticket is ever created from here.** doc-em records which ticket the story
+  is; it does not raise one. `#id` is written by editing the `.examplemap` file,
+  which is why there is no `TICKETING_API_URL`, no `/api/ticket` route and no
+  publish dialog — all three exist in `doc-sm`, where three rows of cards each
+  become an issue. Here there is one story, and it already had a ticket before
+  anybody booked the session. If that changes, `doc-sm/src/lib/ticketing.ts` is
+  the module to copy; it wants a ticket *kind*, and here that is the constant
+  `'story'` rather than the three-way choice `doc-sm` has to make. There is no
+  placeholder for it in `examplemap/model.ts` — a type with one value and no
+  caller is a guess about a feature nobody has asked for.
 - **Still no shared package for the sibling boards.** This component is the
   second copy `doc-sm`'s README predicted, and it makes the case concrete:
   `lexer.ts` (its keyword set is already a parameter), `problems.ts`,
   `board/history.ts` and `files.ts` now exist twice, byte-for-byte apart from
-  their keyword sets and error class names. The trigger `doc-sm` named was "the
+  their keyword sets and error class names. `lib/products.ts` and
+  `ProductPicker.tsx` joined them when the picker landed here, and
+  `lib/products.ts` is the worse case of the two: it is a third near-copy, after
+  `doc-portal`'s. The trigger `doc-sm` named was "the
   first bug found in one of them"; the honest reading now is that `doc-es` should
   not be allowed to become a third copy. `Card.tsx`, `CardMenu.tsx`, `Icon.tsx`
   and `IconButton.tsx` are a second, weaker candidate — they diverged here to
-  drop the ticket and persona rows, so extracting them means a props union rather
-  than a move.
+  drop the persona row and to make the ticket read-only, so extracting them means
+  a props union rather than a move.
 - **No tests.** Matching the rest of the repo, which has none and no runner. The
   fixed-point property above is what a suite would assert first.

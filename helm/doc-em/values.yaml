@@ -122,6 +122,22 @@ app:
   # should be in the room.
   practiceUrl: http://dev-portal.localhost/doc/practices/example-mapping/
 
+  # The registry's admin UI, as the browser sees it — where somebody goes to
+  # register a product that is missing from the picker.
+  registryUrl: http://doc-registry.localhost
+
+  # The same registry as *this server* sees it, read once per render of the
+  # board page to fill the product picker. An in-cluster address, not the host
+  # the cluster uses. doc-registry is a release in this same namespace, so the
+  # Service name is enough — cross-namespace would need
+  # doc-registry.<namespace>.svc.
+  #
+  # An unreachable registry is not an outage here. doc-portal answers 503 when
+  # its catalog fetch fails, because a catalog it cannot read is the page. This
+  # page is a board, and the registry only fills one control, so a failure
+  # degrades to a text box for the shortname and the board opens as usual.
+  registryApiUrl: http://doc-registry:1337
+
   # doc-sm, the board upstream of this one. Example mapping takes *one* story;
   # the story map is where that story was chosen, which is why the link points
   # that way and not the reverse.

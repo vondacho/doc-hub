@@ -3,8 +3,13 @@
  *
  * The same shape as doc-sm's, and a good deal shorter, because the technique is
  * smaller: four card kinds, one story, and examples that belong to a rule. There
- * is no release axis, no ticket, no persona — those belong to the map that picks
- * which story to open, not to the session that opens it.
+ * is no release axis and no persona — those belong to the map that picks which
+ * story to open, not to the session that opens it.
+ *
+ * There is a ticket, though, and exactly one. The story under discussion is a
+ * story in somebody's tracker, and `#id ~status` after its title is how the file
+ * says which one. doc-sm spells the same two annotations the same way on all
+ * three of its rows; here there is one row to put them on.
  *
  * Errors are collected rather than fatal, for the reason doc-sm gives: these
  * files are hand-edited in an editor with no language server and imported
@@ -14,8 +19,11 @@
 
 import { tokenize, type Token, type TokenKind } from './lexer.ts';
 import {
+	DEFAULT_STORY_STATUS,
+	emptyStory,
+	isStoryStatus,
 	STEP_CLAUSES,
-	UNDEFINED_STORY,
+	STORY_STATUSES,
 	wrapNote,
 	type ExampleMapDocument,
 	type ExampleNode,
@@ -23,6 +31,7 @@ import {
 	type RuleNode,
 	type StepClause,
 	type StoryNode,
+	type StoryStatus,
 } from './model.ts';
 import { ExampleMapParseError, isSaturated, report, type Problem } from './problems.ts';
 
@@ -202,6 +211,114 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 	}
 
 	/**
+	 * `product "client-onboarding"` — at most one per map.
+	 *
+	 * A second one is an error rather than a last-one-wins overwrite: a map is
+	 * about one product, and two declarations mean a bad merge, which is exactly
+	 * the thing worth surfacing rather than silently resolving.
+	 */
+	function parseOnce(
+		word: 'product' | 'space',
+		state: { value: string | null; token: Token | null },
+		hint: string,
+		twice: string,
+	): boolean {
+		if (!at('keyword', word)) return false;
+		const keyword = advance();
+		const value = expectString(word, hint);
+		if (value === undefined) {
+			synchronize();
+			return true;
+		}
+		if (state.token !== null) {
+			problemAt(keyword, twice, `Already declared on line ${state.token.line}.`);
+			return true;
+		}
+		state.value = value;
+		state.token = keyword;
+		return true;
+	}
+
+	/**
+	 * The `#ticket` and `~status` that may follow the story's title.
+	 *
+	 * Only the story takes them. A rule is not a ticket and neither is an
+	 * example: they are the story broken down, and breaking a story down does not
+	 * produce more tickets — that is the difference between example mapping and
+	 * the story map next door, where every row is a level in the tracker.
+	 *
+	 * Either order is accepted, since there is no reading in which one is more
+	 * correct, and each may appear once. A repeat is an error rather than a
+	 * last-one-wins, because a repeat means a bad merge.
+	 */
+	function parseStoryAnnotations(): { ticket: string | null; status: StoryStatus } {
+		let ticket: string | null = null;
+		let status: StoryStatus | null = null;
+
+		while (at('at') || at('hash') || at('tilde')) {
+			const sigil = advance();
+
+			// `@` is doc-sm's release sigil, and a hand-written map is quite likely
+			// to arrive carrying one. Naming what it means there is more use than
+			// "unexpected character" — the author knows the notation, just not that
+			// this map has no bands.
+			if (sigil.kind === 'at') {
+				problemAt(
+					sigil,
+					'An example map has no releases.',
+					'`@` puts a story in a band on a story map. An example map is one story, so there is nothing to band.',
+				);
+				if (at('ident') || at('string')) advance();
+				continue;
+			}
+
+			if (sigil.kind === 'hash') {
+				if (!at('ident') && !at('string')) {
+					problemAt(
+						sigil,
+						`Expected a ticket id after \`#\`, found ${describe(peek())}.`,
+						'Write the id the ticketing system issued: #CLONB-42',
+					);
+					continue;
+				}
+				const value = advance().value;
+				if (ticket !== null) {
+					problemAt(sigil, 'This story names two tickets.', 'A story links to one ticket.');
+					continue;
+				}
+				ticket = value;
+				continue;
+			}
+
+			if (!at('ident')) {
+				problemAt(
+					sigil,
+					`Expected a status after \`~\`, found ${describe(peek())}.`,
+					`One of: ${STORY_STATUSES.map((x) => `~${x}`).join(', ')}`,
+				);
+				continue;
+			}
+			const word = advance();
+			if (status !== null) {
+				problemAt(sigil, 'This story names two statuses.', 'A story is in one state.');
+				continue;
+			}
+			if (!isStoryStatus(word.value)) {
+				problemAt(
+					word,
+					`\`${word.value}\` is not a status.`,
+					`One of: ${STORY_STATUSES.map((x) => `~${x}`).join(', ')}`,
+				);
+				continue;
+			}
+			status = word.value;
+		}
+
+		// Unlinked, and nothing said about it yet.
+		return { ticket, status: status ?? DEFAULT_STORY_STATUS };
+	}
+
+	/**
 	 * `story "…"` — exactly one.
 	 *
 	 * A second is an error rather than a list, because the practice is defined as
@@ -217,9 +334,10 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 			return true;
 		}
 
+		const { ticket, status } = parseStoryAnnotations();
 		const notes: string[] = [];
 		const questions: QuestionNode[] = [];
-		const node: StoryNode = { title, notes, questions };
+		const node: StoryNode = { title, notes, ticket, status, questions };
 		parseBody('story', () => parseQuestion(questions) || parseNote(notes));
 
 		if (state.token !== null) {
@@ -261,6 +379,8 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 		}
 
 		let title = 'Untitled example map';
+		const product: { value: string | null; token: Token | null } = { value: null, token: null };
+		const space: { value: string | null; token: Token | null } = { value: null, token: null };
 		const notes: string[] = [];
 		const rules: RuleNode[] = [];
 		const story: { value: StoryNode | null; token: Token | null } = { value: null, token: null };
@@ -271,7 +391,22 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 			if (parsed !== undefined) title = parsed;
 			parseBody(
 				'examplemap',
-				() => parseStory(story) || parseRule(rules) || parseNote(notes),
+				() =>
+					parseOnce(
+						'product',
+						product,
+						'A product is its shortname, quoted: product "client-onboarding"',
+						'The product is declared twice. An example map is about one product.',
+					) ||
+					parseOnce(
+						'space',
+						space,
+						'A ticketing space is quoted: space "CLONB"',
+						'The ticketing space is declared twice. A ticket is raised into one space.',
+					) ||
+					parseStory(story) ||
+					parseRule(rules) ||
+					parseNote(notes),
 			);
 		}
 
@@ -291,10 +426,12 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 
 		return {
 			title,
+			product: product.value,
+			space: space.value,
 			notes: [...notes],
 			// A map with no `story` line is not an error: it is a session that has
 			// not named its story yet, which is exactly what a fresh board is.
-			story: story.value ?? { title: UNDEFINED_STORY, notes: [], questions: [] },
+			story: story.value ?? emptyStory(),
 			rules,
 		};
 	}
@@ -303,5 +440,5 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 }
 
 function blank(title: string): ExampleMapDocument {
-	return { title, notes: [], story: { title: UNDEFINED_STORY, notes: [], questions: [] }, rules: [] };
+	return { title, product: null, space: null, notes: [], story: emptyStory(), rules: [] };
 }

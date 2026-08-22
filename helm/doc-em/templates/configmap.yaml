@@ -7,14 +7,27 @@ metadata:
 data:
   # Read by src/lib/links.ts through process.env at call time.
   #
-  # All three are **browser-facing links** — the visitor's browser resolves
-  # them, so an in-cluster address would be wrong. Unlike doc-sm's ConfigMap
-  # there is no fourth key here that this server resolves itself, because this
-  # server calls nothing: the map is a file, parsed in the browser that opened
-  # it.
+  # These four are **browser-facing links** — the visitor's browser resolves
+  # them, so an in-cluster address would be wrong.
   DOC_PORTAL_URL: {{ .Values.app.docPortalUrl | quote }}
   PRACTICE_URL: {{ .Values.app.practiceUrl | quote }}
+  REGISTRY_URL: {{ .Values.app.registryUrl | quote }}
   STORY_MAPPER_URL: {{ .Values.app.storyMapperUrl | quote }}
+
+  # The one address here the *server* resolves rather than the visitor's
+  # browser: the board page reads the registered products from it on every
+  # request, to fill the product picker. An ingress host here would leave the
+  # cluster and come back in to reach a Service one DNS name away — and would
+  # break entirely the moment the ingress is disabled, which the in-cluster name
+  # does not care about.
+  #
+  # This is the only request doc-em makes. If it fails, the picker degrades to a
+  # text box and the board still works; see src/lib/products.ts.
+  #
+  # There is no TICKETING_API_URL beside it, unlike doc-sm's ConfigMap. doc-em
+  # records which ticket the story is and what state it is in; it never issues
+  # one, so it has no reason to hold a tracker's address or its credentials.
+  REGISTRY_API_URL: {{ .Values.app.registryApiUrl | quote }}
   {{- range $key, $value := .Values.app.extraConfig }}
   {{ $key }}: {{ $value | quote }}
   {{- end }}

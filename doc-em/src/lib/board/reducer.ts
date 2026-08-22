@@ -9,7 +9,14 @@
  * uses an identity check to decide whether an action consumed an undo step.
  */
 
-import { splitNotes, UNDEFINED_STORY, type CardKind, type StepClause } from '../examplemap/model.ts';
+import {
+	DEFAULT_STORY_STATUS,
+	splitNotes,
+	UNDEFINED_STORY,
+	type CardKind,
+	type StepClause,
+	type StoryStatus,
+} from '../examplemap/model.ts';
 import { nextId } from './convert.ts';
 import type { BoardState, Card, Example, Id, Rule } from './state.ts';
 
@@ -22,6 +29,26 @@ export type BoardAction =
 	| { type: 'applyText'; board: BoardState }
 	| { type: 'reset' }
 	| { type: 'setMapTitle'; title: string }
+	/**
+	 * Pick the registered product, or clear it.
+	 *
+	 * Setting a product *initialises* the ticketing space when none has been
+	 * stated, which saves typing the same word twice in the case where they
+	 * agree — the usual one. It never overwrites a space that already holds a
+	 * value: changing the product later leaves a settled space alone, because a
+	 * ticket already raised into it carries a key from it, and quietly
+	 * re-pointing the map at another space would strand it.
+	 */
+	| { type: 'setProduct'; product: string | null }
+	| { type: 'setSpace'; space: string | null }
+	/**
+	 * Record a status against the story.
+	 *
+	 * The one ticketing field the board may write. The id beside it is
+	 * deliberately not here — see `Story.ticket` in state.ts — so there is no
+	 * action that changes it and no component that could offer one by mistake.
+	 */
+	| { type: 'setStoryStatus'; status: StoryStatus }
 	| { type: 'retitle'; kind: CardKind; id: Id; title: string }
 	| { type: 'setNotes'; kind: CardKind; id: Id; text: string }
 	| { type: 'addRule'; index: number }
@@ -50,10 +77,12 @@ export function reduce(board: BoardState, action: BoardAction): BoardState {
 		case 'reset':
 			return {
 				...board,
+				product: null,
+				space: null,
 				notes: [],
 				// A board always has a story, even a blank one: a session that has
 				// not named its story has not started.
-				story: { title: UNDEFINED_STORY, notes: [], questions: [] },
+				story: { title: UNDEFINED_STORY, notes: [], ticket: null, status: DEFAULT_STORY_STATUS, questions: [] },
 				ruleOrder: [],
 				rules: {},
 				examples: {},
@@ -64,6 +93,25 @@ export function reduce(board: BoardState, action: BoardAction): BoardState {
 			return action.title.trim() === '' || action.title === board.title
 				? board
 				: { ...board, title: action.title };
+
+		case 'setProduct': {
+			if (action.product === board.product) return board;
+			// Initialised, not derived: once it holds a value it is the map's own.
+			const space = board.space ?? action.product;
+			return { ...board, product: action.product, space };
+		}
+
+		case 'setSpace': {
+			// Blank and "follow the product" are the same intent, so an emptied
+			// field returns the space to null rather than storing "".
+			const space = action.space === null || action.space.trim() === '' ? null : action.space.trim();
+			return space === board.space ? board : { ...board, space };
+		}
+
+		case 'setStoryStatus':
+			return action.status === board.story.status
+				? board
+				: { ...board, story: { ...board.story, status: action.status } };
 
 		case 'retitle':
 			return retitle(board, action.kind, action.id, action.title);

@@ -3,14 +3,28 @@ import Layout from '../layouts/Layout.astro';
 import ExampleMapBoard from '../components/board/ExampleMapBoard.tsx';
 import { swatchClass } from '../lib/board/kinds';
 import { CARD_KINDS, cardLabel, cardMeaning } from '../lib/examplemap/model';
-import { docPortalUrl, practiceUrl, storyMapperUrl } from '../lib/links';
+import { docPortalUrl, practiceUrl, registryApiUrl, registryUrl, storyMapperUrl } from '../lib/links';
+import { fetchProducts } from '../lib/products';
 
-// Server-rendered like every page in doc-hub. This one asks the server for
-// nothing — the map comes from a file the visitor picks — but it is left as a
-// server route rather than prerendered so the three addresses below stay
-// configuration, resolved per request.
+// Server-rendered, like every other page in doc-hub.
+//
+// This page used to ask the server for nothing — the map comes from a file the
+// visitor picks — and the product picker ended that. The list of registered
+// products is read from doc-registry on every request, so the response is no
+// longer identical for every visitor, and baking it at build time would hand out
+// a catalogue that is stale the first time somebody registers a product.
+//
+// Deliberately uncached, for the reason doc-portal gives about its own catalogue
+// fetch: a hub about how current your documentation is should not be the one
+// page showing you a stale copy of it.
+//
+// fetchProducts never throws. An unreachable registry costs the picker, not the
+// board — see the note at the top of src/lib/products.ts.
+const { products, unavailable } = await fetchProducts(registryApiUrl());
+
 const portal = docPortalUrl();
 const practice = practiceUrl();
+const registry = registryUrl();
 const storyMapper = storyMapperUrl();
 ---
 
@@ -50,7 +64,12 @@ const storyMapper = storyMapperUrl();
       </ul>
     </section>
 
-    <ExampleMapBoard client:only="react" />
+    <ExampleMapBoard
+      client:only="react"
+      products={products}
+      productsUnavailable={unavailable}
+      registryUrl={registry}
+    />
 
     <noscript>
       <div class="rounded-2xl border border-slate-200 p-6 dark:border-slate-700">

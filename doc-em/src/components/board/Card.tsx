@@ -53,6 +53,14 @@ export interface CardProps {
 	readonly data: Record<string, unknown>;
 	/** Set for the story card, which is not draggable: there is only one of it. */
 	readonly fixed?: boolean;
+	/**
+	 * Rendered at the foot of the card, below the notes.
+	 *
+	 * The story card's ticket and status line, and nothing else so far — see
+	 * StoryMeta.tsx. Below rather than beside the title because it is the least
+	 * of what the card says: the story is the sentence, the badges are its
+	 * filing.
+	 */
 	readonly children?: ReactNode;
 }
 

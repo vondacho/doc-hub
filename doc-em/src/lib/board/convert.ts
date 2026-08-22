@@ -67,9 +67,13 @@ export function toBoard(document: ExampleMapDocument): BoardState {
 	return {
 		...emptyBoard(document.title),
 		notes: [...document.notes],
+		product: document.product,
+		space: document.space,
 		story: {
 			title: document.story.title,
 			notes: [...document.story.notes],
+			ticket: document.story.ticket,
+			status: document.story.status,
 			questions: storyQuestions,
 		},
 		ruleOrder,
@@ -87,10 +91,14 @@ export function toDocument(board: BoardState): ExampleMapDocument {
 
 	return {
 		title: board.title,
+		product: board.product,
+		space: board.space,
 		notes: [...board.notes],
 		story: {
 			title: board.story.title,
 			notes: [...board.story.notes],
+			ticket: board.story.ticket,
+			status: board.story.status,
 			questions: board.story.questions.flatMap(question),
 		},
 		rules: board.ruleOrder.flatMap((ruleId) => {

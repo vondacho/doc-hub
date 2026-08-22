@@ -53,6 +53,10 @@ export interface Token {
 /** The words that are keywords rather than identifiers in an `.examplemap` file. */
 export const EXAMPLEMAP_KEYWORDS: ReadonlySet<string> = new Set([
 	'examplemap',
+	// What the map is about and where its ticket lives. Both are map-level and
+	// both are optional; see ExampleMapDocument in model.ts.
+	'product',
+	'space',
 	'story',
 	'rule',
 	'example',

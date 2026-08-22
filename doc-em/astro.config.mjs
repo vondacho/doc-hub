@@ -6,10 +6,15 @@ import tailwindcss from '@tailwindcss/vite';
 
 // https://astro.build/config
 export default defineConfig({
-	// Server-rendered, matching doc-portal — but see the `prerender` export in
-	// src/pages/index.astro: the board itself asks the server for nothing and is
-	// prerendered, which is a claim worth making structurally rather than in a
-	// comment.
+	// Server-rendered, matching doc-portal — but see the `prerender` exports in
+	// src/pages/dsl.astro and src/pages/404.astro: a page that asks the server
+	// for nothing says so structurally rather than in a comment.
+	//
+	// The board page is not among them. It reads the registered products from
+	// doc-registry on every request to fill its product picker, so its response
+	// is not the same for every visitor and baking it at build time would hand
+	// out a catalogue that goes stale the first time somebody registers a
+	// product.
 	output: 'server',
 	adapter: node({ mode: 'standalone' }),
 

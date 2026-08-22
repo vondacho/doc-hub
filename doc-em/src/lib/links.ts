@@ -10,9 +10,16 @@
  * server reading a local .env, then a default that matches what the chart ships
  * — so an unset value and the default look identical, and neither looks broken.
  *
- * All three are **browser-facing links**: doc-em calls nothing. An example map
- * is a file the visitor picked, parsed in their browser, so unlike doc-sm there
- * is no in-cluster address here at all and the chart has no Secret.
+ * Most of these are **browser-facing links**, and one is not. The distinction is
+ * load-bearing — it is the same split doc-portal draws between REGISTRY_URL and
+ * REGISTRY_API_URL. A link is resolved by the visitor's browser and must be an
+ * address the browser can reach; a call is made by this server and must not be,
+ * because leaving the cluster to come back in to a Service one DNS name away
+ * breaks the moment the ingress is disabled.
+ *
+ * doc-em used to call nothing at all, and the product picker is what ended that.
+ * The map is still a file the visitor picked and parsed in their own browser;
+ * the one thing the server fetches is the list of products to choose from.
  */
 
 function fromEnv(name: string, fallback: string): string {
@@ -27,6 +34,28 @@ export function docPortalUrl(): string {
 /** dev-hub's page on the practice — the source this component was built from. */
 export function practiceUrl(): string {
   return fromEnv('PRACTICE_URL', 'http://dev-portal.localhost/doc/practices/example-mapping/');
+}
+
+/**
+ * The registry's admin UI, as the *browser* sees it — a link, not a call.
+ *
+ * Where somebody goes to register a product that is missing from the picker.
+ */
+export function registryUrl(): string {
+  return fromEnv('REGISTRY_URL', 'http://doc-registry.localhost');
+}
+
+/**
+ * The same registry, as *this server* sees it — the one entry here that is an
+ * in-cluster call rather than a browser-facing link.
+ *
+ * Read once per render of the board page, to fill the product picker. It is the
+ * only request doc-em makes, and it must not be an ingress host: doc-registry is
+ * a release in the same namespace, so the Service name is enough.
+ * Cross-namespace would need doc-registry.<namespace>.svc.
+ */
+export function registryApiUrl(): string {
+  return fromEnv('REGISTRY_API_URL', 'http://localhost:1337');
 }
 
 /** doc-sm, the board that picks which story to open. */

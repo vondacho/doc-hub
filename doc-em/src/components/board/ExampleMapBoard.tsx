@@ -45,6 +45,7 @@ import { parse } from '../../lib/examplemap/parser.ts';
 import { ExampleMapParseError, type Problem } from '../../lib/examplemap/problems.ts';
 import { SAMPLE_SOURCE } from '../../lib/examplemap/sample.ts';
 import { serialize } from '../../lib/examplemap/serialize.ts';
+import type { Product } from '../../lib/products.ts';
 import { BASE_FONT, BoardGrid } from './BoardGrid.tsx';
 import { PreviewDialog, type GherkinPreview } from './PreviewDialog.tsx';
 import { ProblemList } from './ProblemList.tsx';
@@ -57,7 +58,18 @@ const DEFAULT_ZOOM_INDEX = 0;
 
 const step = undoable<BoardState, BoardAction>(reduce, { limit: HISTORY_LIMIT, resets: resetsHistory });
 
-export default function ExampleMapBoard() {
+export default function ExampleMapBoard({
+	products,
+	productsUnavailable,
+	registryUrl,
+}: {
+	/** The registered products, read once on the server. See src/lib/products.ts. */
+	products: readonly Product[];
+	/** Why the list is empty, when the registry could not be read. */
+	productsUnavailable: string | null;
+	/** The registry's admin UI, for the "register one" links. Browser-facing. */
+	registryUrl: string;
+}) {
 	const [history, send] = useReducer(
 		step as (state: History<BoardState>, action: BoardAction | HistoryAction) => History<BoardState>,
 		undefined,
@@ -335,6 +347,14 @@ export default function ExampleMapBoard() {
 		>
 			<Toolbar
 				title={board.title}
+				product={board.product}
+				products={products}
+				productsUnavailable={productsUnavailable}
+				registryUrl={registryUrl}
+				onProduct={(product) => dispatch({ type: 'setProduct', product })}
+				space={board.space}
+				spacePlaceholder={board.product ?? ''}
+				onSpace={(next) => dispatch({ type: 'setSpace', space: next })}
 				dirty={dirty}
 				canUndo={canUndo(history)}
 				canRedo={canRedo(history)}

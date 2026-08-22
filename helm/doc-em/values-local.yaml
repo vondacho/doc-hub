@@ -39,6 +39,8 @@ ingress:
 app:
   docPortalUrl: http://doc-portal.localhost
   practiceUrl: http://dev-portal.localhost/doc/practices/example-mapping/
+  registryUrl: http://doc-registry.localhost
+  registryApiUrl: http://doc-registry:1337
   storyMapperUrl: http://doc-sm.localhost
 
 resources:

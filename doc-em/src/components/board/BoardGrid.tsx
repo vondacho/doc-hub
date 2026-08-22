@@ -21,10 +21,19 @@
 import { SortableContext, horizontalListSortingStrategy, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { useDroppable } from '@dnd-kit/core';
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
-import { cardLabel, clauseKeyword, STEP_CLAUSES, type StepClause } from '../../lib/examplemap/model.ts';
+import {
+	cardLabel,
+	clauseKeyword,
+	STEP_CLAUSES,
+	STORY_STATUSES,
+	storyStatusLabel,
+	type StepClause,
+	type StoryStatus,
+} from '../../lib/examplemap/model.ts';
 import type { BoardAction, QuestionParent } from '../../lib/board/reducer.ts';
 import { STORY_DETAIL_KEY, type BoardState, type Example, type Id } from '../../lib/board/state.ts';
 import { Card } from './Card.tsx';
+import { StoryMeta } from './StoryMeta.tsx';
 import { ExampleSteps } from './ExampleSteps.tsx';
 import type { CardMenuAction } from './CardMenu.tsx';
 import { Icon } from './Icon.tsx';
@@ -150,9 +159,12 @@ export function BoardGrid({
 										}),
 								},
 								{ label: 'Ask a question about the story', separated: true, run: () => dispatch({ type: 'addQuestion', parent: { story: true } }) },
+								...statusActions(dispatch, board.story.status, board.story.ticket !== null),
 							]}
 							className="min-w-[16em] flex-1"
-						/>
+						>
+							<StoryMeta ticket={board.story.ticket} status={board.story.status} />
+						</Card>
 
 						<QuestionStrip
 							board={board}
@@ -372,6 +384,28 @@ function QuestionStrip({
 			</SortableContext>
 		</ul>
 	);
+}
+
+/**
+ * Setting the status by hand is offered, and it is also not the truth.
+ *
+ * While the story is unlinked this is the only record there is; once a ticket
+ * exists the ticketing system owns the answer and this changes only the board's
+ * copy — which the label says, so nobody believes they have moved a ticket.
+ *
+ * The current status is filtered out: an item that does nothing is one more
+ * thing to read past on a menu that already lists five.
+ */
+function statusActions(
+	dispatch: (action: BoardAction) => void,
+	current: StoryStatus,
+	linked: boolean,
+): CardMenuAction[] {
+	return STORY_STATUSES.filter((candidate) => candidate !== current).map((candidate, position) => ({
+		label: linked ? `Mark ${storyStatusLabel[candidate]} here only` : `Mark ${storyStatusLabel[candidate]}`,
+		separated: position === 0,
+		run: () => dispatch({ type: 'setStoryStatus', status: candidate }),
+	}));
 }
 
 function Add({ label, onClick, children }: { label: string; onClick: () => void; children: ReactNode }) {
