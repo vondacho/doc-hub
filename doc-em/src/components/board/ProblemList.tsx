@@ -18,7 +18,14 @@ export function ProblemList({
 	subject = 'That file',
 }: {
 	problems: readonly Problem[];
-	onDismiss: () => void;
+	/**
+	 * Omitted where the problems are not this panel's to clear.
+	 *
+	 * The preview's Gherkin tab reports problems in the *other* tab's text: they
+	 * go away when that text parses, and a Dismiss button there would hide the
+	 * reason the pane is empty while leaving it empty.
+	 */
+	onDismiss?: () => void;
 	/** What was wrong — a picked file, or text edited in the preview. */
 	subject?: string;
 }) {
@@ -33,6 +40,7 @@ export function ProblemList({
 				<h2 className="font-semibold">
 					{problems.length === 1 ? `${subject} has a problem` : `${subject} has ${problems.length} problems`}
 				</h2>
+				{onDismiss && (
 				<button
 					type="button"
 					onClick={onDismiss}
@@ -40,6 +48,7 @@ export function ProblemList({
 				>
 					Dismiss
 				</button>
+				)}
 			</div>
 			<p className="mt-1 text-ink-muted dark:text-slate-400">
 				The board on this page has not been changed.

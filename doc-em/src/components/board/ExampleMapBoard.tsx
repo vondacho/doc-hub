@@ -46,7 +46,7 @@ import { ExampleMapParseError, type Problem } from '../../lib/examplemap/problem
 import { SAMPLE_SOURCE } from '../../lib/examplemap/sample.ts';
 import { serialize } from '../../lib/examplemap/serialize.ts';
 import { BASE_FONT, BoardGrid } from './BoardGrid.tsx';
-import { PreviewDialog } from './PreviewDialog.tsx';
+import { PreviewDialog, type GherkinPreview } from './PreviewDialog.tsx';
 import { ProblemList } from './ProblemList.tsx';
 import { Readings } from './Readings.tsx';
 import { Toolbar } from './Toolbar.tsx';
@@ -124,6 +124,28 @@ export default function ExampleMapBoard() {
 		() => (previewing ? serialize(toDocument(board)) : ''),
 		[previewing, board],
 	);
+
+	/**
+	 * The feature file for whatever is currently in the preview's map tab.
+	 *
+	 * Passed in as a function rather than as text so the Gherkin tab tracks the
+	 * draft: edit the map there and the feature file follows, without the dialog
+	 * needing to know how to parse anything.
+	 */
+	const gherkinPreview = useCallback((source: string): GherkinPreview => {
+		try {
+			const parsed = parse(source);
+			return {
+				ok: true,
+				filename: featureFilename(parsed),
+				text: toGherkin(parsed),
+				unwritable: unwritableQuestions(parsed),
+			};
+		} catch (error) {
+			if (!(error instanceof ExampleMapParseError)) throw error;
+			return { ok: false, problems: error.problems };
+		}
+	}, []);
 
 	const exportFile = useCallback(() => {
 		downloadText(filenameFor(board.title), serialize(toDocument(board)));
@@ -350,6 +372,7 @@ export default function ExampleMapBoard() {
 				filename={filenameFor(board.title)}
 				text={preview}
 				onApply={applyPreview}
+				onGherkin={gherkinPreview}
 				onClose={() => setPreviewing(false)}
 			/>
 

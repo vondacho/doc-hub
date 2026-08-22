@@ -114,7 +114,7 @@ export function Toolbar({
 						if (file) onPickFile(file, event.target);
 					}}
 				/>
-				<IconButton icon="preview" label="Preview the .examplemap file" onClick={onPreview} />
+				<IconButton icon="preview" label="Preview the .examplemap and .feature files" onClick={onPreview} />
 				<IconButton icon="publish" label="Write the Gherkin feature file" onClick={onExportGherkin} />
 				<IconButton icon="exportFile" label="Export the .examplemap file" onClick={onExport} tone="primary" />
 

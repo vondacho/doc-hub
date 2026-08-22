@@ -7,7 +7,8 @@
  *
  *   Story    (yellow) -> Feature:   one per file
  *   Rule     (blue)   -> Rule:      a real keyword since Gherkin 6
- *   Example  (green)  -> Example:   same word, same meaning as the card
+ *   Example  (green)  -> Scenario:  the card's own word is Gherkin's synonym
+ *                                  for it; `Scenario` is the one written here
  *   Question (red)    -> nothing
  *
  * ## Why this is a one-way door
@@ -67,7 +68,11 @@ export function toGherkin(document: ExampleMapDocument): string {
 
 		for (const example of rule.examples) {
 			out.push('');
-			out.push(`    Example: ${example.title}`);
+			// `Scenario:`, not `Example:`. Gherkin accepts both — they are synonyms —
+			// and this writes the one nearly every reader and every tutorial uses. The
+			// green card keeps its own name on the board, because there it is an
+			// example of a rule; in the file it is a scenario to run.
+			out.push(`    Scenario: ${example.title}`);
 			for (const note of example.notes) {
 				for (const line of note.split('\n')) out.push(`      ${line}`);
 			}

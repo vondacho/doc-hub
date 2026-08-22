@@ -143,7 +143,7 @@ export it, and you have the map back.
 
 **`.feature`** is Gherkin, and it is a one-way door. Three of the four colours
 have a Gherkin keyword — story is `Feature:`, rule is `Rule:`, example is
-`Example:` — and the fourth has none, because an open question is not a
+`Scenario:` — and the fourth has none, because an open question is not a
 specification. So the feature file cannot carry the red cards, and the board
 says how many it is about to drop before it writes one.
 
@@ -162,14 +162,14 @@ Feature: Redeem a voucher
 
   Rule: A voucher must not be expired
 
-    Example: A voucher that expired yesterday is refused
+    Scenario: A voucher that expired yesterday is refused
       Given a voucher SUMMER10 that expired on 2026-08-21
       And a basket of 40 CHF
       When the voucher is applied
       Then the voucher is refused
       And the basket total is still 40 CHF
 
-    Example: A voucher expiring today is accepted
+    Scenario: A voucher expiring today is accepted
       # No steps yet — this scenario would pass without asserting anything.
 
   Rule: One voucher per basket

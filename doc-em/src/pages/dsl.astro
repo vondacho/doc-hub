@@ -8,13 +8,14 @@ export const prerender = true;
 const practice = practiceUrl();
 
 /**
- * Backtick spans in these strings become <code>. Written as prose with markup in
- * it rather than as JSX so the entries stay readable as sentences — which is what
- * they are, and what makes them easy to correct.
+ * Split a sentence on its backticks: even pieces are prose, odd pieces are code.
+ *
+ * The rendering itself is in the template below, because Astro frontmatter is
+ * TypeScript and not JSX — a `<code>` element here compiles fine under
+ * `astro check` and then fails the build, which is a lesson worth only learning
+ * once.
  */
-function code(text: string) {
-  return text.split('`').map((part, index) => (index % 2 === 0 ? part : <code>{part}</code>));
-}
+const spans = (text: string): readonly string[] => text.split('`');
 
 const rules: { title: string; body: string }[] = [
   {
@@ -85,8 +86,12 @@ const rules: { title: string; body: string }[] = [
         {
           rules.map((rule) => (
             <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-night-raised">
-              <dt class="font-semibold">{code(rule.title)}</dt>
-              <dd class="mt-1.5 text-sm text-ink-muted dark:text-slate-400">{code(rule.body)}</dd>
+              <dt class="font-semibold">
+                {spans(rule.title).map((part, index) => (index % 2 === 0 ? part : <code>{part}</code>))}
+              </dt>
+              <dd class="mt-1.5 text-sm text-ink-muted dark:text-slate-400">
+                {spans(rule.body).map((part, index) => (index % 2 === 0 ? part : <code>{part}</code>))}
+              </dd>
             </div>
           ))
         }
@@ -115,7 +120,7 @@ Comment    = '//' , { Char } ;   (* discarded *)`}</code></pre>
       <h2 id="gherkin" class="text-xl font-bold">And the Gherkin it writes</h2>
       <p class="mt-3 max-w-prose text-ink-muted dark:text-slate-400">
         Three of the four colours have a Gherkin keyword of their own — <code>Feature:</code>,
-        <code>Rule:</code>, <code>Example:</code> — and the fourth has none. An open question is not a
+        <code>Rule:</code>, <code>Scenario:</code> — and the fourth has none. An open question is not a
         specification, so the feature file cannot carry the red cards and the board says so before it writes
         one. That is why the <code>.examplemap</code> file is the one that round-trips.
       </p>
@@ -127,14 +132,14 @@ Comment    = '//' , { Char } ;   (* discarded *)`}</code></pre>
       <div class="mt-3 overflow-x-auto rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-night-raised">
         <pre class="text-xs leading-relaxed"><code>{`  Rule: A voucher must not be expired
 
-    Example: A voucher that expired yesterday is refused
+    Scenario: A voucher that expired yesterday is refused
       Given a voucher SUMMER10 that expired on 2026-08-21
       And a basket of 40 CHF
       When the voucher is applied
       Then the voucher is refused
       And the basket total is still 40 CHF
 
-    Example: A voucher expiring today is accepted
+    Scenario: A voucher expiring today is accepted
       # No steps yet — this scenario would pass without asserting anything.`}</code></pre>
       </div>
     </section>
