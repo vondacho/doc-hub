@@ -67,13 +67,14 @@ them would hide that.
 | preview | the `.examplemap` text this board would export — editable, and applicable back onto the board |
 | write the feature file | the Gherkin (see below) |
 | export | the `.examplemap` file |
-| show / hide notes | every card's notes at once; individually via the caret beside each title |
+| show / hide notes | every card's hidden half at once — notes, and the scenario on an example; individually via the caret beside each title |
 | zoom, fullscreen | 100 %–160 %, and the board alone filling the screen |
 
 Everything a card can do is on the card: click the title to rename it, the caret
-to show its notes, the menu at the end of the row for adding, moving and
-deleting. Drag with the pointer or lift with the keyboard — space to pick up,
-arrows to move, space to drop — and every move is announced.
+to show what is hidden — its notes, and on an example its scenario — the menu at
+the end of the row for adding, moving and deleting. Drag with the pointer or lift
+with the keyboard — space to pick up, arrows to move, space to drop — and every
+move is announced.
 
 ## Reading the shape of the map
 
@@ -93,6 +94,48 @@ They are readings, not verdicts. Each one names the count and the cards it is
 talking about, so a person can disagree with it out loud. The thresholds are
 named constants at the top of `src/lib/board/reading.ts` for the same reason.
 
+## The formal language on an example card
+
+A rule and a question are prose. An example is not, or not for long: it is a
+concrete case, and the notation for a concrete case is Gherkin. So an example
+card carries its own **Given / When / Then**, the way a story card in `doc-sm`
+carries *As a… I want… so that…*.
+
+Expand any example and the scenario is there, in grey, before anybody has typed:
+
+```
+Given some context
+When something happens
+Then an outcome
+```
+
+That is the guidance. A blank text box teaches nothing; a formal sentence with
+the words missing teaches the notation and asks for the words in one gesture.
+Click a line to write it, Enter to commit, clear it to delete it.
+
+**Any clause may be written more than once.** `Given` genuinely accumulates —
+"a voucher that expired yesterday" *and* "a basket of 40 CHF" — and so does
+`Then`. Add another from the card's menu, and the guidance follows:
+
+```
+Given a voucher SUMMER10 that expired on 2026-08-21
+And a basket of 40 CHF
+When the voucher is applied
+Then the voucher is refused
+And the basket total is still 40 CHF
+```
+
+**`And` is rendered, never stored.** The model keeps three lists, and the second
+step of a clause is *printed* as `And` — on the card and in the feature file
+alike. Delete the first `Given` and the second becomes `Given` on its own.
+Storing the word would make each line's meaning depend on the line above it, so
+reordering two lines would silently change what they assert.
+
+**Steps are optional, and staying optional is the point.** A session that
+produced ten example titles and no steps did example mapping correctly; the
+technique is twenty-five minutes of conversation, not a test-writing exercise.
+The steps are for whoever makes a card precise afterwards.
+
 ## Two exports, and only one of them round-trips
 
 **`.examplemap`** is the file this board reads and writes. Import it, edit it,
@@ -104,6 +147,12 @@ have a Gherkin keyword — story is `Feature:`, rule is `Rule:`, example is
 specification. So the feature file cannot carry the red cards, and the board
 says how many it is about to drop before it writes one.
 
+An example's steps are written out verbatim. Nothing is guessed: an example that
+is still a title alone produces a scenario with no steps, and a comment saying
+so. A stepless scenario is not an error in Gherkin — it parses, runs and passes —
+which is exactly why it is called out, because a green suite that asserted
+nothing is worse than a red one.
+
 A rule with no examples still emits its `Rule:`, followed by a comment saying
 nobody has agreed what it means. Dropping it silently would lose the most useful
 thing on the board.
@@ -114,17 +163,19 @@ Feature: Redeem a voucher
   Rule: A voucher must not be expired
 
     Example: A voucher that expired yesterday is refused
+      Given a voucher SUMMER10 that expired on 2026-08-21
+      And a basket of 40 CHF
+      When the voucher is applied
+      Then the voucher is refused
+      And the basket total is still 40 CHF
 
     Example: A voucher expiring today is accepted
+      # No steps yet — this scenario would pass without asserting anything.
 
   Rule: One voucher per basket
 
     # No examples yet — nobody has agreed what this rule means.
 ```
-
-The examples are titles, not steps. Turning `A voucher that expired yesterday is
-refused` into Given/When/Then is the work of writing the test, and a tool that
-guessed at it would produce steps nobody wrote and nobody trusts.
 
 ## The DSL
 
@@ -140,7 +191,13 @@ examplemap "Redeem a voucher" {
   }
 
   rule "A voucher must not be expired" {
-    example "A voucher that expired yesterday is refused"
+    example "A voucher that expired yesterday is refused" {
+      given "a voucher SUMMER10 that expired on 2026-08-21"
+      given "a basket of 40 CHF"
+      when "the voucher is applied"
+      then "the voucher is refused"
+      then "the basket total is still 40 CHF"
+    }
     example "A voucher expiring today is accepted"
     question "Is expiry checked when it is applied, or when the basket is paid?"
   }
@@ -162,7 +219,8 @@ File       = ExampleMap , EOF ;
 ExampleMap = 'examplemap' , String , [ '{' , { Story | Rule | Note } , '}' ] ;
 Story      = 'story'    , String , [ '{' , { Question | Note } , '}' ] ;   (* exactly one *)
 Rule       = 'rule'     , String , [ '{' , { Example | Question | Note } , '}' ] ;
-Example    = 'example'  , String , [ '{' , { Note } , '}' ] ;
+Example    = 'example'  , String , [ '{' , { Step | Note } , '}' ] ;
+Step       = ( 'given' | 'when' | 'then' ) , String ;   (* each repeatable *)
 Question   = 'question' , String , [ '{' , { Note } , '}' ] ;
 Note       = 'note'     , String ;
 String     = '"' , { Char | Escape | Splice } , '"' ;
@@ -176,6 +234,13 @@ What the grammar decides, each of which the source states its reason for:
 - **One story.** A second is an error, not a list.
 - **An example belongs to a rule** and cannot float. A rule with no examples is
   legal, and is the practice's own warning sign.
+- **`given`, `when` and `then` each repeat**, and there is no `and` keyword. See
+  above: `And` is a rendering of a repeat, not a fourth kind of step.
+- **Steps come back in Gherkin's order** however they were typed. Given before
+  When before Then is not a style preference — any other order is not a scenario,
+  and the file would produce a feature no Cucumber accepts. Normalising costs
+  nothing, because the three are separate fields with no order between them to
+  lose.
 - **A question hangs on the story or on one rule.** A doubt raised before any
   rule exists belongs to the story; one raised while discussing a rule sits with
   it. Both readings are different, which is why the format keeps them apart —
@@ -189,7 +254,11 @@ What the grammar decides, each of which the source states its reason for:
 ### What round-trips
 
 Preserved: the title, the story, the rules in order, their examples and
-questions in order, and every note.
+questions in order, every note, and every step.
+
+Normalised: the order steps were typed in. Dropped: a step line opened from the
+menu and never written — on the board it is a placeholder waiting for words, and
+`given ""` in a file asserts nothing.
 
 Lost: comments, blank lines and your indentation. Export emits two-space indent
 and a canonical order. So a hand-edited file loses its comments the first time
@@ -279,8 +348,6 @@ ticketing adapter.
   own change. The doc-sm one is the more interesting: "open this story in an
   example map" is the real workflow, and it needs a way to carry a story's title
   across, which is a question about a URL contract rather than about this board.
-- **No Given/When/Then.** Examples stay titles. See above — writing the steps is
-  writing the test.
 - **No persistence and no sharing.** If maps ever need to be shared rather than
   committed, that is a conversation about where the file lives, not a reason to
   put an example map in Strapi.

@@ -9,9 +9,9 @@
  * uses an identity check to decide whether an action consumed an undo step.
  */
 
-import { splitNotes, UNDEFINED_STORY, type CardKind } from '../examplemap/model.ts';
+import { splitNotes, UNDEFINED_STORY, type CardKind, type StepClause } from '../examplemap/model.ts';
 import { nextId } from './convert.ts';
-import type { BoardState, Card, Id, Rule } from './state.ts';
+import type { BoardState, Card, Example, Id, Rule } from './state.ts';
 
 /** Where a question hangs. The story, or one rule. */
 export type QuestionParent = { readonly story: true } | { readonly ruleId: Id };
@@ -26,6 +26,10 @@ export type BoardAction =
 	| { type: 'setNotes'; kind: CardKind; id: Id; text: string }
 	| { type: 'addRule'; index: number }
 	| { type: 'addExample'; ruleId: Id }
+	/** Open a step line on an example. The line starts empty; the author fills it. */
+	| { type: 'addStep'; exampleId: Id; clause: StepClause }
+	/** Write one step. Blank text deletes the line rather than storing nothing. */
+	| { type: 'setStep'; exampleId: Id; clause: StepClause; index: number; text: string }
 	| { type: 'addQuestion'; parent: QuestionParent }
 	| { type: 'remove'; kind: Exclude<CardKind, 'story'>; id: Id }
 	| { type: 'moveRule'; ruleId: Id; index: number }
@@ -82,10 +86,22 @@ export function reduce(board: BoardState, action: BoardAction): BoardState {
 			const id = nextId('e');
 			return {
 				...board,
-				examples: { ...board.examples, [id]: { id, title: 'New example', notes: [] } },
+				examples: {
+					...board.examples,
+					// No steps, not empty ones: a new example shows the Given/When/Then
+					// template because `stepLines` supplies it, and the card stays a
+					// title until somebody makes it precise.
+					[id]: { id, title: 'New example', notes: [], given: [], when: [], then: [] },
+				},
 				rules: { ...board.rules, [rule.id]: { ...rule, exampleIds: [...rule.exampleIds, id] } },
 			};
 		}
+
+		case 'addStep':
+			return addStep(board, action.exampleId, action.clause);
+
+		case 'setStep':
+			return setStep(board, action.exampleId, action.clause, action.index, action.text);
 
 		case 'addQuestion': {
 			const id = nextId('q');
@@ -124,6 +140,68 @@ export function reduce(board: BoardState, action: BoardAction): BoardState {
 
 /* -------------------------------------------------------------------------- */
 
+/**
+ * Open one more line of a clause.
+ *
+ * Appends an empty string, which is how the board says "this line exists and is
+ * waiting". The first `Given` is not appended by this — `stepLines` already
+ * renders a template line for an empty clause, so opening a clause that has
+ * nothing in it would produce two placeholders where the author expects one.
+ */
+function addStep(board: BoardState, id: Id, clause: StepClause): BoardState {
+	const example = board.examples[id];
+	if (!example) return board;
+	// A trailing blank is already the line being waited on; a second helps nobody.
+	if (example[clause].at(-1)?.trim() === '') return board;
+	return withSteps(board, example, clause, [...example[clause], '']);
+}
+
+/**
+ * Write one step, by index within its clause.
+ *
+ * Blank text removes the line. That is the only way to delete a step, and it is
+ * the obvious one: clearing the words of a step you did not mean to add is what
+ * a person tries first. An index past the end appends, so the template line that
+ * `stepLines` renders for an empty clause commits into the first real entry.
+ */
+function setStep(
+	board: BoardState,
+	id: Id,
+	clause: StepClause,
+	index: number,
+	raw: string,
+): BoardState {
+	const example = board.examples[id];
+	if (!example) return board;
+
+	// A step is one line of a scenario. Pasted breaks are collapsed rather than
+	// written into a feature file that would then fail to parse.
+	const text = raw.replace(/\s+/g, ' ').trim();
+	const current = example[clause];
+
+	if (index >= current.length) {
+		return text === '' ? board : withSteps(board, example, clause, [...current, text]);
+	}
+	if (current[index] === text) return board;
+
+	const next = text === ''
+		? [...current.slice(0, index), ...current.slice(index + 1)]
+		: current.map((step, at) => (at === index ? text : step));
+	return withSteps(board, example, clause, next);
+}
+
+function withSteps(
+	board: BoardState,
+	example: Example,
+	clause: StepClause,
+	steps: readonly string[],
+): BoardState {
+	return {
+		...board,
+		examples: { ...board.examples, [example.id]: { ...example, [clause]: steps } },
+	};
+}
+
 function retitle(board: BoardState, kind: CardKind, id: Id, raw: string): BoardState {
 	const title = raw.trim();
 	if (title === '') return board;
@@ -136,11 +214,18 @@ function retitle(board: BoardState, kind: CardKind, id: Id, raw: string): BoardS
 		if (!rule || rule.title === title) return board;
 		return { ...board, rules: { ...board.rules, [id]: { ...rule, title } } };
 	}
-	const bag = kind === 'example' ? board.examples : board.questions;
-	const card = bag[id];
+	// Examples and questions are handled apart rather than through one `bag`.
+	// They were the same shape until an example grew its three step buckets, and
+	// a shared local widens back to `Card` — which then loses them on every
+	// rename.
+	if (kind === 'example') {
+		const card = board.examples[id];
+		if (!card || card.title === title) return board;
+		return { ...board, examples: { ...board.examples, [id]: { ...card, title } } };
+	}
+	const card = board.questions[id];
 	if (!card || card.title === title) return board;
-	const updated = { ...bag, [id]: { ...card, title } };
-	return kind === 'example' ? { ...board, examples: updated } : { ...board, questions: updated };
+	return { ...board, questions: { ...board.questions, [id]: { ...card, title } } };
 }
 
 function setNotes(board: BoardState, kind: CardKind, id: Id, text: string): BoardState {
@@ -156,11 +241,14 @@ function setNotes(board: BoardState, kind: CardKind, id: Id, text: string): Boar
 		if (!rule || same(rule.notes)) return board;
 		return { ...board, rules: { ...board.rules, [id]: { ...rule, notes } } };
 	}
-	const bag = kind === 'example' ? board.examples : board.questions;
-	const card = bag[id];
+	if (kind === 'example') {
+		const card = board.examples[id];
+		if (!card || same(card.notes)) return board;
+		return { ...board, examples: { ...board.examples, [id]: { ...card, notes } } };
+	}
+	const card = board.questions[id];
 	if (!card || same(card.notes)) return board;
-	const updated = { ...bag, [id]: { ...card, notes } };
-	return kind === 'example' ? { ...board, examples: updated } : { ...board, questions: updated };
+	return { ...board, questions: { ...board.questions, [id]: { ...card, notes } } };
 }
 
 /**

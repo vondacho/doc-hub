@@ -10,8 +10,8 @@
  * toBoard is a deterministic function of its input.
  */
 
-import type { ExampleMapDocument, QuestionNode } from '../examplemap/model.ts';
-import { emptyBoard, type BoardState, type Card, type Id, type Rule } from './state.ts';
+import { STEP_CLAUSES, type ExampleMapDocument, type QuestionNode } from '../examplemap/model.ts';
+import { emptyBoard, type BoardState, type Card, type Example, type Id, type Rule } from './state.ts';
 
 let counter = 0;
 
@@ -28,7 +28,7 @@ export function resetIds(): void {
 export function toBoard(document: ExampleMapDocument): BoardState {
 	const rules: Record<Id, Rule> = {};
 	const ruleOrder: Id[] = [];
-	const examples: Record<Id, Card> = {};
+	const examples: Record<Id, Example> = {};
 	const questions: Record<Id, Card> = {};
 
 	const addQuestions = (nodes: readonly QuestionNode[]): Id[] =>
@@ -44,7 +44,14 @@ export function toBoard(document: ExampleMapDocument): BoardState {
 		const ruleId = nextId('r');
 		const exampleIds = rule.examples.map((example) => {
 			const id = nextId('e');
-			examples[id] = { id, title: example.title, notes: [...example.notes] };
+			examples[id] = {
+				id,
+				title: example.title,
+				notes: [...example.notes],
+				given: [...example.given],
+				when: [...example.when],
+				then: [...example.then],
+			};
 			return id;
 		});
 		rules[ruleId] = {
@@ -95,7 +102,22 @@ export function toDocument(board: BoardState): ExampleMapDocument {
 					notes: [...rule.notes],
 					examples: rule.exampleIds.flatMap((id) => {
 						const card = board.examples[id];
-						return card ? [{ title: card.title, notes: [...card.notes] }] : [];
+						if (!card) return [];
+						// Blank steps are dropped here rather than in the serializer, so
+						// that the document model — which is what `.examplemap` and the
+						// feature file are both written from — never carries a step that
+						// says nothing.
+						const written = (clause: (typeof STEP_CLAUSES)[number]) =>
+							card[clause].map((step) => step.trim()).filter((step) => step !== '');
+						return [
+							{
+								title: card.title,
+								notes: [...card.notes],
+								given: written('given'),
+								when: written('when'),
+								then: written('then'),
+							},
+						];
 					}),
 					questions: rule.questionIds.flatMap(question),
 				},

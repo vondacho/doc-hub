@@ -21,13 +21,21 @@
  * So this writes and never reads. The `.examplemap` file is what round-trips;
  * this is the artefact, and the board says as much before it hands it over.
  *
- * The steps are deliberately absent. An example's card is one line — "a voucher
- * that expired yesterday is refused" — and its Given/When/Then are written
- * afterwards, by whoever picks the story up. Emitting a guessed skeleton would
- * put words in their mouth and make a real file look finished.
+ * ## The steps
+ *
+ * An example's card is one line — "a voucher that expired yesterday is refused".
+ * Its Given/When/Then are written on the card too, when somebody has made the
+ * line precise, and those are the steps written here verbatim. Nothing is
+ * guessed: an example with no steps produces a scenario with no steps, and says
+ * so, rather than a skeleton that puts words in somebody's mouth.
+ *
+ * `And` is generated, not stored. A second step of the same clause is written
+ * `And` because that is how Gherkin renders a repeat — the map holds three
+ * buckets and this decides how to print them, so the same rule applies here and
+ * on the card.
  */
 
-import type { ExampleMapDocument } from './model.ts';
+import { clauseKeyword, STEP_CLAUSES, type ExampleMapDocument, type ExampleNode } from './model.ts';
 
 /** How many questions the file cannot carry. The caller warns with this. */
 export function unwritableQuestions(document: ExampleMapDocument): number {
@@ -63,10 +71,33 @@ export function toGherkin(document: ExampleMapDocument): string {
 			for (const note of example.notes) {
 				for (const line of note.split('\n')) out.push(`      ${line}`);
 			}
+			emitSteps(out, example);
 		}
 	}
 
 	return `${out.join('\n')}\n`;
+}
+
+/**
+ * One example's steps, or a note saying it has none.
+ *
+ * A scenario with no steps is not an error in Gherkin — it parses, runs, and
+ * passes. That is exactly why it is called out: a green suite that asserted
+ * nothing is worse than a red one, and the person who opens this file should not
+ * have to notice the absence for themselves.
+ */
+function emitSteps(out: string[], example: ExampleNode): void {
+	const written = STEP_CLAUSES.flatMap((clause) =>
+		example[clause]
+			.filter((step) => step.trim() !== '')
+			.map((step, index) => `${index === 0 ? clauseKeyword[clause] : 'And'} ${step.trim()}`),
+	);
+
+	if (written.length === 0) {
+		out.push('      # No steps yet — this scenario would pass without asserting anything.');
+		return;
+	}
+	for (const line of written) out.push(`      ${line}`);
 }
 
 /** `redeem-a-voucher.feature`, from the story rather than the map's title. */

@@ -11,6 +11,13 @@
  * practice calls the sign that nobody understands the rule. A tidy example would
  * teach the notation and hide the point of the technique, which is that the
  * shape of the map tells you what to do next.
+ *
+ * Two of the five examples carry Given/When/Then and the rest are titles alone,
+ * which is also deliberate. That is what a real map looks like an hour after the
+ * session: the cards everyone agreed on have been made precise, and the others
+ * are still one line in the room's own words. One of the two accumulates — two
+ * `given` and two `then` — so the `And` the board and the feature file both
+ * render is visible in the sample rather than only described.
  */
 
 export const SAMPLE_FILENAME = 'redeem-a-voucher.examplemap';
@@ -25,7 +32,13 @@ examplemap "Redeem a voucher" {
   }
 
   rule "A voucher must not be expired" {
-    example "A voucher that expired yesterday is refused"
+    example "A voucher that expired yesterday is refused" {
+      given "a voucher SUMMER10 that expired on 2026-08-21"
+      given "a basket of 40 CHF"
+      when "the voucher is applied"
+      then "the voucher is refused"
+      then "the basket total is still 40 CHF"
+    }
     example "A voucher expiring today is accepted"
     question "Is expiry checked when it is applied, or when the basket is paid?"
   }
@@ -37,7 +50,11 @@ examplemap "Redeem a voucher" {
   rule "A voucher cannot take a basket below zero" {
     note "The finance team asked for this in writing. Do not\\
          change it without them."
-    example "A 50 CHF voucher on a 30 CHF basket leaves a total of 0.00 CHF"
+    example "A 50 CHF voucher on a 30 CHF basket leaves a total of 0.00 CHF" {
+      given "a basket of 30 CHF"
+      when "a 50 CHF voucher is applied"
+      then "the basket total is 0.00 CHF"
+    }
     example "The remaining 20 CHF is not carried to the next order"
   }
 

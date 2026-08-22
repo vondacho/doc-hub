@@ -6,9 +6,10 @@
  * row. Somebody who has used the story mapper should not have to learn a second
  * set of gestures to use this one.
  *
- * Simpler than doc-sm's in one way. There is nothing composed here — no need
- * clauses, no ticket line — so a card is its title and its notes, and both are
- * text somebody typed.
+ * Simpler than doc-sm's in one way — there is no ticket line — but not in
+ * another: an example card carries its Given/When/Then, which arrives through
+ * `detailContent` and shares the collapsible region with the notes. Everything
+ * else here is a title and some notes, both text somebody typed.
  */
 
 import {
@@ -38,6 +39,14 @@ export interface CardProps {
 	readonly onToggleDetail: () => void;
 	readonly onRetitle: (title: string) => void;
 	readonly onNotes: (text: string) => void;
+	/**
+	 * Anything the card shows above its notes when expanded — the scenario, on an
+	 * example. Its presence alone earns the card a caret, because a card can have
+	 * something to reveal without having a note.
+	 */
+	readonly detailContent?: ReactNode;
+	/** What the caret reveals, for its accessible name. Defaults to "the notes". */
+	readonly detailName?: string;
 	readonly style?: CSSProperties;
 	readonly className?: string;
 	/** Sortable data, so the drag handlers know what was picked up. */
@@ -58,6 +67,8 @@ export function Card({
 	onToggleDetail,
 	onRetitle,
 	onNotes,
+	detailContent,
+	detailName = 'the notes',
 	style,
 	className = '',
 	data,
@@ -115,12 +126,12 @@ export function Card({
 						{title}
 					</button>
 
-					{notes.length > 0 && (
+					{(notes.length > 0 || detailContent !== undefined) && (
 						<button
 							type="button"
 							onClick={onToggleDetail}
 							aria-expanded={detailOpen}
-							aria-label={`${detailOpen ? 'Hide' : 'Show'} the notes on ${title}`}
+							aria-label={`${detailOpen ? 'Hide' : 'Show'} ${detailName} on ${title}`}
 							className="shrink-0 rounded-sm text-ink-muted transition hover:text-brand focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand motion-reduce:transition-none dark:text-slate-400 dark:hover:text-sky-400"
 						>
 							<Icon name={detailOpen ? 'up' : 'down'} className="h-[1.05em] w-[1.05em]" />
@@ -133,6 +144,7 @@ export function Card({
 
 			{detailOpen && !editing && (
 				<div className="mt-[0.25em] text-[0.8em] leading-snug text-ink-muted dark:text-slate-400">
+					{detailContent}
 					{editingNotes ? (
 						<NoteEditor
 							value={joinNotes(notes)}
@@ -149,7 +161,9 @@ export function Card({
 								type="button"
 								onClick={() => setEditingNotes(true)}
 								aria-label={`Edit the notes on ${title}`}
-								className="block w-full text-left break-words hyphens-auto whitespace-pre-line focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand"
+								className={`block w-full text-left break-words hyphens-auto whitespace-pre-line focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand ${
+									detailContent === undefined ? '' : 'mt-[0.35em]'
+								}`}
 							>
 								{joinNotes(notes)}
 							</button>

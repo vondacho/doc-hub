@@ -38,9 +38,51 @@ export const cardMeaning: Record<CardKind, string> = {
 	question: 'Something nobody in the room can answer.',
 };
 
+/**
+ * The three clauses of a Gherkin step, in the only order Gherkin allows them.
+ *
+ * Order is not a style choice here: `Given` establishes context, `When` is the
+ * one action under test, `Then` is what must be true afterwards. A file that
+ * wrote them in another order would not be Gherkin, so the serializer emits
+ * these buckets in this order regardless of the order they were typed in.
+ */
+export type StepClause = 'given' | 'when' | 'then';
+
+export const STEP_CLAUSES: readonly StepClause[] = ['given', 'when', 'then'];
+
+export const clauseKeyword: Record<StepClause, string> = {
+	given: 'Given',
+	when: 'When',
+	then: 'Then',
+};
+
+/**
+ * A concrete case illustrating a rule.
+ *
+ * The title is the card as it is written on the wall — one line, in the room's
+ * own words. The three step buckets are what that line means in Gherkin, and
+ * they are optional: a session that produced ten example titles and no steps did
+ * example mapping correctly. The steps are for the ones somebody has since sat
+ * down and made precise.
+ *
+ * **Each clause is a list, not a string.** One `When` is the common case and two
+ * is usually a sign the example is really two examples — but `Given` genuinely
+ * accumulates ("a voucher that expired yesterday" *and* "a basket of 40 CHF"),
+ * and so does `Then`. Modelling all three the same way costs nothing and avoids
+ * a rule about which of them may repeat.
+ *
+ * **There is no `and` here, and that is deliberate.** Gherkin's `And` is a
+ * rendering of "another step of the same kind as the one above it", so it is
+ * derived on the way out — see `stepLines` and `toGherkin`. Storing it would
+ * make the meaning of a step depend on the step before it, and reordering two
+ * lines would then silently change what they assert.
+ */
 export interface ExampleNode {
 	readonly title: string;
 	readonly notes: readonly string[];
+	readonly given: readonly string[];
+	readonly when: readonly string[];
+	readonly then: readonly string[];
 }
 
 export interface QuestionNode {
@@ -81,6 +123,87 @@ export interface ExampleMapDocument {
 	readonly notes: readonly string[];
 	readonly story: StoryNode;
 	readonly rules: readonly RuleNode[];
+}
+
+/**
+ * One rendered step line: the keyword to print, and the text beside it.
+ *
+ * The guidance the card shows, in other words — and it has to know about
+ * accumulation, because the second `Given` in a row is written `And`. Deriving
+ * that here rather than in the component means the board, the Gherkin writer and
+ * anything built later all say `And` in the same places.
+ *
+ * A clause nobody has written yet still produces one line, with `value: null`
+ * and a placeholder. That is the template: an example card shows
+ *
+ *     Given some context
+ *     When something happens
+ *     Then an outcome
+ *
+ * in grey until the words are filled in, the same way doc-sm shows an unwritten
+ * "As a … I want … so that …". A blank card that had to be told what shape to be
+ * teaches nothing.
+ */
+export interface StepLine {
+	readonly clause: StepClause;
+	/** Position within its own clause. Also the index a reducer edits. */
+	readonly index: number;
+	/** `Given`/`When`/`Then` for the first of a clause, `And` for every one after. */
+	readonly keyword: string;
+	readonly value: string | null;
+	readonly placeholder: string;
+}
+
+const stepPlaceholder: Record<StepClause, readonly [string, string]> = {
+	given: ['some context', 'more context'],
+	when: ['something happens', 'something else happens'],
+	then: ['an outcome', 'another outcome'],
+};
+
+/**
+ * The step lines to render for one example, template lines included.
+ *
+ * Always at least three — one per clause — so the shape of a scenario is visible
+ * before anybody has typed into it. An entry that is the empty string is a line
+ * somebody opened and has not written yet; it renders as a placeholder and is
+ * dropped on the way to the file.
+ */
+export function stepLines(example: {
+	given: readonly string[];
+	when: readonly string[];
+	then: readonly string[];
+}): readonly StepLine[] {
+	const lines: StepLine[] = [];
+
+	for (const clause of STEP_CLAUSES) {
+		const written = example[clause];
+		const [first, more] = stepPlaceholder[clause];
+
+		if (written.length === 0) {
+			lines.push({ clause, index: 0, keyword: clauseKeyword[clause], value: null, placeholder: first });
+			continue;
+		}
+		written.forEach((text, index) => {
+			lines.push({
+				clause,
+				index,
+				keyword: index === 0 ? clauseKeyword[clause] : 'And',
+				value: text.trim() === '' ? null : text,
+				placeholder: index === 0 ? first : more,
+			});
+		});
+	}
+
+	return lines;
+}
+
+/** Whether an example has any step written — an empty entry does not count. */
+export function hasSteps(example: {
+	given: readonly string[];
+	when: readonly string[];
+	then: readonly string[];
+}): boolean {
+	return STEP_CLAUSES.some((clause) => example[clause].some((text) => text.trim() !== ''));
 }
 
 /** What a board starts as, and what an empty story card says. */

@@ -21,10 +21,11 @@
 import { SortableContext, horizontalListSortingStrategy, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { useDroppable } from '@dnd-kit/core';
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
-import { cardLabel } from '../../lib/examplemap/model.ts';
+import { cardLabel, clauseKeyword, STEP_CLAUSES, type StepClause } from '../../lib/examplemap/model.ts';
 import type { BoardAction, QuestionParent } from '../../lib/board/reducer.ts';
-import { STORY_DETAIL_KEY, type BoardState, type Id } from '../../lib/board/state.ts';
+import { STORY_DETAIL_KEY, type BoardState, type Example, type Id } from '../../lib/board/state.ts';
 import { Card } from './Card.tsx';
+import { ExampleSteps } from './ExampleSteps.tsx';
 import type { CardMenuAction } from './CardMenu.tsx';
 import { Icon } from './Icon.tsx';
 
@@ -277,7 +278,16 @@ function RuleColumn({
 									onToggleDetail={() => onToggleDetail(id)}
 									onRetitle={(title) => dispatch({ type: 'retitle', kind: 'example', id, title })}
 									onNotes={(text) => dispatch({ type: 'setNotes', kind: 'example', id, text })}
-									menu={cardMenu(dispatch, 'example', id, card.notes)}
+									detailName="the scenario"
+									detailContent={
+										<ExampleSteps
+											example={card}
+											onStep={(clause, at, text) =>
+												dispatch({ type: 'setStep', exampleId: id, clause, index: at, text })
+											}
+										/>
+									}
+									menu={exampleMenu(dispatch, id, card)}
 								/>
 							</li>
 						);
@@ -399,9 +409,44 @@ function addNote(
 	};
 }
 
+/**
+ * An example's menu: one entry per clause, plus the usual note and delete.
+ *
+ * The entries say "Add another Given" once a clause has something in it, because
+ * that is what the line will read as — `And`. Naming it after the keyword it
+ * produces would be shorter and would teach the wrong thing: there is no `And`
+ * step, only a second `Given`.
+ */
+function exampleMenu(
+	dispatch: (action: BoardAction) => void,
+	id: Id,
+	example: Example,
+): CardMenuAction[] {
+	const clause = (name: StepClause): CardMenuAction => {
+		const written = example[name].filter((step) => step.trim() !== '').length;
+		const waiting = example[name].at(-1)?.trim() === '';
+		return {
+			label: written === 0 ? `Add a ${clauseKeyword[name]}` : `Add another ${clauseKeyword[name]}`,
+			run: waiting ? undefined : () => dispatch({ type: 'addStep', exampleId: id, clause: name }),
+			disabledReason: waiting ? `There is already an empty ${clauseKeyword[name]} waiting.` : undefined,
+		};
+	};
+
+	return [
+		...STEP_CLAUSES.map(clause),
+		addNote(dispatch, 'example', id, example.notes),
+		{
+			label: 'Delete this example',
+			separated: true,
+			run: () => dispatch({ type: 'remove', kind: 'example', id }),
+		},
+	];
+}
+
+/** A question's menu. Examples have their own — see `exampleMenu`. */
 function cardMenu(
 	dispatch: (action: BoardAction) => void,
-	kind: 'example' | 'question',
+	kind: 'question',
 	id: Id,
 	notes: readonly string[],
 ): CardMenuAction[] {

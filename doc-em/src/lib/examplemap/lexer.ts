@@ -58,6 +58,12 @@ export const EXAMPLEMAP_KEYWORDS: ReadonlySet<string> = new Set([
 	'example',
 	'question',
 	'note',
+	// The three Gherkin clauses. Each may be repeated inside one example; there
+	// is deliberately no `and`, because `And` is how a repeat is *printed*, not
+	// a fourth kind of step. See StepClause in model.ts.
+	'given',
+	'when',
+	'then',
 ]);
 
 /**

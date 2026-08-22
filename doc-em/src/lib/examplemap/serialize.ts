@@ -14,7 +14,8 @@
  * | Rules, in order                            | Indentation width and style        |
  * | Examples under each rule, in order         | `{ }` on an empty card (omitted)   |
  * | Questions under each rule, in order        |                                    |
- * | Notes, and their line breaks               |                                    |
+ * | Notes, and their line breaks               | The order steps were typed in      |
+ * | Steps, as Given / When / Then buckets      | Empty steps opened but not written |
  *
  * The contract is the one doc-sm holds to:
  *
@@ -24,7 +25,7 @@
  * re-import" safe.
  */
 
-import { wrapNote, type ExampleMapDocument, type QuestionNode } from './model.ts';
+import { STEP_CLAUSES, wrapNote, type ExampleMapDocument, type ExampleNode, type QuestionNode } from './model.ts';
 
 const INDENT = '  ';
 
@@ -52,7 +53,9 @@ export function serialize(document: ExampleMapDocument): string {
 		out.push('');
 		emitCard(out, INDENT, 'rule', rule.title, rule.notes, (inner) => {
 			for (const example of rule.examples) {
-				emitCard(out, inner, 'example', example.title, example.notes, undefined);
+				emitCard(out, inner, 'example', example.title, example.notes, (deepest) => {
+					emitSteps(out, deepest, example);
+				});
 			}
 			emitQuestions(out, inner, rule.questions);
 		});
@@ -60,6 +63,28 @@ export function serialize(document: ExampleMapDocument): string {
 
 	out.push('}');
 	return `${out.join('\n')}\n`;
+}
+
+/**
+ * An example's steps, always in Gherkin's order whatever order they were typed.
+ *
+ * Normalising here rather than preserving the author's order is the one place
+ * this serializer rewrites rather than renders, and it is worth it: `Given`
+ * after `Then` is not a scenario, and a file that kept it would produce a
+ * feature file no Cucumber accepts. Since the buckets are separate fields, this
+ * costs nothing — there is no order to lose.
+ *
+ * Blank entries are dropped. On the board an empty step is a line somebody
+ * opened and has not written; in a file it would be `given ""`, which asserts
+ * nothing and re-imports as the same nothing.
+ */
+function emitSteps(out: string[], indent: string, example: ExampleNode): void {
+	for (const clause of STEP_CLAUSES) {
+		for (const step of example[clause]) {
+			if (step.trim() === '') continue;
+			out.push(`${indent}${clause} ${quote(step)}`);
+		}
+	}
 }
 
 function emitQuestions(out: string[], indent: string, questions: readonly QuestionNode[]): void {

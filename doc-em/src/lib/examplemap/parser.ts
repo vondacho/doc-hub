@@ -14,12 +14,14 @@
 
 import { tokenize, type Token, type TokenKind } from './lexer.ts';
 import {
+	STEP_CLAUSES,
 	UNDEFINED_STORY,
 	wrapNote,
 	type ExampleMapDocument,
 	type ExampleNode,
 	type QuestionNode,
 	type RuleNode,
+	type StepClause,
 	type StoryNode,
 } from './model.ts';
 import { ExampleMapParseError, isSaturated, report, type Problem } from './problems.ts';
@@ -37,6 +39,13 @@ export function parse(source: string): ExampleMapDocument {
 	if (problems.length > 0) throw new ExampleMapParseError(problems);
 	return document;
 }
+
+/** What each clause looks like written properly, for the error hint. */
+const stepExample: Record<StepClause, string> = {
+	given: 'a voucher that expired on 2026-08-21',
+	when: 'the voucher is applied to the basket',
+	then: 'the voucher is refused',
+};
 
 function createParser(tokens: readonly Token[], problems: Problem[]) {
 	let position = 0;
@@ -131,6 +140,32 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 		return true;
 	}
 
+	/**
+	 * `given "…"`, `when "…"`, `then "…"` — each repeatable within one example.
+	 *
+	 * Repetition is the whole notation: a second `given` is what Gherkin prints
+	 * as `And`. The file says which clause each line belongs to, so the lines can
+	 * be written in any order and reordered later without changing meaning; the
+	 * serializer puts them back in Gherkin's order on the way out.
+	 */
+	function parseStep(steps: Record<StepClause, string[]>): boolean {
+		const clause = STEP_CLAUSES.find((candidate) => at('keyword', candidate));
+		if (clause === undefined) return false;
+		advance();
+		const text = expectString(
+			clause,
+			`A step is quoted: ${clause} "${stepExample[clause]}"`,
+		);
+		if (text === undefined) {
+			synchronize();
+			return true;
+		}
+		// A step is one line of a scenario, so its own breaks are not meaningful;
+		// collapse them rather than writing a Gherkin file that will not parse.
+		steps[clause].push(text.replace(/\s*\n\s*/g, ' ').trim());
+		return true;
+	}
+
 	function parseExample(examples: ExampleNode[]): boolean {
 		if (!at('keyword', 'example')) return false;
 		advance();
@@ -143,8 +178,9 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 			return true;
 		}
 		const notes: string[] = [];
-		examples.push({ title, notes });
-		parseBody('example', () => parseNote(notes));
+		const steps: Record<StepClause, string[]> = { given: [], when: [], then: [] };
+		examples.push({ title, notes, given: steps.given, when: steps.when, then: steps.then });
+		parseBody('example', () => parseStep(steps) || parseNote(notes));
 		return true;
 	}
 

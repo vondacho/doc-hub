@@ -10,15 +10,29 @@
  * are regenerated on every import; nothing outside this tab refers to them.
  */
 
-import type { CardKind } from '../examplemap/model.ts';
+import { hasSteps, type CardKind, type StepClause } from '../examplemap/model.ts';
 
-export type { CardKind };
+export type { CardKind, StepClause };
 export type Id = string;
 
 export interface Card {
 	readonly id: Id;
 	readonly title: string;
 	readonly notes: readonly string[];
+}
+
+/**
+ * An example, which is a card plus the scenario it stands for.
+ *
+ * The three buckets may hold an empty string, and that is not the same as not
+ * holding it: an empty entry is a step line somebody opened from the menu and
+ * has not written yet. It renders as a placeholder, and `toDocument` drops it —
+ * so it never reaches the file, and re-importing does not resurrect it.
+ */
+export interface Example extends Card {
+	readonly given: readonly string[];
+	readonly when: readonly string[];
+	readonly then: readonly string[];
 }
 
 export interface Rule extends Card {
@@ -45,7 +59,7 @@ export interface BoardState {
 	readonly story: Story;
 	readonly ruleOrder: readonly Id[];
 	readonly rules: Readonly<Record<Id, Rule>>;
-	readonly examples: Readonly<Record<Id, Card>>;
+	readonly examples: Readonly<Record<Id, Example>>;
 	readonly questions: Readonly<Record<Id, Card>>;
 }
 
@@ -101,7 +115,16 @@ export function cardsWithDetail(board: BoardState): readonly Id[] {
 	const found: Id[] = [];
 	if (board.story.notes.length > 0) found.push(STORY_DETAIL_KEY);
 	for (const [id, rule] of Object.entries(board.rules)) if (rule.notes.length > 0) found.push(id);
-	for (const [id, card] of Object.entries(board.examples)) if (card.notes.length > 0) found.push(id);
+	// Every example, written steps or not: an example always has a scenario to
+	// show, even if that scenario is still the Given/When/Then template. This is
+	// the one kind where "expand" reveals something on a card nobody has typed
+	// into — the same way every story in doc-sm shows its As/I want/So that.
+	for (const id of Object.keys(board.examples)) found.push(id);
 	for (const [id, card] of Object.entries(board.questions)) if (card.notes.length > 0) found.push(id);
 	return found;
+}
+
+/** Whether this example has a scenario written, as opposed to only a title. */
+export function exampleIsWritten(example: Example): boolean {
+	return hasSteps(example);
 }
