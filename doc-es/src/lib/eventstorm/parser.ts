@@ -406,9 +406,10 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 			product: product.value,
 			level: chosen,
 			notes: [...notes],
-			// A board always has a lane, even an empty one: the practice starts with
-			// paper on a wall, and the first empty square needs somewhere to be.
-			lanes: all.length > 0 ? all : [emptyLane()],
+			// No lanes is a legal storm: a file that names none is one nobody has
+			// drawn a wall on yet, and the board offers the choice rather than
+			// inventing a lane to hold the emptiness.
+			lanes: all,
 		};
 	}
 
@@ -416,7 +417,7 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 }
 
 function blank(title: string): EventStormDocument {
-	return { title, product: null, level: 'big-picture', notes: [], lanes: [emptyLane()] };
+	return { title, product: null, level: 'big-picture', notes: [], lanes: [] };
 }
 
 function describe(token: Token): string {

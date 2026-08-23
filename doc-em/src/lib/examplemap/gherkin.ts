@@ -40,13 +40,17 @@ import { clauseKeyword, STEP_CLAUSES, type ExampleMapDocument, type ExampleNode 
 
 /** How many questions the file cannot carry. The caller warns with this. */
 export function unwritableQuestions(document: ExampleMapDocument): number {
-	return document.story.questions.length + document.rules.reduce((n, r) => n + r.questions.length, 0);
+	return (document.story?.questions.length ?? 0) + document.rules.reduce((n, r) => n + r.questions.length, 0);
 }
 
 export function toGherkin(document: ExampleMapDocument): string {
-	const out: string[] = [`Feature: ${document.story.title}`];
+	// A map with no story still produces a feature file, named after the map.
+	// Refusing would be the wrong call: the rules and examples are the scenarios,
+	// and they are worth writing out whether or not anybody has got round to
+	// naming the story they belong to.
+	const out: string[] = [`Feature: ${document.story?.title ?? document.title}`];
 
-	for (const note of document.story.notes) {
+	for (const note of document.story?.notes ?? []) {
 		for (const line of note.split('\n')) out.push(`  ${line}`);
 	}
 
@@ -105,9 +109,9 @@ function emitSteps(out: string[], example: ExampleNode): void {
 	for (const line of written) out.push(`      ${line}`);
 }
 
-/** `redeem-a-voucher.feature`, from the story rather than the map's title. */
+/** `redeem-a-voucher.feature`, from the story, or the map's title without one. */
 export function featureFilename(document: ExampleMapDocument): string {
-	const slug = document.story.title
+	const slug = (document.story?.title ?? document.title)
 		.toLowerCase()
 		.replace(/[^a-z0-9]+/g, '-')
 		.replace(/^-+|-+$/g, '')

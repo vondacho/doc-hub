@@ -404,7 +404,8 @@ export interface ExampleMapDocument {
 	 * deliveries shows no bands at all rather than one empty one.
 	 */
 	readonly deliveries: readonly DeliveryNode[];
-	readonly story: StoryNode;
+	/** `null` until somebody names one. See `StoryNode` for why it is optional. */
+	readonly story: StoryNode | null;
 	readonly rules: readonly RuleNode[];
 }
 
@@ -499,7 +500,7 @@ export function emptyDocument(title = 'Untitled example map'): ExampleMapDocumen
 		space: null,
 		notes: [],
 		deliveries: [],
-		story: emptyStory(),
+		story: null,
 		rules: [],
 	};
 }

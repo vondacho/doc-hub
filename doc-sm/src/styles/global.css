@@ -8,10 +8,43 @@
  * build-time dependency between two components that otherwise have none. Keep
  * them in step by hand; they are eleven values.
  *
- * Dark mode follows the OS, as it does in doc-portal. If either ever grows an
- * explicit toggle, switch to a `@custom-variant dark` driven by a data-attribute
- * rather than scattering a second mechanism through the components.
+ * Dark mode follows the OS *unless something says otherwise*, which is the
+ * `@custom-variant` below. That is the change this file's earlier note asked
+ * for: one mechanism, defined once, rather than a second one scattered through
+ * the components.
  */
+
+/*
+ * `dark:` applies when the OS says dark, or when an ancestor says so — and an
+ * ancestor can say the opposite.
+ *
+ * Two rules, and the order of the conditions in the first is the whole trick.
+ *
+ *   1. The OS is in dark mode, *and* nothing between here and the root has
+ *      opted out with `data-theme="light"`.
+ *   2. Something between here and the root has opted in with
+ *      `data-theme="dark"`, whatever the OS thinks.
+ *
+ * So a page with no attribute anywhere behaves exactly as it did before this
+ * existed — it follows the OS — and a subtree that carries one is an island of
+ * the opposite. That is what lets the board be light on a dark page without a
+ * second palette, a second set of classes, or any component knowing about it.
+ *
+ * `:where()` throughout, so none of this adds specificity. A variant that made
+ * `dark:bg-night` outrank a later `bg-white` would be a very confusing thing to
+ * debug six months from now.
+ */
+@custom-variant dark {
+  @media (prefers-color-scheme: dark) {
+    &:where(:not([data-theme='light'], [data-theme='light'] *)) {
+      @slot;
+    }
+  }
+  &:where([data-theme='dark'], [data-theme='dark'] *) {
+    @slot;
+  }
+}
+
 
 @theme {
   --color-ink: oklch(0.24 0.03 255);

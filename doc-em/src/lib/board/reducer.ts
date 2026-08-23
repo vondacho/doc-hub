@@ -32,6 +32,7 @@ import {
 	type Example,
 	type Id,
 	type Rule,
+	type Story,
 } from './state.ts';
 
 /** Where a question hangs. The story, or one rule. */
@@ -62,6 +63,14 @@ export type BoardAction =
 	 * deliberately not here — see `Story.ticket` in state.ts — so there is no
 	 * action that changes it and no component that could offer one by mistake.
 	 */
+	/**
+	 * Name the story this session is about.
+	 *
+	 * The board opens without one — see `Story` in state.ts — so this is the move
+	 * that starts a session. Ignored when there already is a story: the practice
+	 * takes one, and a second would be a second session.
+	 */
+	| { type: 'addStory' }
 	| { type: 'setStoryStatus'; status: StoryStatus }
 	/**
 	 * Write one clause of the story's need. Blank text clears it.
@@ -101,6 +110,24 @@ export type BoardAction =
 	| { type: 'moveExample'; exampleId: Id; from: CellKey; to: CellKey; index: number }
 	| { type: 'moveQuestion'; questionId: Id; from: QuestionParent; to: QuestionParent; index: number };
 
+/**
+ * Change the story, or do nothing when there is not one yet.
+ *
+ * Every story action goes through this, which is the only place the "there may
+ * be no story" case is handled. Written once because it is one rule, and because
+ * a dozen inline null checks is a dozen chances to write `board.story!` on a
+ * tired afternoon.
+ *
+ * Returning the *same* story object means no change, and this returns the same
+ * board — which is what history.ts checks to decide whether an action consumed
+ * an undo step. So a no-op stays a no-op through the wrapper.
+ */
+function withStory(board: BoardState, change: (story: Story) => Story): BoardState {
+	if (board.story === null) return board;
+	const next = change(board.story);
+	return next === board.story ? board : { ...board, story: next };
+}
+
 /** Actions that open a different document; history.ts clears on these. */
 export function resetsHistory(action: BoardAction): boolean {
 	return action.type === 'import' || action.type === 'reset';
@@ -120,17 +147,7 @@ export function reduce(board: BoardState, action: BoardAction): BoardState {
 				notes: [],
 				// A board always has a story, even a blank one: a session that has
 				// not named its story has not started.
-				story: {
-					title: UNDEFINED_STORY,
-					notes: [],
-					ticket: null,
-					status: DEFAULT_STORY_STATUS,
-					release: null,
-					persona: null,
-					want: null,
-					soThat: null,
-					questions: [],
-				},
+				story: null,
 				deliveryOrder: [],
 				deliveries: {},
 				ruleOrder: [],
@@ -162,14 +179,33 @@ export function reduce(board: BoardState, action: BoardAction): BoardState {
 		case 'setStoryNeed': {
 			const text = action.text.replace(/\s+/g, ' ').trim();
 			const value = text === '' ? null : text;
-			if (board.story[action.field] === value) return board;
-			return { ...board, story: { ...board.story, [action.field]: value } };
+			return withStory(board, (story) =>
+				story[action.field] === value ? story : { ...story, [action.field]: value },
+			);
 		}
 
-		case 'setStoryStatus':
-			return action.status === board.story.status
+		case 'addStory':
+			return board.story !== null
 				? board
-				: { ...board, story: { ...board.story, status: action.status } };
+				: {
+						...board,
+						story: {
+							title: UNDEFINED_STORY,
+							notes: [],
+							ticket: null,
+							status: DEFAULT_STORY_STATUS,
+							release: null,
+							persona: null,
+							want: null,
+							soThat: null,
+							questions: [],
+						},
+					};
+
+		case 'setStoryStatus':
+			return withStory(board, (story) =>
+				story.status === action.status ? story : { ...story, status: action.status },
+			);
 
 		case 'retitle':
 			return retitle(board, action.kind, action.id, action.title);
@@ -214,6 +250,9 @@ export function reduce(board: BoardState, action: BoardAction): BoardState {
 			const id = nextId('q');
 			const card: Card = { id, title: 'New question', notes: [] };
 			if ('story' in action.parent) {
+				// No story means no story questions. The board offers the control only
+				// when there is one, so this is a guard rather than a path.
+				if (board.story === null) return board;
 				return {
 					...board,
 					questions: { ...board.questions, [id]: card },
@@ -303,9 +342,9 @@ export function reduce(board: BoardState, action: BoardAction): BoardState {
 		}
 
 		case 'setStoryRelease':
-			return action.release === board.story.release
-				? board
-				: { ...board, story: { ...board.story, release: action.release } };
+			return withStory(board, (story) =>
+				story.release === action.release ? story : { ...story, release: action.release },
+			);
 
 		case 'moveQuestion':
 			return moveQuestion(board, action.questionId, action.from, action.to, action.index);
@@ -381,7 +420,7 @@ function retitle(board: BoardState, kind: CardKind, id: Id, raw: string): BoardS
 	if (title === '') return board;
 
 	if (kind === 'story') {
-		return title === board.story.title ? board : { ...board, story: { ...board.story, title } };
+		return withStory(board, (story) => (story.title === title ? story : { ...story, title }));
 	}
 	if (kind === 'rule') {
 		const rule = board.rules[id];
@@ -408,7 +447,7 @@ function setNotes(board: BoardState, kind: CardKind, id: Id, text: string): Boar
 		existing.length === notes.length && existing.every((note, i) => note === notes[i]);
 
 	if (kind === 'story') {
-		return same(board.story.notes) ? board : { ...board, story: { ...board.story, notes } };
+		return withStory(board, (story) => (same(story.notes) ? story : { ...story, notes }));
 	}
 	if (kind === 'rule') {
 		const rule = board.rules[id];
@@ -471,7 +510,10 @@ function remove(board: BoardState, kind: Exclude<CardKind, 'story'>, id: Id): Bo
 	return {
 		...board,
 		questions,
-		story: { ...board.story, questions: board.story.questions.filter((q) => q !== id) },
+		story:
+			board.story === null
+				? null
+				: { ...board.story, questions: board.story.questions.filter((q) => q !== id) },
 		rules: mapRules(board, (rule) => ({ ...rule, questionIds: rule.questionIds.filter((q) => q !== id) })),
 	};
 }
@@ -541,7 +583,7 @@ function removeDelivery(board: BoardState, id: Id): BoardState {
 		deliveries,
 		deliveryOrder: board.deliveryOrder.filter((d) => d !== id),
 		cells,
-		story: board.story.release === id ? { ...board.story, release: null } : board.story,
+		story: board.story?.release === id ? { ...board.story, release: null } : board.story,
 	};
 }
 
@@ -576,7 +618,12 @@ function moveQuestion(
 	to: QuestionParent,
 	index: number,
 ): BoardState {
-	const holds = 'story' in from ? board.story.questions.includes(id) : board.rules[from.ruleId]?.questionIds.includes(id);
+	// A question on the story implies a story. `holds` being false when there is
+	// none makes every branch below unreachable without a second null check.
+	const holds =
+		'story' in from
+			? (board.story?.questions.includes(id) ?? false)
+			: board.rules[from.ruleId]?.questionIds.includes(id);
 	if (holds !== true) return board;
 	if ('ruleId' in to && !board.rules[to.ruleId]) return board;
 
@@ -586,10 +633,10 @@ function moveQuestion(
 
 	if (sameParent) {
 		if ('story' in to) {
-			const reordered = moveWithin(board.story.questions, id, index);
-			return reordered === board.story.questions
-				? board
-				: { ...board, story: { ...board.story, questions: reordered } };
+			return withStory(board, (story) => {
+				const reordered = moveWithin(story.questions, id, index);
+				return reordered === story.questions ? story : { ...story, questions: reordered };
+			});
 		}
 		const rule = board.rules[to.ruleId]!;
 		const reordered = moveWithin(rule.questionIds, id, index);
@@ -601,7 +648,7 @@ function moveQuestion(
 	let next: BoardState = {
 		...board,
 		story:
-			'story' in from
+			'story' in from && board.story !== null
 				? { ...board.story, questions: board.story.questions.filter((q) => q !== id) }
 				: board.story,
 		rules:
@@ -617,7 +664,10 @@ function moveQuestion(
 	};
 
 	if ('story' in to) {
-		next = { ...next, story: { ...next.story, questions: insertAt(next.story.questions, index, id) } };
+		next = withStory(next, (story) => ({
+			...story,
+			questions: insertAt(story.questions, index, id),
+		}));
 	} else {
 		const rule = next.rules[to.ruleId]!;
 		next = {

@@ -75,6 +75,10 @@ export const icons = {
 	up: 'm18 15-6-6-6 6',
 	down: 'm6 9 6 6 6-6',
 	trash: 'M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3',
+	/** A sun — the board in daylight. */
+	sun: 'M12 4V2M12 22v-2M4 12H2M22 12h-2M6 6 4.5 4.5M19.5 19.5 18 18M18 6l1.5-1.5M4.5 19.5 6 18M16 12a4 4 0 1 1-8 0 4 4 0 0 1 8 0Z',
+	/** A crescent moon — the board at night. */
+	moon: 'M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5Z',
 	/** A floppy disk, still the only glyph everybody reads as "save". */
 	save: 'M5 3h11l3 3v15H5zM8 3v6h8V3M8 14h8v7H8z',
 	/** A folder — the boards this browser is keeping. */

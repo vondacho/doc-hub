@@ -74,7 +74,7 @@ export function toBoard(document: ExampleMapDocument): BoardState {
 			return id;
 		});
 
-	const storyQuestions = addQuestions(document.story.questions);
+	const storyQuestions = addQuestions(document.story?.questions ?? []);
 
 	for (const rule of document.rules) {
 		const ruleId = nextId('r');
@@ -108,17 +108,21 @@ export function toBoard(document: ExampleMapDocument): BoardState {
 		notes: [...document.notes],
 		product: document.product,
 		space: document.space,
-		story: {
-			title: document.story.title,
-			notes: [...document.story.notes],
-			ticket: document.story.ticket,
-			status: document.story.status,
-			release: (document.story.release !== null ? bandOf.get(document.story.release) : undefined) ?? null,
-			persona: document.story.persona,
-			want: document.story.want,
-			soThat: document.story.soThat,
-			questions: storyQuestions,
-		},
+		story:
+			document.story === null
+				? null
+				: {
+						title: document.story.title,
+						notes: [...document.story.notes],
+						ticket: document.story.ticket,
+						status: document.story.status,
+						release:
+							(document.story.release !== null ? bandOf.get(document.story.release) : undefined) ?? null,
+						persona: document.story.persona,
+						want: document.story.want,
+						soThat: document.story.soThat,
+						questions: storyQuestions,
+					},
 		deliveryOrder,
 		deliveries,
 		ruleOrder,
@@ -161,17 +165,20 @@ export function toDocument(board: BoardState): ExampleMapDocument {
 					]
 				: [];
 		}),
-		story: {
-			title: board.story.title,
-			notes: [...board.story.notes],
-			ticket: board.story.ticket,
-			status: board.story.status,
-			release: board.story.release === null ? null : titleOf(board.story.release),
-			persona: board.story.persona,
-			want: board.story.want,
-			soThat: board.story.soThat,
-			questions: board.story.questions.flatMap(question),
-		},
+		story:
+			board.story === null
+				? null
+				: {
+						title: board.story.title,
+						notes: [...board.story.notes],
+						ticket: board.story.ticket,
+						status: board.story.status,
+						release: board.story.release === null ? null : titleOf(board.story.release),
+						persona: board.story.persona,
+						want: board.story.want,
+						soThat: board.story.soThat,
+						questions: board.story.questions.flatMap(question),
+					},
 		rules: board.ruleOrder.flatMap((ruleId) => {
 			const rule = board.rules[ruleId];
 			if (!rule) return [];

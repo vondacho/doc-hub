@@ -13,7 +13,8 @@
  * | Product and ticketing space                | Blank lines                        |
  * | Deliveries, with tickets and sprint sizes  | A `~open` status (it is the default) |
  * | Which delivery the story and each example ship in |                             |
- * | The story, its ticket and its status       | An unwritten need clause (omitted)  |
+ * | The story, when there is one, with its      | An unwritten need clause (omitted)  |
+ * | ticket, status, release and need           | A map with no story writes no line  |
  * | The story's as / want / so, when written   |                                    |
  * | Rules, in order                            | Indentation width and style        |
  * | Examples under each rule, in order         | `{ }` on an empty card (omitted)   |
@@ -68,21 +69,26 @@ export function serialize(document: ExampleMapDocument): string {
 
 	for (const note of document.notes) emitNote(out, INDENT, note);
 
-	// The story first, always: it is what the session is about, and a map that
-	// listed its rules before naming its story would read backwards.
-	if (document.notes.length > 0) out.push('');
-	emitCard(
-		out,
-		INDENT,
-		'story',
-		document.story.title,
-		document.story.notes,
-		(inner) => {
-			emitNeed(out, inner, document.story);
-			emitQuestions(out, inner, document.story.questions);
-		},
-		storyAnnotations(document.story),
-	);
+	// The story first when there is one: it is what the session is about, and a
+	// map that listed its rules before naming its story would read backwards. A
+	// map with no story writes no `story` line at all rather than a placeholder,
+	// which is what makes "nobody has named one" survive a round trip.
+	const story = document.story;
+	if (story !== null) {
+		if (document.notes.length > 0) out.push('');
+		emitCard(
+			out,
+			INDENT,
+			'story',
+			story.title,
+			story.notes,
+			(inner) => {
+				emitNeed(out, inner, story);
+				emitQuestions(out, inner, story.questions);
+			},
+			storyAnnotations(story),
+		);
+	}
 
 	for (const rule of document.rules) {
 		out.push('');

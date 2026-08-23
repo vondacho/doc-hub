@@ -9,9 +9,13 @@ Outbound links (browser-facing, resolved per request):
   The practice       -> {{ .Values.app.practiceUrl }}
   Story mapper       -> {{ .Values.app.storyMapperUrl }}
 
-This server reads nothing in-cluster. There is no registry call, no ticketing
-adapter, no Secret and no volume — the list above is the whole of this release's
-configuration.
+Read by this server (in-cluster), to fill the board's product picker:
+  Product registry   -> {{ .Values.app.registryApiUrl }}
+  If it cannot be reached the picker becomes a text box; the board still works.
+
+That read is the only call this release makes. There is no ticketing adapter, no
+Secret and no volume: doc-em records which ticket a story is and what state it is
+in, and never issues one.
 
 Browse the board:
 {{- if .Values.ingress.enabled }}
@@ -29,12 +33,14 @@ Browse the board:
 Verify the release:
   helm test {{ .Release.Name }} --namespace {{ .Release.Namespace }}
 
-This release stores nothing. A map lives in the .examplemap file the visitor
-exports, and nothing about it reaches this pod. A pod can be deleted at any
-moment without losing work that was already exported. Work that was *not*
-exported lives only in the visitor's tab, which is what the board's unload
-warning is for — and in a session that is the red cards, which the feature file
-cannot carry either.
+Nothing about a map reaches this pod. The map lives in the .examplemap file the
+visitor exports, and the board keeps a copy in their browser's local storage —
+this side of it holds neither. A pod can be deleted at any moment without losing
+anybody's work.
+
+Work that was never exported lives in that one browser, which is what the board's
+unload warning is for: a copy in one browser is insurance, not an artefact. In a
+session that is mostly the red cards, which the feature file cannot carry either.
 
 Reminder: image.tag is pinned with pullPolicy: Never in values-local.yaml, so a
 rebuilt image under the same tag leaves the running pods untouched. After

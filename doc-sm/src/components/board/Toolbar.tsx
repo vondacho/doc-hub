@@ -56,6 +56,10 @@ export function Toolbar({
 	onZoomReset,
 	fullscreen,
 	onToggleFullscreen,
+	boardIsDark,
+	themePinned,
+	onFlipTheme,
+	onFollowPage,
 	detailShown,
 	canToggleDetail,
 	onToggleAllDetail,
@@ -101,6 +105,13 @@ export function Toolbar({
 	onZoomReset: () => void;
 	fullscreen: boolean;
 	onToggleFullscreen: () => void;
+	/** What the board is showing now, whether pinned or following the page. */
+	boardIsDark: boolean;
+	/** Whether the visitor has pinned it, as opposed to following along. */
+	themePinned: boolean;
+	onFlipTheme: () => void;
+	onFollowPage: () => void;
+
 	/** True when at least one card's detail is open. */
 	detailShown: boolean;
 	/** False when nothing on the board has any detail to show. */
@@ -261,6 +272,26 @@ export function Toolbar({
 						{Math.round(zoom * 100)}%
 					</button>
 					<IconButton icon="zoomIn" label="Zoom in" onClick={onZoomIn} disabled={!canZoomIn} />
+					{/*
+					 * The board's own night/day switch.
+					 *
+					 * The icon is what you would get, not what you have — the usual
+					 * convention for these, and the one that makes a single button
+					 * legible without a label. Shift-clicking hands the board back to
+					 * the page, which is the third state; it is on the modifier rather
+					 * than on a third press because a three-way button whose third
+					 * state is invisible is a button nobody can predict, and the
+					 * accessible name says so out loud.
+					 */}
+					<IconButton
+						icon={boardIsDark ? 'sun' : 'moon'}
+						label={
+							themePinned
+								? `Show the board in ${boardIsDark ? 'daylight' : 'the dark'}. Shift-click to follow the page again.`
+								: `Show the board in ${boardIsDark ? 'daylight' : 'the dark'}`
+						}
+						onClick={(event) => (event.shiftKey ? onFollowPage() : onFlipTheme())}
+					/>
 					<IconButton
 						icon={fullscreen ? 'fullscreenExit' : 'fullscreen'}
 						label={fullscreen ? 'Leave fullscreen' : 'Fullscreen the board'}

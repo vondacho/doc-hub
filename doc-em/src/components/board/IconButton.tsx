@@ -14,6 +14,7 @@
  * the accessible name already says the same words.
  */
 
+import type { MouseEvent } from 'react';
 import type { IconName } from '../../lib/board/icons.ts';
 import { Icon } from './Icon.tsx';
 
@@ -42,7 +43,15 @@ export function IconButton({
 	icon: IconName;
 	/** The accessible name, and the tooltip text. Always both. */
 	label: string;
-	onClick: () => void;
+	/**
+	 * The click handler, given the event.
+	 *
+	 * Widened from `() => void` for the one control that reads a modifier — the
+	 * board's theme switch, where shift-click means "follow the page again". Every
+	 * other caller ignores the argument, which is why widening it was cheaper than
+	 * a second button component.
+	 */
+	onClick: (event: MouseEvent<HTMLButtonElement>) => void;
 	disabled?: boolean;
 	tone?: IconButtonTone;
 	size?: 'sm' | 'md';

@@ -27,7 +27,6 @@ import { tokenize, type Token, type TokenKind } from './lexer.ts';
 import {
 	DEFAULT_STORY_STATUS,
 	DELIVERY_KINDS,
-	emptyStory,
 	isDeliveryKind,
 	isStoryStatus,
 	STEP_CLAUSES,
@@ -664,8 +663,9 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 			notes: [...notes],
 			deliveries: deliveries.map((entry) => entry.node),
 			// A map with no `story` line is not an error: it is a session that has
-			// not named its story yet, which is exactly what a fresh board is.
-			story: story.value ?? emptyStory(),
+			// not named its story yet, which is exactly what a fresh board is. It
+			// stays absent rather than becoming a placeholder card nobody wrote.
+			story: story.value,
 			rules,
 		};
 	}
@@ -719,5 +719,5 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 }
 
 function blank(title: string): ExampleMapDocument {
-	return { title, product: null, space: null, notes: [], deliveries: [], story: emptyStory(), rules: [] };
+	return { title, product: null, space: null, notes: [], deliveries: [], story: null, rules: [] };
 }

@@ -108,7 +108,7 @@ function DeliveryLabel({
 	// story card, because this is the row a reader is scanning when they ask
 	// "when is this done?" — and it is the line every example should land on or
 	// before.
-	const shipsHere = board.story.release === deliveryId;
+	const shipsHere = board.story?.release === deliveryId;
 
 	return (
 		<div

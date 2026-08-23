@@ -158,6 +158,7 @@ export function BoardGrid({
 	// written once here rather than as a `+ 2` at each place that needs it.
 	const columnOfRule = (index: number): number => index + 2;
 	const columns = Math.max(1, board.ruleOrder.length) + 1;
+	const story = board.story;
 	const rows = bands(board);
 
 	return (
@@ -215,61 +216,71 @@ export function BoardGrid({
 					</div>
 
 					{/* ---- the story, and the doubts about the story ---- */}
-					<div
-						style={{ gridColumn: '2 / -1', gridRow: STORY_ROW }}
-						className="sticky top-0 z-10 flex flex-wrap items-start gap-[0.4em]"
-					>
-						<Card
-							id={STORY_DETAIL_KEY}
-							kind="story"
-							title={board.story.title}
-							notes={board.story.notes}
-							fixed
-							data={{ type: 'story' }}
-							detailOpen={expanded.has(STORY_DETAIL_KEY)}
-							onToggleDetail={() => onToggleDetail(STORY_DETAIL_KEY)}
-							detailName="the need"
-							detailContent={
-								<StoryNeed
-									story={board.story}
-									onClause={(field, text) => dispatch({ type: 'setStoryNeed', field, text })}
-								/>
-							}
-							onRetitle={(title) => dispatch({ type: 'retitle', kind: 'story', id: '', title })}
-							onNotes={(text) => dispatch({ type: 'setNotes', kind: 'story', id: '', text })}
-							menu={[
-								{
-									label: 'Add a note',
-									run: () =>
-										dispatch({
-											type: 'setNotes',
-											kind: 'story',
-											id: '',
-											text: board.story.notes.length > 0 ? `${board.story.notes.join('\n\n')}\n\nNew note` : 'New note',
-										}),
-								},
-								{ label: 'Ask a question about the story', separated: true, run: () => dispatch({ type: 'addQuestion', parent: { story: true } }) },
-								...statusActions(dispatch, board.story.status, board.story.ticket !== null),
-								...releaseActions(board, dispatch),
-							]}
-							className="min-w-[16em] flex-1"
+					{/*
+					 * Rendered only when there is a story. A board opens without one —
+					 * the island shows the choice instead — so this row is absent
+					 * rather than occupied by a placeholder card. Bound to a local so
+					 * the twelve reads below need one null check between them.
+					 */}
+					{story !== null && (
+						<>
+						<div
+							style={{ gridColumn: '2 / -1', gridRow: STORY_ROW }}
+							className="sticky top-0 z-10 flex flex-wrap items-start gap-[0.4em]"
 						>
-							<StoryMeta
-								ticket={board.story.ticket}
-								status={board.story.status}
-								release={board.story.release === null ? null : (board.deliveries[board.story.release]?.title ?? null)}
-							/>
-						</Card>
+							<Card
+								id={STORY_DETAIL_KEY}
+								kind="story"
+								title={story.title}
+								notes={story.notes}
+								fixed
+								data={{ type: 'story' }}
+								detailOpen={expanded.has(STORY_DETAIL_KEY)}
+								onToggleDetail={() => onToggleDetail(STORY_DETAIL_KEY)}
+								detailName="the need"
+								detailContent={
+									<StoryNeed
+										story={story}
+										onClause={(field, text) => dispatch({ type: 'setStoryNeed', field, text })}
+									/>
+								}
+								onRetitle={(title) => dispatch({ type: 'retitle', kind: 'story', id: '', title })}
+								onNotes={(text) => dispatch({ type: 'setNotes', kind: 'story', id: '', text })}
+								menu={[
+									{
+										label: 'Add a note',
+										run: () =>
+											dispatch({
+												type: 'setNotes',
+												kind: 'story',
+												id: '',
+												text: story.notes.length > 0 ? `${story.notes.join('\n\n')}\n\nNew note` : 'New note',
+											}),
+									},
+									{ label: 'Ask a question about the story', separated: true, run: () => dispatch({ type: 'addQuestion', parent: { story: true } }) },
+									...statusActions(dispatch, story.status, story.ticket !== null),
+									...releaseActions(board, dispatch),
+								]}
+								className="min-w-[16em] flex-1"
+							>
+								<StoryMeta
+									ticket={story.ticket}
+									status={story.status}
+									release={story.release === null ? null : (board.deliveries[story.release]?.title ?? null)}
+								/>
+							</Card>
 
-						<QuestionStrip
-							board={board}
-							dispatch={dispatch}
-							parent={{ story: true }}
-							ids={board.story.questions}
-							expanded={expanded}
-							onToggleDetail={onToggleDetail}
-						/>
-					</div>
+							<QuestionStrip
+								board={board}
+								dispatch={dispatch}
+								parent={{ story: true }}
+								ids={story.questions}
+								expanded={expanded}
+								onToggleDetail={onToggleDetail}
+							/>
+						</div>
+						</>
+					)}
 
 					{/* ---- the rules ---- */}
 					<SortableContext items={[...board.ruleOrder]} strategy={horizontalListSortingStrategy}>
@@ -537,14 +548,14 @@ function releaseActions(board: BoardState, dispatch: (action: BoardAction) => vo
 	if (board.deliveryOrder.length === 0) return [];
 
 	const actions: CardMenuAction[] = board.deliveryOrder
-		.filter((id) => id !== board.story.release)
+		.filter((id) => id !== board.story?.release)
 		.map((id, position) => ({
 			label: `Ship in ${board.deliveries[id]?.title ?? 'it'}`,
 			separated: position === 0,
 			run: () => dispatch({ type: 'setStoryRelease', release: id }),
 		}));
 
-	if (board.story.release !== null) {
+	if (board.story?.release != null) {
 		actions.push({
 			label: 'Not scheduled yet',
 			separated: actions.length === 0,

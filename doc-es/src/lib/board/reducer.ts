@@ -76,20 +76,10 @@ export function reduce(board: BoardState, action: BoardAction): BoardState {
 		case 'applyText':
 			return action.board;
 
-		case 'reset': {
-			// A board always has a lane, even a blank one: the practice starts with
-			// paper on a wall, and the first empty square needs somewhere to be.
-			const id = nextId('l');
-			return {
-				...board,
-				product: null,
-				notes: [],
-				laneOrder: [id],
-				lanes: { [id]: { id, title: UNNAMED_LANE, notes: [] } },
-				cards: {},
-				cells: {},
-			};
-		}
+		case 'reset':
+			// No lane, so the island shows the choice again rather than a bare grid.
+			// A wall somebody has to clear away is not an empty board.
+			return { ...board, product: null, notes: [], laneOrder: [], lanes: {}, cards: {}, cells: {} };
 
 		case 'setMapTitle':
 			return action.title.trim() === '' || action.title === board.title
@@ -215,12 +205,13 @@ function moveCard(board: BoardState, id: Id, from: CellKey, to: CellKey, index: 
 }
 
 /**
- * Deleting a lane takes its cards with it, and never leaves the board laneless.
+ * Deleting a lane takes its cards with it, and the last one may go too.
  *
- * The last lane cannot be deleted — removing it would leave nowhere to put a
- * card and no square to press, which is a board you cannot get out of without
- * reloading the page. It is cleared instead, which is what somebody pressing
- * delete on the only row actually means.
+ * It used to be cleared rather than removed, because a board with no lane had
+ * nowhere to put a card and no square to press — a board you could not get out
+ * of without reloading. That is no longer true: an empty board shows the choice,
+ * so deleting the only lane returns you to it, which is what pressing delete on
+ * the only row actually means.
  */
 function removeLane(board: BoardState, id: Id): BoardState {
 	const lane = board.lanes[id];
@@ -232,10 +223,6 @@ function removeLane(board: BoardState, id: Id): BoardState {
 		if (splitCellKey(key).laneId !== id) continue;
 		for (const cardId of ids) delete cards[cardId];
 		delete cells[key];
-	}
-
-	if (board.laneOrder.length === 1) {
-		return { ...board, cards, cells, lanes: { [id]: { ...lane, title: UNNAMED_LANE, notes: [] } } };
 	}
 
 	const lanes = { ...board.lanes };
@@ -251,6 +238,11 @@ function removeLane(board: BoardState, id: Id): BoardState {
  * Counting avoids handing out a name that is already taken.
  */
 function freshLaneTitle(board: BoardState): string {
+	// The first one is the wall itself. A storm that has just been started has one
+	// undivided surface, and calling it "Lane 1" would imply a second nobody has
+	// thought about yet — the lanes appear when the room finds a reason to split.
+	if (board.laneOrder.length === 0) return UNNAMED_LANE;
+
 	const taken = new Set(Object.values(board.lanes).map((lane) => lane.title));
 	for (let n = board.laneOrder.length + 1; ; n += 1) {
 		const candidate = `Lane ${n}`;

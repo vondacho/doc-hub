@@ -50,8 +50,21 @@ const storyMapper = storyMapperUrl();
       without being told — and the rule that governs doc-portal's status palette
       governs them too: colour is never the only signal.
     */}
-    <section aria-labelledby="legend" class="mb-6">
-      <h2 id="legend" class="sr-only">What the colours mean</h2>
+{/*
+      The legend lives in the island now, not here.
+
+      It used to sit between the header and the board, which put a block of
+      reference text ahead of the product picker — the control that says what
+      this board is about. It is rendered under the toolbar instead, as doc-es
+      does, so all three boards read alike.
+
+      What is left here is the same list for `<noscript>`. A reader without
+      scripting cannot use the board, but they can still be told what the colours
+      on an exported file mean.
+    */}
+    <noscript>
+    <section aria-labelledby="legend-static" class="mb-6">
+      <h2 id="legend-static" class="sr-only">What the colours mean</h2>
       <ul class="flex flex-wrap gap-x-6 gap-y-2 text-sm">
         {
           CARD_KINDS.map((kind) => (
@@ -64,6 +77,7 @@ const storyMapper = storyMapperUrl();
         }
       </ul>
     </section>
+    </noscript>
 
     <ExampleMapBoard
       client:only="react"
@@ -86,7 +100,7 @@ const storyMapper = storyMapperUrl();
     <footer class="mt-10 border-t border-slate-200 pt-6 text-sm text-ink-muted dark:border-slate-700 dark:text-slate-400">
       <p>
         Nothing here is stored on the server — the board keeps a copy in this browser, and that copy goes no further. The <code>.examplemap</code> file you export is the map, and the <code>.feature</code> file is what it produced.
-        The technique is written up in <a class="font-semibold text-brand underline" href={practice}>the development hub</a>;
+        The technique is written up in the <a class="font-semibold text-brand underline" href={practice}>development hub</a>;
         the <a class="font-semibold text-brand underline" href={storyMapper}>Story mapper</a> tool is what picks which story to open.
         The <a class="font-semibold text-brand underline" href="/dsl">format is documented</a>, and
         the <a class="font-semibold text-brand underline" href={portal}>documentation portal</a> holds the product catalogue.

@@ -72,8 +72,21 @@ const ticketingConfigured = isConfigured(ticketingApiUrl());
 			is never the only signal. This says in words what the fills say in hue,
 			and every card repeats it in its accessible name.
 		*/}
-		<section aria-labelledby="legend" class="mb-6">
-			<h2 id="legend" class="sr-only">What the colours mean</h2>
+{/*
+		  The legend lives in the island now, not here.
+
+		  It used to sit between the header and the board, which put a block of
+		  reference text ahead of the product picker — the control that says what
+		  this board is about. It is rendered under the toolbar instead, as doc-es
+		  does, so all three boards read alike.
+
+		  What is left here is the same list for `<noscript>`. A reader without
+		  scripting cannot use the board, but they can still be told what the colours
+		  on an exported file mean.
+		*/}
+		<noscript>
+		<section aria-labelledby="legend-static" class="mb-6">
+			<h2 id="legend-static" class="sr-only">What the colours mean</h2>
 			<ul class="flex flex-wrap gap-x-6 gap-y-2 text-sm">
 				{
 					KIND_ORDER.map((kind) => (
@@ -86,6 +99,7 @@ const ticketingConfigured = isConfigured(ticketingApiUrl());
 				}
 			</ul>
 		</section>
+		</noscript>
 
 		{/*
 			The only hydrated component in doc-hub. See the header comment in
@@ -121,7 +135,7 @@ const ticketingConfigured = isConfigured(ticketingApiUrl());
           <p>
             Nothing here is stored on the server — the board keeps a copy in this browser, and that copy goes no further. The <code>.storymap</code> file you export is the map —
             keep it in the product's repository, next to the code it describes.
-            The technique is written up in <a class="font-semibold text-brand underline" href={practice}>the development hub</a>.
+            The technique is written up in the <a class="font-semibold text-brand underline" href={practice}>development hub</a>.
             The <a class="font-semibold text-brand underline" href="/dsl">format is documented</a>, and
             the <a class="font-semibold text-brand underline" href={portal}>documentation portal</a> holds the product catalogue.
         </p>

@@ -37,11 +37,14 @@ Browse the board:
 Verify the release:
   helm test {{ .Release.Name }} --namespace {{ .Release.Namespace }}
 
-This release stores nothing. A story map lives in the .storymap file the visitor
-exports, and nothing about it reaches this pod — there is no database and no
-volume, and the one registry call it makes is a read of the product list. A pod
-can be deleted at any moment without losing work that was already exported. Work that was *not* exported lives only in the
-visitor's tab, which is what the board's unload warning is for.
+Nothing about a map reaches this pod. The story map lives in the .storymap file
+the visitor exports, and the board keeps a copy in their browser's local storage
+— this side of it holds neither: there is no database and no volume, and the one
+registry call it makes is a read of the product list. A pod can be deleted at any
+moment without losing anybody's work.
+
+Work that was never exported lives in that one browser, which is what the board's
+unload warning is for: a copy in one browser is insurance, not an artefact.
 
 Reminder: image.tag is pinned with pullPolicy: Never in values-local.yaml, so a
 rebuilt image under the same tag leaves the running pods untouched. After

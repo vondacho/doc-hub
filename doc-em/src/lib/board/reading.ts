@@ -46,7 +46,7 @@ export function readMap(board: BoardState): readonly Reading[] {
 	const examplesOn = (rule: { id: string }): number => countOf.get(rule.id) ?? 0;
 
 	const questions =
-		board.story.questions.length + rules.reduce((n, rule) => n + rule.questionIds.length, 0);
+		(board.story?.questions.length ?? 0) + rules.reduce((n, rule) => n + rule.questionIds.length, 0);
 	const examples = rules.reduce((n, rule) => n + examplesOn(rule), 0);
 	const cards = 1 + rules.length + examples + questions;
 
@@ -120,7 +120,8 @@ export function readMap(board: BoardState): readonly Reading[] {
  * be done before the thing that makes it true.
  */
 function scheduleReadings(board: BoardState): readonly Reading[] {
-	const release = board.story.release;
+	// No story means nothing is scheduled, so there is nothing to contradict.
+	const release = board.story?.release ?? null;
 	if (release === null) return [];
 
 	const readings: Reading[] = [];

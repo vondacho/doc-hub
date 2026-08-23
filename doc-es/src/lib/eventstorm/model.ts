@@ -362,10 +362,15 @@ export interface EventStormDocument {
 	/**
 	 * The swimlanes, top to bottom.
 	 *
-	 * Always at least one, even on an empty board. The practice starts with paper
-	 * on a wall, and the wall exists before anybody has written on it — so a fresh
-	 * board is one unnamed lane holding no cards, which is what gives the first
-	 * empty square somewhere to be.
+	 * May be empty, and a fresh storm is. The board used to open with one unnamed
+	 * lane so that the first empty square had somewhere to be — which was a good
+	 * argument about the *grid* and a bad one about the *tool*. An empty board is
+	 * opened far more often to import a file or look at the example than to start
+	 * a workshop, and a lane nobody asked for is furniture to clear away.
+	 *
+	 * So an empty storm offers the choice instead — load the example, or put up
+	 * the wall — exactly as doc-sm and doc-em do. A file with no `lane` line
+	 * parses to no lanes rather than to a lane nobody drew.
 	 */
 	readonly lanes: readonly LaneNode[];
 }
@@ -376,7 +381,7 @@ export const UNNAMED_LANE = 'The wall';
 export function emptyDocument(title = 'Untitled event storm'): EventStormDocument {
 	// Big picture, because that is where the practice starts and where a board
 	// opened by somebody who has not chosen yet should be.
-	return { title, product: null, level: 'big-picture', notes: [], lanes: [emptyLane()] };
+	return { title, product: null, level: 'big-picture', notes: [], lanes: [] };
 }
 
 export function emptyLane(title = UNNAMED_LANE): LaneNode {

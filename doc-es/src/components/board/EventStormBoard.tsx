@@ -235,6 +235,15 @@ export default function EventStormBoard({
 
 	/* ---- detail, zoom, fullscreen ------------------------------------------ */
 
+	/**
+	 * No wall up yet — so offer the choice rather than a grid of empty squares.
+	 *
+	 * Lanes alone decide it. A storm with a lane and no cards is one somebody has
+	 * started, and replacing it with a prompt would throw away the only decision
+	 * on it.
+	 */
+	const empty = board.laneOrder.length === 0;
+
 	const detailed = useMemo(() => cardsWithDetail(board), [board]);
 	const anyExpanded = detailed.some((id) => expanded.has(id));
 
@@ -493,6 +502,12 @@ export default function EventStormBoard({
 				onDragEnd={onDragEnd}
 				onDragCancel={() => setDragging(null)}
 			>
+				{empty ? (
+					<EmptyBoard
+						onLoadSample={() => load(SAMPLE_SOURCE)}
+						onAddLane={() => dispatch({ type: 'addLane', index: 0 })}
+					/>
+				) : (
 				<BoardGrid
 					board={board}
 					dispatch={dispatch}
@@ -502,6 +517,7 @@ export default function EventStormBoard({
 					expanded={expanded}
 					onToggleDetail={toggleDetail}
 				/>
+				)}
 
 				{/* Mandatory, not decorative: the board scrolls, and a card dragged
 				    by transform inside an overflow:auto container is clipped at its
@@ -563,4 +579,41 @@ function nameOf(board: BoardState, id: string): string {
 	const lane = board.lanes[id];
 	if (lane) return `lane ${lane.title}`;
 	return 'the note';
+}
+
+/**
+ * What an unopened board offers instead of a grid.
+ *
+ * doc-sm's prompt, with doc-es's verbs. The board used to open with one unnamed
+ * lane so the first square had somewhere to be — a good argument about the grid
+ * and a bad one about the tool. An empty board is opened far more often to import
+ * a file or look at the example than to start a workshop, and a lane nobody asked
+ * for is furniture to clear away.
+ */
+function EmptyBoard({ onLoadSample, onAddLane }: { onLoadSample: () => void; onAddLane: () => void }) {
+	return (
+		<div className="rounded-2xl border border-dashed border-slate-300 p-10 text-center dark:border-slate-600">
+			<h2 className="text-lg font-semibold">No storm open</h2>
+			<p className="mx-auto mt-2 max-w-prose text-ink-muted dark:text-slate-400">
+				Import an <code>.eventstorm</code> file, start from the example, or put up the wall and start
+				writing. Nothing is stored on the server — the file you export is the wall.
+			</p>
+			<div className="mt-5 flex flex-wrap justify-center gap-3">
+				<button
+					type="button"
+					onClick={onLoadSample}
+					className="rounded-full bg-brand px-5 py-2.5 font-semibold text-white transition hover:bg-brand-strong focus-visible:outline-2 focus-visible:outline-offset-3 focus-visible:outline-brand motion-reduce:transition-none"
+				>
+					Load the example
+				</button>
+				<button
+					type="button"
+					onClick={onAddLane}
+					className="rounded-full border border-slate-300 px-5 py-2.5 font-semibold transition hover:border-brand hover:text-brand focus-visible:outline-2 focus-visible:outline-offset-3 focus-visible:outline-brand motion-reduce:transition-none dark:border-slate-600 dark:hover:border-sky-400 dark:hover:text-sky-400"
+				>
+					Put up the wall
+				</button>
+			</div>
+		</div>
+	);
 }

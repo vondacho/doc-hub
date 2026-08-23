@@ -50,6 +50,7 @@ import type { Product } from '../../lib/products.ts';
 import { BASE_FONT, BoardGrid } from './BoardGrid.tsx';
 import { OpenDialog } from './OpenDialog.tsx';
 import { PreviewDialog, type GherkinPreview } from './PreviewDialog.tsx';
+import { Legend } from './Legend.tsx';
 import { ProblemList } from './ProblemList.tsx';
 import { Readings } from './Readings.tsx';
 import { Toolbar } from './Toolbar.tsx';
@@ -106,6 +107,18 @@ export default function ExampleMapBoard({
 	const [documentKey, setDocumentKey] = useState(0);
 	const [zoomIndex, setZoomIndex] = useState(DEFAULT_ZOOM_INDEX);
 	const [fullscreen, setFullscreen] = useState(false);
+	/**
+	 * The board's own light/dark override, or `null` to follow the page.
+	 *
+	 * Read from storage in an effect rather than in the initialiser, because this
+	 * component is `client:only` today but the initialiser would be the first
+	 * thing to break if it ever were not — `localStorage` does not exist while a
+	 * component is being rendered on a server, and a crash at import time takes
+	 * the whole island with it.
+	 */
+	const [boardTheme, setBoardTheme] = useState<storage.BoardTheme | null>(null);
+	/** What the page is showing right now, so the toggle can offer the opposite. */
+	const [pageIsDark, setPageIsDark] = useState(false);
 	const [expanded, setExpanded] = useState<ReadonlySet<Id>>(() => new Set());
 	/**
 	 * What is currently under the cursor, for the drag overlay.
@@ -329,6 +342,15 @@ export default function ExampleMapBoard({
 
 	/* ---- detail, zoom, fullscreen ------------------------------------------ */
 
+	/**
+	 * Nothing named and nothing written — so offer the choice rather than a grid.
+	 *
+	 * Deliveries do not count. A storm-in-waiting with a timeline drawn on it is a
+	 * board somebody has already started, and replacing it with a prompt would
+	 * throw away the only thing on it.
+	 */
+	const empty = board.story === null && board.ruleOrder.length === 0;
+
 	const detailed = useMemo(() => cardsWithDetail(board), [board]);
 	const anyExpanded = detailed.some((id) => expanded.has(id));
 
@@ -347,6 +369,39 @@ export default function ExampleMapBoard({
 		document.addEventListener('fullscreenchange', sync);
 		return () => document.removeEventListener('fullscreenchange', sync);
 	}, []);
+
+	useEffect(() => setBoardTheme(storage.loadTheme()), []);
+
+	/**
+	 * Follow the OS while the board is not pinned.
+	 *
+	 * Subscribed rather than read once: somebody whose machine switches at sunset
+	 * would otherwise be offered "switch to dark" by a button sitting on a board
+	 * that had already gone dark around it.
+	 */
+	useEffect(() => {
+		const query = window.matchMedia('(prefers-color-scheme: dark)');
+		const sync = () => setPageIsDark(query.matches);
+		sync();
+		query.addEventListener('change', sync);
+		return () => query.removeEventListener('change', sync);
+	}, []);
+
+	/**
+	 * Pin the board to the opposite of what it is showing.
+	 *
+	 * A two-state control over three states, which is what makes it feel like the
+	 * usual night/day switch: the first click pins whatever you asked for, and
+	 * every click after that flips it. Returning to "follow the page" is not a
+	 * third press — it is the reset the toolbar offers, because a three-way
+	 * button whose third state is invisible is a button nobody can predict.
+	 */
+	const boardIsDark = boardTheme === null ? pageIsDark : boardTheme === 'dark';
+	const flipTheme = useCallback(() => {
+		const next: storage.BoardTheme = boardIsDark ? 'light' : 'dark';
+		setBoardTheme(next);
+		storage.saveTheme(next);
+	}, [boardIsDark]);
 
 	const toggleFullscreen = useCallback(() => {
 		const element = stage.current;
@@ -448,7 +503,8 @@ export default function ExampleMapBoard({
 				const from = activeData.parent as QuestionParent;
 				const to = (overData?.parent ?? overData?.parent) as QuestionParent | undefined;
 				const parent = to ?? from;
-				const target = 'story' in parent ? board.story.questions : board.rules[parent.ruleId]?.questionIds ?? [];
+				const target =
+					'story' in parent ? (board.story?.questions ?? []) : (board.rules[parent.ruleId]?.questionIds ?? []);
 				const index = target.indexOf(overId);
 				dispatch({
 					type: 'moveQuestion',
@@ -477,9 +533,44 @@ export default function ExampleMapBoard({
 	);
 
 	return (
+		/*
+		 * `data-theme` is the whole override.
+		 *
+		 * `dark:` resolves against the nearest ancestor that carries it — see the
+		 * `@custom-variant` in global.css — so every component under here follows
+		 * the board's theme without knowing that a board theme exists. Absent
+		 * while the board follows the page, which is why the default behaviour is
+		 * byte-for-byte what it was before this was added.
+		 *
+		 * It sits on the stage rather than on the grid so the toolbar, the legend
+		 * and the dialogs come with it: they are part of the board, and a light
+		 * board under a dark toolbar would look like a rendering fault.
+		 *
+		 * ## The stage must state its own colours, not inherit them
+		 *
+		 * `bg-white text-ink dark:bg-night dark:text-slate-100` here is not
+		 * decoration — it is what makes the override sound.
+		 *
+		 * Anything inside the board that does not set a colour inherits one, and
+		 * the nearest one used to be on `<body>`. Body's `dark:` resolves at body
+		 * level, where there is no `data-theme`, so it follows the operating
+		 * system. Pin the board to daylight on a machine in dark mode and the
+		 * board's own surfaces correctly turned white while every unstyled string
+		 * inside them stayed near-white, inherited from a body that had never
+		 * heard of the override. The swimlane names went first, because they were
+		 * the largest text on the board carrying no colour class of its own.
+		 *
+		 * Restating the pair here stops the inheritance at the boundary: the whole
+		 * subtree now takes its foreground and background from the same attribute
+		 * that decides its variants. The values are the ones `<body>` uses, so a
+		 * board that is *not* pinned looks exactly as it did before.
+		 */
 		<div
 			ref={stage}
-			className={`flex flex-col gap-4 ${fullscreen ? 'h-screen overflow-hidden bg-white p-4 dark:bg-night' : ''}`}
+			data-theme={boardTheme ?? undefined}
+			className={`flex flex-col gap-4 bg-white text-ink dark:bg-night dark:text-slate-100 ${
+				fullscreen ? 'h-screen overflow-hidden p-4' : ''
+			}`}
 		>
 			<Toolbar
 				title={board.title}
@@ -523,10 +614,19 @@ export default function ExampleMapBoard({
 				onZoomReset={() => setZoomIndex(DEFAULT_ZOOM_INDEX)}
 				fullscreen={fullscreen}
 				onToggleFullscreen={toggleFullscreen}
+				boardIsDark={boardIsDark}
+				themePinned={boardTheme !== null}
+				onFlipTheme={flipTheme}
+				onFollowPage={() => {
+					setBoardTheme(null);
+					storage.saveTheme(null);
+				}}
 				detailShown={anyExpanded}
 				canToggleDetail={detailed.length > 0}
 				onToggleAllDetail={() => setExpanded(anyExpanded ? new Set() : new Set(detailed))}
 			/>
+
+			<Legend />
 
 			<ProblemList problems={problems} subject="This map" onDismiss={() => setProblems([])} />
 			<Readings board={board} />
@@ -565,6 +665,12 @@ export default function ExampleMapBoard({
 				accessibility={{ announcements }}
 			>
 				<div className={fullscreen ? 'flex min-h-0 flex-1 flex-col' : undefined}>
+					{empty ? (
+						<EmptyBoard
+							onLoadSample={() => load(SAMPLE_SOURCE)}
+							onAddStory={() => dispatch({ type: 'addStory' })}
+						/>
+					) : (
 					<BoardGrid
 						board={board}
 						dispatch={dispatch}
@@ -574,6 +680,7 @@ export default function ExampleMapBoard({
 						expanded={expanded}
 						onToggleDetail={toggleDetail}
 					/>
+					)}
 
 					{/* Mandatory, not decorative: the board scrolls, and a card dragged
 					    by transform inside an overflow:auto container is clipped at its
@@ -614,4 +721,41 @@ function nameOf(board: BoardState, id: string): string {
 	const delivery = board.deliveries[id];
 	if (delivery) return `${deliveryKindLabel[delivery.kind]} ${delivery.title}`;
 	return 'the card';
+}
+
+/**
+ * What an unopened board offers instead of a placeholder.
+ *
+ * doc-sm's prompt, with doc-em's verbs. The board used to open with a story card
+ * reading "To be defined", on the argument that a session which has not named its
+ * story has not started. True of the session and false of the tool: an empty
+ * board is opened far more often to import a file or look at the example than to
+ * start a session, and the placeholder was then furniture to clear away.
+ */
+function EmptyBoard({ onLoadSample, onAddStory }: { onLoadSample: () => void; onAddStory: () => void }) {
+	return (
+		<div className="rounded-2xl border border-dashed border-slate-300 p-10 text-center dark:border-slate-600">
+			<h2 className="text-lg font-semibold">No map open</h2>
+			<p className="mx-auto mt-2 max-w-prose text-ink-muted dark:text-slate-400">
+				Import an <code>.examplemap</code> file, start from the example, or name the story this session
+				is about. Nothing is stored on the server — the file you export is the map.
+			</p>
+			<div className="mt-5 flex flex-wrap justify-center gap-3">
+				<button
+					type="button"
+					onClick={onLoadSample}
+					className="rounded-full bg-brand px-5 py-2.5 font-semibold text-white transition hover:bg-brand-strong focus-visible:outline-2 focus-visible:outline-offset-3 focus-visible:outline-brand motion-reduce:transition-none"
+				>
+					Load the example
+				</button>
+				<button
+					type="button"
+					onClick={onAddStory}
+					className="rounded-full border border-slate-300 px-5 py-2.5 font-semibold transition hover:border-brand hover:text-brand focus-visible:outline-2 focus-visible:outline-offset-3 focus-visible:outline-brand motion-reduce:transition-none dark:border-slate-600 dark:hover:border-sky-400 dark:hover:text-sky-400"
+				>
+					Add a story
+				</button>
+			</div>
+		</div>
+	);
 }

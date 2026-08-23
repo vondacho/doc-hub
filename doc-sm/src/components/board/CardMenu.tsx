@@ -210,7 +210,14 @@ export function CardMenu({ label, actions }: { label: string; actions: readonly 
 						left: at.left,
 						width: MENU_WIDTH,
 					}}
-					className="z-[1000] rounded-lg border border-slate-200 bg-white py-1 text-left text-sm shadow-lg dark:border-slate-700 dark:bg-night-raised"
+					// The board's light/dark override, carried across the portal, and the
+					// colour pair with it. This element is in the body, so anything it
+					// does not colour itself inherits from a `<body>` that follows the
+					// operating system rather than the board — a menu opened from a board
+					// pinned to daylight on a dark machine would be near-white on white.
+					// Read off the trigger, which *is* inside the board.
+					data-theme={button.current?.closest('[data-theme]')?.getAttribute('data-theme') ?? undefined}
+					className="z-[1000] rounded-lg border border-slate-200 bg-white py-1 text-left text-sm text-ink shadow-lg dark:border-slate-700 dark:bg-night-raised dark:text-slate-100"
 				>
 					{actions.map((action, index) => {
 						const reasonId = `${menuId}-r${index}`;

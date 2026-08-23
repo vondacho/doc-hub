@@ -33,9 +33,7 @@
  */
 
 import {
-	DEFAULT_STORY_STATUS,
 	hasSteps,
-	UNDEFINED_STORY,
 	type CardKind,
 	type DeliveryKind,
 	type StepClause,
@@ -162,7 +160,14 @@ export interface BoardState {
 	/** The stated ticketing space; null falls back to the product shortname. */
 	readonly space: string | null;
 	readonly notes: readonly string[];
-	readonly story: Story;
+	/**
+	 * The story under discussion, or `null` before anybody has named one.
+	 *
+	 * Optional here for the reason it is optional in the file — see `StoryNode` in
+	 * examplemap/model.ts. A board with no story and no rules shows the choice
+	 * instead of a placeholder card.
+	 */
+	readonly story: Story | null;
 	/** The timeline, earliest first. Order is the only statement of sequence. */
 	readonly deliveryOrder: readonly Id[];
 	readonly deliveries: Readonly<Record<Id, Delivery>>;
@@ -182,23 +187,13 @@ export interface BoardState {
 	readonly questions: Readonly<Record<Id, Card>>;
 }
 
-export function emptyBoard(title = 'Untitled example map', story = UNDEFINED_STORY): BoardState {
+export function emptyBoard(title = 'Untitled example map'): BoardState {
 	return {
 		title,
 		product: null,
 		space: null,
 		notes: [],
-		story: {
-			title: story,
-			notes: [],
-			ticket: null,
-			status: DEFAULT_STORY_STATUS,
-			release: null,
-			persona: null,
-			want: null,
-			soThat: null,
-			questions: [],
-		},
+		story: null,
 		deliveryOrder: [],
 		deliveries: {},
 		ruleOrder: [],
