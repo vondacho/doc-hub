@@ -9,11 +9,12 @@
  *
  * | Preserved                                  | Not preserved                      |
  * | ------------------------------------------ | ---------------------------------- |
- * | Storm title, and the product               | Comments — every one of them       |
- * | Phases, in order                           | Blank lines                        |
- * | Cards under each phase, in order and kind  | Indentation width and style        |
+ * | Storm title, the product and the level     | Comments — every one of them       |
+ * |                                            | `level big-picture`, which is the default |
+ * | Lanes, in order                            | Blank lines                        |
+ * | Every card's kind, words and column        | Indentation width and style        |
  * | Notes, and their line breaks               | `{ }` on an empty card (omitted)   |
- * |                                            | Cards written before the first phase, which are gathered into one |
+ * |                                            | Cards written before the first lane, which are gathered into one |
  *
  * The contract is the one the other two boards hold to:
  *
@@ -21,11 +22,12 @@
  *
  * The output is a fixed point, which is what makes "export, hand-edit,
  * re-import" safe. Note the one normalisation above: loose cards written before
- * any `phase` line come back inside an explicit phase, so the *second* export
- * matches the first even though the first did not match the input.
+ * any `lane` line come back inside an explicit lane, and every card comes back
+ * with its `@column` written out — so the *second* export matches the first even
+ * where the first did not match the input.
  */
 
-import { cardKeyword, wrapNote, type CardNode, type EventStormDocument, type PhaseNode } from './model.ts';
+import { cardKeyword, wrapNote, type CardNode, type EventStormDocument, type LaneNode } from './model.ts';
 
 const INDENT = '  ';
 
@@ -41,17 +43,20 @@ export function serialize(document: EventStormDocument): string {
 
 	out.push(`eventstorm ${quote(document.title)} {`);
 
-	if (document.product !== null) {
-		out.push(`${INDENT}product ${quote(document.product)}`);
-		out.push('');
-	}
+	if (document.product !== null) out.push(`${INDENT}product ${quote(document.product)}`);
+	// Written only when it is not the default, the way `~open` is omitted on the
+	// other two boards: a big-picture storm is what a storm is unless somebody
+	// says otherwise, and spelling it on every file would be noise on the common
+	// case. Omitted and `big-picture` parse back to the same document.
+	if (document.level !== 'big-picture') out.push(`${INDENT}level ${document.level}`);
+	if (document.product !== null || document.level !== 'big-picture') out.push('');
 
 	for (const note of document.notes) emitNote(out, INDENT, note);
 	if (document.notes.length > 0) out.push('');
 
-	document.phases.forEach((phase, index) => {
+	document.lanes.forEach((lane, index) => {
 		if (index > 0) out.push('');
-		emitPhase(out, INDENT, phase);
+		emitLane(out, INDENT, lane);
 	});
 
 	out.push('}');
@@ -59,25 +64,31 @@ export function serialize(document: EventStormDocument): string {
 }
 
 /**
- * One phase, written even when it is empty.
+ * One lane, written even when it is empty.
  *
- * Unlike a card, whose empty body is omitted, a phase with no cards is written
- * out in full — it is a stretch of wall somebody has named and not yet filled,
- * and dropping it would delete a decision. An empty *body* is still omitted:
- * `phase "Checkout"` says everything `phase "Checkout" { }` does.
+ * Unlike a card, whose empty body is omitted, a lane with no cards is written
+ * out in full — it is a row somebody has named and not yet filled, and dropping
+ * it would delete a decision. An empty *body* is still omitted: `lane "Customer"`
+ * says everything `lane "Customer" { }` does.
+ *
+ * Cards come out sorted by column, whatever order they were typed in. The column
+ * is the position, so the file lists them the way the lane reads — and two cards
+ * sharing a column keep the order they were written, because that is a genuine
+ * stacking order the coordinate does not record.
  */
-function emitPhase(out: string[], indent: string, phase: PhaseNode): void {
-	const head = `${indent}phase ${quote(phase.title)}`;
+function emitLane(out: string[], indent: string, lane: LaneNode): void {
+	const head = `${indent}lane ${quote(lane.title)}`;
 	const inner = indent + INDENT;
 
-	if (phase.notes.length === 0 && phase.cards.length === 0) {
+	if (lane.notes.length === 0 && lane.cards.length === 0) {
 		out.push(head);
 		return;
 	}
 
 	out.push(`${head} {`);
-	for (const note of phase.notes) emitNote(out, inner, note);
-	for (const card of phase.cards) emitCard(out, inner, card);
+	for (const note of lane.notes) emitNote(out, inner, note);
+	// A stable sort, which is what keeps two cards at one column in their order.
+	for (const card of [...lane.cards].sort((a, b) => a.column - b.column)) emitCard(out, inner, card);
 	out.push(`${indent}}`);
 }
 
@@ -87,9 +98,14 @@ function emitPhase(out: string[], indent: string, phase: PhaseNode): void {
  * The keyword is the kind. There is no separate colour or type annotation,
  * because a card whose keyword said one thing and whose annotation said another
  * would be a state the file could express and the board could not.
+ *
+ * `@column` is always written, even where the parser would have inferred it.
+ * The coordinate is the fact; leaving it out on export would make a file's
+ * meaning depend on the order of the lines around it, which is exactly what the
+ * column exists to stop.
  */
 function emitCard(out: string[], indent: string, card: CardNode): void {
-	const head = `${indent}${cardKeyword[card.kind]} ${quote(card.title)}`;
+	const head = `${indent}${cardKeyword[card.kind]} ${quote(card.title)} @${card.column}`;
 	if (card.notes.length === 0) {
 		out.push(head);
 		return;

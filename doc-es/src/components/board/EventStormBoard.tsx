@@ -41,6 +41,7 @@ import { cardClass } from '../../lib/board/kinds.ts';
 import { reduce, resetsHistory, type BoardAction } from '../../lib/board/reducer.ts';
 import { cardsWithDetail, type BoardState, type Id } from '../../lib/board/state.ts';
 import { cardLabel, emptyDocument, type CardKind } from '../../lib/eventstorm/model.ts';
+import { Legend } from './Legend.tsx';
 import { parse } from '../../lib/eventstorm/parser.ts';
 import { EventStormParseError, type Problem } from '../../lib/eventstorm/problems.ts';
 import { SAMPLE_SOURCE } from '../../lib/eventstorm/sample.ts';
@@ -55,6 +56,14 @@ import { Toolbar } from './Toolbar.tsx';
 const HISTORY_LIMIT = 100;
 /** How long the board must be still before autosave writes. See the effect. */
 const AUTOSAVE_DELAY_MS = 1_000;
+/**
+ * 100% to 160%, in five stops, and 100% is where the board opens.
+ *
+ * What 100% *is* in pixels is `BASE_FONT` in BoardGrid, which was raised so that
+ * this board's natural size is its smallest — the stops here are unchanged, and
+ * deliberately so: the toolbar prints these numbers, and they should keep
+ * meaning "relative to how this board is meant to be read".
+ */
 const ZOOM_STOPS = [1, 1.15, 1.3, 1.45, 1.6] as const;
 const DEFAULT_ZOOM_INDEX = 0;
 
@@ -76,11 +85,11 @@ export default function EventStormBoard({
 		step as (state: History<BoardState>, action: BoardAction | HistoryAction) => History<BoardState>,
 		undefined,
 		/*
-		 * A board opens with one empty phase.
+		 * A board opens with one empty lane and a full width of empty squares.
 		 *
 		 * Not a blank page: the practice starts with paper on a wall, and the wall
-		 * exists before anybody has written on it. It is also what gives the first
-		 * row of `+` somewhere to be — see the note at the top of BoardGrid.
+		 * exists before anybody has written on it. See the note at the top of
+		 * BoardGrid for why the grid is drawn wider than the work on it.
 		 */
 		() => initialHistory(toBoard(emptyDocument())),
 	);
@@ -96,7 +105,19 @@ export default function EventStormBoard({
 	const [zoomIndex, setZoomIndex] = useState(DEFAULT_ZOOM_INDEX);
 	const [expanded, setExpanded] = useState<ReadonlySet<Id>>(new Set());
 	const [fullscreen, setFullscreen] = useState(false);
-	const [dragging, setDragging] = useState<{ kind: CardKind | 'phase'; title: string } | null>(null);
+	/**
+	 * The board's own light/dark override, or `null` to follow the page.
+	 *
+	 * Read from storage in an effect rather than in the initialiser, because this
+	 * component is `client:only` today but the initialiser would be the first
+	 * thing to break if it ever were not — `localStorage` does not exist while a
+	 * component is being rendered on a server, and a crash at import time takes
+	 * the whole island with it.
+	 */
+	const [boardTheme, setBoardTheme] = useState<storage.BoardTheme | null>(null);
+	/** What the page is showing right now, so the toggle can offer the opposite. */
+	const [pageIsDark, setPageIsDark] = useState(false);
+	const [dragging, setDragging] = useState<{ kind: CardKind | 'lane'; title: string } | null>(null);
 	const stage = useRef<HTMLDivElement>(null);
 
 	const dispatch = useCallback((action: BoardAction) => {
@@ -233,6 +254,39 @@ export default function EventStormBoard({
 		return () => document.removeEventListener('fullscreenchange', sync);
 	}, []);
 
+	useEffect(() => setBoardTheme(storage.loadTheme()), []);
+
+	/**
+	 * Follow the OS while the board is not pinned.
+	 *
+	 * Subscribed rather than read once: somebody whose machine switches at sunset
+	 * would otherwise be offered "switch to dark" by a button sitting on a board
+	 * that had already gone dark around it.
+	 */
+	useEffect(() => {
+		const query = window.matchMedia('(prefers-color-scheme: dark)');
+		const sync = () => setPageIsDark(query.matches);
+		sync();
+		query.addEventListener('change', sync);
+		return () => query.removeEventListener('change', sync);
+	}, []);
+
+	/**
+	 * Pin the board to the opposite of what it is showing.
+	 *
+	 * A two-state control over three states, which is what makes it feel like the
+	 * usual night/day switch: the first click pins whatever you asked for, and
+	 * every click after that flips it. Returning to "follow the page" is not a
+	 * third press — it is the reset the toolbar offers, because a three-way
+	 * button whose third state is invisible is a button nobody can predict.
+	 */
+	const boardIsDark = boardTheme === null ? pageIsDark : boardTheme === 'dark';
+	const flipTheme = useCallback(() => {
+		const next: storage.BoardTheme = boardIsDark ? 'light' : 'dark';
+		setBoardTheme(next);
+		storage.saveTheme(next);
+	}, [boardIsDark]);
+
 	const toggleFullscreen = useCallback(() => {
 		const element = stage.current;
 		if (!element) return;
@@ -259,10 +313,10 @@ export default function EventStormBoard({
 		const type = args.active.data.current?.type;
 		const containers = args.droppableContainers.filter((container) => {
 			const data = container.data.current;
-			// A phase reorders among phases and against nothing else. Without this a
-			// phase dragged sideways would collide with the columns beneath it,
-			// which are much larger targets.
-			if (type === 'phase') return data?.type === 'phase';
+			// A lane reorders among lanes and against nothing else. Without this a
+			// lane dragged down would collide with the squares beside it, of which
+			// there are a great many and every one is a larger target.
+			if (type === 'lane') return data?.type === 'lane';
 			return data?.accepts === type || data?.type === type;
 		});
 		return closestCenter({ ...args, droppableContainers: containers });
@@ -270,14 +324,15 @@ export default function EventStormBoard({
 
 	const onDragStart = useCallback(
 		(event: DragStartEvent) => {
-			const type = event.active.data.current?.type as 'card' | 'phase' | undefined;
+			const type = event.active.data.current?.type as 'card' | 'lane' | undefined;
 			const id = String(event.active.id);
-			const title = type === 'phase' ? board.phases[id]?.title : board.cards[id]?.title;
-			if (type === undefined || title === undefined) {
-				setDragging(null);
+			if (type === 'lane') {
+				const lane = board.lanes[id];
+				setDragging(lane ? { kind: 'lane', title: lane.title } : null);
 				return;
 			}
-			setDragging({ kind: type === 'phase' ? 'phase' : (board.cards[id]?.kind ?? 'event'), title });
+			const card = type === 'card' ? board.cards[id] : undefined;
+			setDragging(card ? { kind: card.kind, title: card.title } : null);
 		},
 		[board],
 	);
@@ -292,18 +347,21 @@ export default function EventStormBoard({
 			const activeId = String(active.id);
 			const overId = String(over.id);
 
-			if (activeData?.type === 'phase') {
-				const index = board.phaseOrder.indexOf(overId);
-				if (index !== -1) dispatch({ type: 'movePhase', id: activeId, index });
+			if (activeData?.type === 'lane') {
+				const index = board.laneOrder.indexOf(overId);
+				if (index !== -1) dispatch({ type: 'moveLane', id: activeId, index });
 				return;
 			}
 
 			if (activeData?.type === 'card') {
-				// The drop is either on a phase column (its own `phaseId` datum) or
-				// on another card, whose datum names the phase it is in.
-				const from = String(activeData.phaseId);
-				const to = String(overData?.phaseId ?? from);
-				const target = board.phases[to]?.cardIds ?? [];
+				// The drop is either on a square (its own `cell` datum) or on another
+				// note, whose datum names the square it is on. Both resolve to a cell
+				// key, which is the only thing the reducer needs — lane and column are
+				// both encoded in it, so a sideways, vertical or diagonal drag is the
+				// same call.
+				const from = String(activeData.cell);
+				const to = String(overData?.cell ?? from);
+				const target = board.cells[to] ?? [];
 				const index = target.indexOf(overId);
 				dispatch({
 					type: 'moveCard',
@@ -332,9 +390,44 @@ export default function EventStormBoard({
 	);
 
 	return (
+		/*
+		 * `data-theme` is the whole override.
+		 *
+		 * `dark:` resolves against the nearest ancestor that carries it — see the
+		 * `@custom-variant` in global.css — so every component under here follows
+		 * the board's theme without knowing that a board theme exists. Absent
+		 * while the board follows the page, which is why the default behaviour is
+		 * byte-for-byte what it was before this was added.
+		 *
+		 * It sits on the stage rather than on the grid so the toolbar, the legend
+		 * and the dialogs come with it: they are part of the board, and a light
+		 * board under a dark toolbar would look like a rendering fault.
+		 *
+		 * ## The stage must state its own colours, not inherit them
+		 *
+		 * `bg-white text-ink dark:bg-night dark:text-slate-100` here is not
+		 * decoration — it is what makes the override sound.
+		 *
+		 * Anything inside the board that does not set a colour inherits one, and
+		 * the nearest one used to be on `<body>`. Body's `dark:` resolves at body
+		 * level, where there is no `data-theme`, so it follows the operating
+		 * system. Pin the board to daylight on a machine in dark mode and the
+		 * board's own surfaces correctly turned white while every unstyled string
+		 * inside them stayed near-white, inherited from a body that had never
+		 * heard of the override. The swimlane names went first, because they were
+		 * the largest text on the board carrying no colour class of its own.
+		 *
+		 * Restating the pair here stops the inheritance at the boundary: the whole
+		 * subtree now takes its foreground and background from the same attribute
+		 * that decides its variants. The values are the ones `<body>` uses, so a
+		 * board that is *not* pinned looks exactly as it did before.
+		 */
 		<div
 			ref={stage}
-			className={`flex flex-col gap-4 ${fullscreen ? 'h-screen overflow-hidden bg-white p-4 dark:bg-night' : ''}`}
+			data-theme={boardTheme ?? undefined}
+			className={`flex flex-col gap-4 bg-white text-ink dark:bg-night dark:text-slate-100 ${
+				fullscreen ? 'h-screen overflow-hidden p-4' : ''
+			}`}
 		>
 			<Toolbar
 				title={board.title}
@@ -363,7 +456,7 @@ export default function EventStormBoard({
 					setOpening(true);
 				}}
 				onLoadSample={() => load(SAMPLE_SOURCE)}
-				onAddPhase={() => dispatch({ type: 'addPhase', index: board.phaseOrder.length })}
+				onAddLane={() => dispatch({ type: 'addLane', index: board.laneOrder.length })}
 				onUndo={() => send({ type: 'undo' })}
 				onRedo={() => send({ type: 'redo' })}
 				zoom={zoom}
@@ -374,12 +467,21 @@ export default function EventStormBoard({
 				onZoomReset={() => setZoomIndex(DEFAULT_ZOOM_INDEX)}
 				fullscreen={fullscreen}
 				onToggleFullscreen={toggleFullscreen}
+				boardIsDark={boardIsDark}
+				themePinned={boardTheme !== null}
+				onFlipTheme={flipTheme}
+				onFollowPage={() => {
+					setBoardTheme(null);
+					storage.saveTheme(null);
+				}}
 				detailShown={anyExpanded}
 				canToggleDetail={detailed.length > 0}
 				onToggleAllDetail={() =>
 					setExpanded(anyExpanded ? new Set() : new Set(detailed))
 				}
 			/>
+
+			<Legend board={board} onLevel={(level) => dispatch({ type: 'setLevel', level })} />
 
 			{problems.length > 0 && <ProblemList problems={problems} />}
 
@@ -408,10 +510,11 @@ export default function EventStormBoard({
 					{dragging && (
 						<div
 							style={{ fontSize: `${BASE_FONT * zoom}px` }}
-							className={`rounded-[0.4em] border px-[0.55em] py-[0.4em] text-[1em] shadow-lg ${
-								// A phase is a boundary, not a sticky note, so it drags as a
-								// plain opaque label — which is also how it looks at rest.
-								dragging.kind === 'phase'
+							className={`rounded-[0.3em] border px-[0.4em] py-[0.3em] text-[0.75em] shadow-lg ${
+								// A lane is a line somebody drew, not a sticky note, so it
+								// drags as a plain opaque label — which is also how it looks
+								// at rest in the rail.
+								dragging.kind === 'lane'
 									? 'border-slate-300 bg-white font-semibold dark:border-slate-600 dark:bg-night-raised'
 									: cardClass[dragging.kind]
 							}`}
@@ -457,7 +560,7 @@ function storageKeyOf(board: BoardState): string {
 function nameOf(board: BoardState, id: string): string {
 	const card = board.cards[id];
 	if (card) return `${cardLabel[card.kind]} ${card.title}`;
-	const phase = board.phases[id];
-	if (phase) return `phase ${phase.title}`;
-	return 'the card';
+	const lane = board.lanes[id];
+	if (lane) return `lane ${lane.title}`;
+	return 'the note';
 }

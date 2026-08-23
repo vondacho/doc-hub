@@ -204,13 +204,33 @@ export function CardMenu({ label, actions }: { label: string; actions: readonly 
 					ref={menu}
 					id={menuId}
 					role="menu"
+					/*
+					 * The board's light/dark override, carried across the portal.
+					 *
+					 * `dark:` resolves against the nearest ancestor carrying
+					 * `data-theme`, and this element has none — it is rendered into the
+					 * body, not into the board. Without this a menu opened from a board
+					 * that had been switched to daylight would come up in the page's
+					 * dark palette, which looks exactly like a bug.
+					 *
+					 * Read off the trigger rather than passed in as a prop: the button
+					 * *is* inside the board, so it already knows the answer, and every
+					 * one of this component's several callers would otherwise have to
+					 * thread a value none of them cares about.
+					 */
+					data-theme={button.current?.closest('[data-theme]')?.getAttribute('data-theme') ?? undefined}
 					style={{
 						position: 'fixed',
 						top: at.top,
 						left: at.left,
 						width: MENU_WIDTH,
 					}}
-					className="z-[1000] rounded-lg border border-slate-200 bg-white py-1 text-left text-sm shadow-lg dark:border-slate-700 dark:bg-night-raised"
+					// `text-ink dark:text-slate-100` for the same reason `data-theme` is
+					// here: this element is in the body, so anything it does not colour
+					// itself inherits from a `<body>` that follows the operating system
+					// rather than the board. A menu opened from a board pinned to
+					// daylight on a dark machine would otherwise be near-white on white.
+					className="z-[1000] rounded-lg border border-slate-200 bg-white py-1 text-left text-sm text-ink shadow-lg dark:border-slate-700 dark:bg-night-raised dark:text-slate-100"
 				>
 					{actions.map((action, index) => {
 						const reasonId = `${menuId}-r${index}`;

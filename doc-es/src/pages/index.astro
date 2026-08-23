@@ -2,7 +2,7 @@
 import Layout from '../layouts/Layout.astro';
 import EventStormBoard from '../components/board/EventStormBoard.tsx';
 import { swatchClass } from '../lib/board/kinds';
-import { CARD_KINDS, cardLabel, cardMeaning } from '../lib/eventstorm/model';
+import { cardLabel, cardMeaning, kindsFor } from '../lib/eventstorm/model';
 import { docPortalUrl, practiceUrl, registryApiUrl, registryUrl, storyMapperUrl } from '../lib/links';
 import { fetchProducts } from '../lib/products';
 
@@ -35,30 +35,39 @@ const storyMapper = storyMapperUrl();
       <h1 class="mt-2 text-3xl font-bold sm:text-4xl">Everything that happens, in order</h1>
       <p class="mt-3 text-ink-muted dark:text-slate-400">
         Domain events along a timeline, the actors and systems around them, and the disagreements
-        nobody could settle.
+        nobody could settle — then commands and policies, then aggregates, as the room goes deeper.
       </p>
     </header>
 
     {/*
-      The legend is the notation, not decoration. These five colours are the
-      technique — somebody who has stood at one of these walls must recognise the
-      board without being told — and the rule that governs doc-portal's status
-      palette governs them too: colour is never the only signal.
+      The legend lives in the island now, not here.
+
+      doc-sm and doc-em render theirs on the server, because their notations are
+      fixed and the markup is the same for every visitor. This one grows with the
+      level the visitor picks, so it has to live where that setting does — see
+      Legend.tsx.
+
+      What is left here is the big-picture five for `<noscript>`, which is the
+      level a storm is at unless somebody says otherwise. A reader without
+      scripting cannot use the board, but they can still be told what the colours
+      on an exported wall mean.
     */}
-    <section aria-labelledby="legend" class="mb-6">
-      <h2 id="legend" class="sr-only">What the colours mean</h2>
-      <ul class="flex flex-wrap gap-x-6 gap-y-2 text-sm">
-        {
-          CARD_KINDS.map((kind) => (
-            <li class="flex items-center gap-2">
-              <span class={`inline-block h-3.5 w-3.5 rounded-sm border ${swatchClass[kind]}`} aria-hidden="true" />
-              <span class="font-semibold">{cardLabel[kind]}</span>
-              <span class="text-ink-muted dark:text-slate-400">{cardMeaning[kind]}</span>
-            </li>
-          ))
-        }
-      </ul>
-    </section>
+    <noscript>
+      <section aria-labelledby="legend-static" class="mb-6">
+        <h2 id="legend-static" class="sr-only">What the colours mean</h2>
+        <ul class="flex flex-wrap gap-x-6 gap-y-2 text-sm">
+          {
+            kindsFor('big-picture').map((kind) => (
+              <li class="flex items-center gap-2">
+                <span class={`inline-block h-3.5 w-3.5 rounded-sm border ${swatchClass[kind]}`} aria-hidden="true" />
+                <span class="font-semibold">{cardLabel[kind]}</span>
+                <span class="text-ink-muted dark:text-slate-400">{cardMeaning[kind]}</span>
+              </li>
+            ))
+          }
+        </ul>
+      </section>
+    </noscript>
 
     <EventStormBoard
       client:only="react"

@@ -9,9 +9,9 @@
  * uses an identity check to decide whether an action consumed an undo step.
  */
 
-import { emptyPhase, splitNotes, UNNAMED_PHASE, type CardKind } from '../eventstorm/model.ts';
+import { kindsFor, newCardTitle, splitNotes, UNNAMED_LANE, type CardKind, type Level } from '../eventstorm/model.ts';
 import { nextId } from './convert.ts';
-import type { BoardState, Card, Id, Phase } from './state.ts';
+import { cellKey, cellOfCard, splitCellKey, type BoardState, type Card, type CellKey, type Id } from './state.ts';
 
 export type BoardAction =
 	| { type: 'import'; board: BoardState }
@@ -20,39 +20,55 @@ export type BoardAction =
 	| { type: 'reset' }
 	| { type: 'setMapTitle'; title: string }
 	| { type: 'setProduct'; product: string | null }
-	| { type: 'addPhase'; index: number }
-	| { type: 'retitlePhase'; id: Id; title: string }
-	| { type: 'setPhaseNotes'; id: Id; text: string }
 	/**
-	 * Delete a phase. Its cards go with it.
+	 * Change which workshop this is.
 	 *
-	 * Unlike a delivery band on the other two boards, a phase is not a schedule a
-	 * card could fall out of — it is the stretch of wall the card is stuck to.
-	 * There is nowhere else for the cards to be, so the label says they go too.
+	 * Refused when the wall already carries notes the new level has no colour
+	 * for. The board must not hold a state the file cannot express, and a storm
+	 * whose level does not admit its own cards is exactly that — the parser
+	 * rejects one, so the board must not produce one. The picker disables those
+	 * levels with a reason rather than letting the click fail silently.
 	 */
-	| { type: 'removePhase'; id: Id }
-	| { type: 'movePhase'; id: Id; index: number }
-	| { type: 'addCard'; phaseId: Id; kind: CardKind; index?: number }
+	| { type: 'setLevel'; level: Level }
+	| { type: 'addLane'; index: number }
+	| { type: 'retitleLane'; id: Id; title: string }
+	| { type: 'setLaneNotes'; id: Id; text: string }
+	/**
+	 * Delete a lane. Its cards go with it.
+	 *
+	 * A lane is not a schedule a card could fall out of — it is the row the card
+	 * is stuck to. There is nowhere else for the cards to be, so the label says
+	 * they go too. The last lane is cleared instead of removed: a board with no
+	 * lane has no square to place anything on.
+	 */
+	| { type: 'removeLane'; id: Id }
+	| { type: 'moveLane'; id: Id; index: number }
+	/** Place a note on a square. It stacks under whatever is already there. */
+	| { type: 'addCard'; laneId: Id; column: number; kind: CardKind }
 	| { type: 'retitleCard'; id: Id; title: string }
 	| { type: 'setCardNotes'; id: Id; text: string }
 	/** Re-colour a note: what looked like an event turns out to be a hotspot. */
 	| { type: 'setCardKind'; id: Id; kind: CardKind }
 	| { type: 'removeCard'; id: Id }
-	| { type: 'moveCard'; cardId: Id; from: Id; to: Id; index: number };
+	/** A drag between squares: the lane and the column may each change. */
+	| { type: 'moveCard'; cardId: Id; from: CellKey; to: CellKey; index: number };
 
 /** Actions that open a different document; history.ts clears on these. */
 export function resetsHistory(action: BoardAction): boolean {
 	return action.type === 'import' || action.type === 'reset';
 }
 
-/** What a new note says before anybody writes on it, per kind. */
-const placeholder: Record<CardKind, string> = {
-	event: 'Something happened',
-	actor: 'Somebody',
-	system: 'Some system',
-	hotspot: 'Something nobody agrees on',
-	opportunity: 'Something worth doing',
-};
+/**
+ * The notes a level would leave without a colour.
+ *
+ * Exported so the picker can say *why* a level is unavailable and how many cards
+ * stand in the way, rather than showing a control that does nothing. The reducer
+ * refuses the change either way — this is the explanation, not the guard.
+ */
+export function orphanedBy(board: BoardState, level: Level): readonly Card[] {
+	const allowed = new Set(kindsFor(level));
+	return Object.values(board.cards).filter((card) => !allowed.has(card.kind));
+}
 
 export function reduce(board: BoardState, action: BoardAction): BoardState {
 	switch (action.type) {
@@ -61,16 +77,17 @@ export function reduce(board: BoardState, action: BoardAction): BoardState {
 			return action.board;
 
 		case 'reset': {
-			// A board always has a wall, even a blank one: the practice starts with
-			// paper on a wall, and the first `+` needs somewhere to be.
-			const id = nextId('p');
+			// A board always has a lane, even a blank one: the practice starts with
+			// paper on a wall, and the first empty square needs somewhere to be.
+			const id = nextId('l');
 			return {
 				...board,
 				product: null,
 				notes: [],
-				phaseOrder: [id],
-				phases: { [id]: { id, ...emptyPhase(), cardIds: [] } },
+				laneOrder: [id],
+				lanes: { [id]: { id, title: UNNAMED_LANE, notes: [] } },
 				cards: {},
+				cells: {},
 			};
 		}
 
@@ -82,51 +99,53 @@ export function reduce(board: BoardState, action: BoardAction): BoardState {
 		case 'setProduct':
 			return action.product === board.product ? board : { ...board, product: action.product };
 
-		case 'addPhase': {
-			const id = nextId('p');
+		case 'setLevel': {
+			if (action.level === board.level) return board;
+			const allowed = new Set(kindsFor(action.level));
+			const orphans = Object.values(board.cards).filter((card) => !allowed.has(card.kind));
+			if (orphans.length > 0) return board;
+			return { ...board, level: action.level };
+		}
+
+		case 'addLane': {
+			const id = nextId('l');
 			return {
 				...board,
-				phases: { ...board.phases, [id]: { id, title: freshPhaseTitle(board), notes: [], cardIds: [] } },
-				phaseOrder: insertAt(board.phaseOrder, action.index, id),
+				lanes: { ...board.lanes, [id]: { id, title: freshLaneTitle(board), notes: [] } },
+				laneOrder: insertAt(board.laneOrder, action.index, id),
 			};
 		}
 
-		case 'retitlePhase': {
-			const phase = board.phases[action.id];
+		case 'retitleLane': {
+			const lane = board.lanes[action.id];
 			const title = action.title.trim();
-			if (!phase || title === '' || title === phase.title) return board;
-			return { ...board, phases: { ...board.phases, [action.id]: { ...phase, title } } };
+			if (!lane || title === '' || title === lane.title) return board;
+			return { ...board, lanes: { ...board.lanes, [action.id]: { ...lane, title } } };
 		}
 
-		case 'setPhaseNotes': {
-			const phase = board.phases[action.id];
-			if (!phase) return board;
-			return {
-				...board,
-				phases: { ...board.phases, [action.id]: { ...phase, notes: splitNotes(action.text) } },
-			};
+		case 'setLaneNotes': {
+			const lane = board.lanes[action.id];
+			if (!lane) return board;
+			return { ...board, lanes: { ...board.lanes, [action.id]: { ...lane, notes: splitNotes(action.text) } } };
 		}
 
-		case 'removePhase':
-			return removePhase(board, action.id);
+		case 'removeLane':
+			return removeLane(board, action.id);
 
-		case 'movePhase': {
-			const order = moveWithin(board.phaseOrder, action.id, action.index);
-			return order === board.phaseOrder ? board : { ...board, phaseOrder: order };
+		case 'moveLane': {
+			const order = moveWithin(board.laneOrder, action.id, action.index);
+			return order === board.laneOrder ? board : { ...board, laneOrder: order };
 		}
 
 		case 'addCard': {
-			const phase = board.phases[action.phaseId];
-			if (!phase) return board;
+			if (!board.lanes[action.laneId] || action.column < 1) return board;
 			const id = nextId('c');
-			const card: Card = { id, kind: action.kind, title: placeholder[action.kind], notes: [] };
+			const card: Card = { id, kind: action.kind, title: newCardTitle[action.kind], notes: [] };
+			const key = cellKey(action.laneId, action.column);
 			return {
 				...board,
 				cards: { ...board.cards, [id]: card },
-				phases: {
-					...board.phases,
-					[phase.id]: { ...phase, cardIds: insertAt(phase.cardIds, action.index ?? phase.cardIds.length, id) },
-				},
+				cells: { ...board.cells, [key]: [...(board.cells[key] ?? []), id] },
 			};
 		}
 
@@ -140,10 +159,7 @@ export function reduce(board: BoardState, action: BoardAction): BoardState {
 		case 'setCardNotes': {
 			const card = board.cards[action.id];
 			if (!card) return board;
-			return {
-				...board,
-				cards: { ...board.cards, [action.id]: { ...card, notes: splitNotes(action.text) } },
-			};
+			return { ...board, cards: { ...board.cards, [action.id]: { ...card, notes: splitNotes(action.text) } } };
 		}
 
 		case 'setCardKind': {
@@ -153,18 +169,13 @@ export function reduce(board: BoardState, action: BoardAction): BoardState {
 		}
 
 		case 'removeCard': {
-			const card = board.cards[action.id];
-			if (!card) return board;
+			if (!board.cards[action.id]) return board;
 			const cards = { ...board.cards };
 			delete cards[action.id];
-			return {
-				...board,
-				cards,
-				phases: mapPhases(board, (phase) => ({
-					...phase,
-					cardIds: phase.cardIds.filter((c) => c !== action.id),
-				})),
-			};
+			const key = cellOfCard(board, action.id);
+			const cells = { ...board.cells };
+			if (key !== undefined) cells[key] = (cells[key] ?? []).filter((c) => c !== action.id);
+			return { ...board, cards, cells };
 		}
 
 		case 'moveCard':
@@ -172,76 +183,79 @@ export function reduce(board: BoardState, action: BoardAction): BoardState {
 	}
 }
 
-function moveCard(board: BoardState, id: Id, fromId: Id, toId: Id, index: number): BoardState {
-	const from = board.phases[fromId];
-	const to = board.phases[toId];
-	if (!from || !to || !from.cardIds.includes(id)) return board;
+/**
+ * A drag from one square to another — which is how a note is both moved along
+ * the timeline and moved between lanes.
+ *
+ * One operation for both, because on this board they are one gesture. Sideways
+ * changes when it happens; up or down changes whose lane it is on; diagonally
+ * does both, and there is no reading under which that should need two undo
+ * steps.
+ */
+function moveCard(board: BoardState, id: Id, from: CellKey, to: CellKey, index: number): BoardState {
+	const source = board.cells[from];
+	if (!source?.includes(id)) return board;
 
-	if (fromId === toId) {
-		const reordered = moveWithin(from.cardIds, id, index);
-		return reordered === from.cardIds
-			? board
-			: { ...board, phases: { ...board.phases, [fromId]: { ...from, cardIds: reordered } } };
+	const { laneId, column } = splitCellKey(to);
+	if (!board.lanes[laneId] || !Number.isInteger(column) || column < 1) return board;
+
+	if (from === to) {
+		const reordered = moveWithin(source, id, index);
+		return reordered === source ? board : { ...board, cells: { ...board.cells, [from]: reordered } };
 	}
 
 	return {
 		...board,
-		phases: {
-			...board.phases,
-			[fromId]: { ...from, cardIds: from.cardIds.filter((c) => c !== id) },
-			[toId]: { ...to, cardIds: insertAt(to.cardIds, index, id) },
+		cells: {
+			...board.cells,
+			[from]: source.filter((c) => c !== id),
+			[to]: insertAt(board.cells[to] ?? [], index, id),
 		},
 	};
 }
 
 /**
- * Deleting a phase takes its cards with it, and never leaves the board wall-less.
+ * Deleting a lane takes its cards with it, and never leaves the board laneless.
  *
- * The last phase cannot be deleted — removing it would leave nowhere to put a
- * card and no `+` to press, which is a board you cannot get out of without
+ * The last lane cannot be deleted — removing it would leave nowhere to put a
+ * card and no square to press, which is a board you cannot get out of without
  * reloading the page. It is cleared instead, which is what somebody pressing
- * delete on the only stretch of wall actually means.
+ * delete on the only row actually means.
  */
-function removePhase(board: BoardState, id: Id): BoardState {
-	const phase = board.phases[id];
-	if (!phase) return board;
+function removeLane(board: BoardState, id: Id): BoardState {
+	const lane = board.lanes[id];
+	if (!lane) return board;
 
 	const cards = { ...board.cards };
-	for (const cardId of phase.cardIds) delete cards[cardId];
-
-	if (board.phaseOrder.length === 1) {
-		return {
-			...board,
-			cards,
-			phases: { [id]: { ...phase, title: UNNAMED_PHASE, notes: [], cardIds: [] } },
-		};
+	const cells = { ...board.cells };
+	for (const [key, ids] of Object.entries(board.cells)) {
+		if (splitCellKey(key).laneId !== id) continue;
+		for (const cardId of ids) delete cards[cardId];
+		delete cells[key];
 	}
 
-	const phases = { ...board.phases };
-	delete phases[id];
-	return { ...board, cards, phases, phaseOrder: board.phaseOrder.filter((p) => p !== id) };
+	if (board.laneOrder.length === 1) {
+		return { ...board, cards, cells, lanes: { [id]: { ...lane, title: UNNAMED_LANE, notes: [] } } };
+	}
+
+	const lanes = { ...board.lanes };
+	delete lanes[id];
+	return { ...board, cards, cells, lanes, laneOrder: board.laneOrder.filter((l) => l !== id) };
 }
 
 /**
- * `Phase 3`, or the next number after the ones that already exist.
+ * `Lane 3`, or the next number after the ones that already exist.
  *
- * A wall's stretches are named after what happens in them — "Checkout",
- * "Delivery" — and nobody can guess that, so the placeholder is a number and the
- * author renames it. Counting avoids handing out a name that is already taken,
- * which would be confusing rather than wrong.
+ * A lane is named after whose track it is — "Customer", "Kitchen" — and nobody
+ * can guess that, so the placeholder is a number and the author renames it.
+ * Counting avoids handing out a name that is already taken.
  */
-function freshPhaseTitle(board: BoardState): string {
-	const taken = new Set(Object.values(board.phases).map((phase) => phase.title));
-	for (let n = board.phaseOrder.length + 1; ; n += 1) {
-		const candidate = `Phase ${n}`;
+function freshLaneTitle(board: BoardState): string {
+	const taken = new Set(Object.values(board.lanes).map((lane) => lane.title));
+	for (let n = board.laneOrder.length + 1; ; n += 1) {
+		const candidate = `Lane ${n}`;
 		if (!taken.has(candidate)) return candidate;
 	}
-}
-
-function mapPhases(board: BoardState, fn: (phase: Phase) => Phase): Record<Id, Phase> {
-	const out: Record<Id, Phase> = {};
-	for (const [id, phase] of Object.entries(board.phases)) out[id] = fn(phase);
-	return out;
 }
 
 function insertAt<T>(list: readonly T[], index: number, value: T): T[] {

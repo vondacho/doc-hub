@@ -56,17 +56,25 @@ export const EVENTSTORM_KEYWORDS: ReadonlySet<string> = new Set([
 	// What the storm is about. No `space` beside it — an event storm produces a
 	// picture and a set of seams, not work to be raised into a tracker.
 	'product',
-	// A stretch of the wall. Time runs left to right, and declaration order is
-	// that order.
-	'phase',
-	// The Big Picture five. Process Modelling's `command`, `policy` and
-	// `readmodel`, and Software Design's `aggregate`, are deliberately absent —
-	// see the note at the top of model.ts.
+	// Which of the three workshops this is, and therefore which card keywords the
+	// file may use. See `Level` in model.ts.
+	'level',
+	// A horizontal swimlane. Lanes are declared top to bottom; where a card sits
+	// along the timeline is `@column` on the card, not the order it is written.
+	'lane',
+	// The ten card kinds, in the order the levels introduce them. Which of them a
+	// given file may use depends on its `level` — the parser checks.
 	'event',
 	'actor',
 	'system',
 	'hotspot',
 	'opportunity',
+	'command',
+	'policy',
+	'readmodel',
+	'aggregate',
+	'ui',
+	'context',
 	'note',
 ]);
 

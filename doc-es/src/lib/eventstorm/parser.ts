@@ -2,8 +2,8 @@
  * The `.eventstorm` parser — recursive descent over the token array.
  *
  * The shortest of the three, because a Big Picture wall is the simplest thing
- * any of these boards models: a title, a product, and a run of phases holding
- * coloured notes in time order. There is no reference to resolve and no second
+ * any of these boards models: a title, a product, and a set of swimlanes
+ * holding coloured notes at points along one shared timeline. There is no reference to resolve and no second
  * phase — nothing in this grammar points at anything else, so everything can be
  * decided as it is read.
  *
@@ -23,14 +23,20 @@ import { tokenize, type Token, type TokenKind } from './lexer.ts';
 import {
 	CARD_KINDS,
 	cardKeyword,
-	emptyPhase,
+	cardLabel,
+	emptyLane,
 	isCardKind,
-	UNNAMED_PHASE,
+	isLevel,
+	kindsFor,
+	LEVELS,
+	levelLabel,
+	levelOfKind,
 	wrapNote,
 	type CardKind,
 	type CardNode,
 	type EventStormDocument,
-	type PhaseNode,
+	type LaneNode,
+	type Level,
 } from './model.ts';
 import { EventStormParseError, isSaturated, report, type Problem } from './problems.ts';
 
@@ -55,6 +61,12 @@ const cardExample: Record<CardKind, string> = {
 	system: 'system "Payment provider"',
 	hotspot: 'hotspot "Nobody agrees what \\"confirmed\\" means"',
 	opportunity: 'opportunity "Tell the customer sooner"',
+	command: 'command "Place the order"',
+	policy: 'policy "Whenever payment is refused, hold the order"',
+	readmodel: 'readmodel "Basket total"',
+	aggregate: 'aggregate "Order"',
+	ui: 'ui "Checkout page"',
+	context: 'context "Ordering"',
 };
 
 function createParser(tokens: readonly Token[], problems: Problem[]) {
@@ -67,6 +79,9 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 	};
 	const advance = (): Token => tokens[Math.min(position++, tokens.length - 1)]!;
 	const atDeclaration = (): boolean => at('keyword') && peek().value !== 'eventstorm';
+
+	/** Every card written, with its keyword's position, for the level check. */
+	const placed: { kind: CardKind; token: Token }[] = [];
 
 	function problemAt(token: Token, message: string, hint?: string): void {
 		report(problems, { message, line: token.line, column: token.column, length: token.length, hint });
@@ -145,23 +160,66 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 			return true;
 		}
 
+		/*
+		 * `@column`, or the next square along from the last card written here.
+		 *
+		 * Optional on the way in and always written on the way out. A run of
+		 * events typed straight down a lane is the common case and should not
+		 * have to be numbered by hand; a card that genuinely belongs at column 7
+		 * because that is when it happens has to be able to say so. Defaulting to
+		 * "one after the previous" makes the terse form mean the obvious thing.
+		 *
+		 * `@0` and below are refused rather than clamped. Columns are one-based
+		 * because they are positions on a wall, not array indices, and a silently
+		 * corrected coordinate is a card that is not where the file says it is.
+		 */
+		let column = nextColumn(cards);
+		while (at('at')) {
+			const sigil = advance();
+			if (!at('ident') || !/^\d+$/.test(peek().value)) {
+				problemAt(
+					sigil,
+					`Expected a column number after \`@\`, found ${describe(peek())}.`,
+					'A column is a whole number from 1: event "Order placed" @3',
+				);
+				continue;
+			}
+			const value = Number(advance().value);
+			if (value < 1) {
+				problemAt(sigil, 'Columns start at 1.', 'Column 1 is the left-hand edge of the wall.');
+				continue;
+			}
+			column = value;
+		}
+
 		const notes: string[] = [];
-		cards.push({ kind, title, notes });
+		cards.push({ kind, title, column, notes });
+		// Where this card was written, so a level mismatch can be reported at the
+		// keyword rather than at the top of the file. Cleared as the tree is built;
+		// nothing outside this parser sees it.
+		placed.push({ kind, token: keyword });
 		parseBody(cardKeyword[kind], () => parseNote(notes));
 		return true;
 	}
 
+	/** One past the rightmost column written so far in this lane, or 1. */
+	function nextColumn(cards: readonly CardNode[]): number {
+		let last = 0;
+		for (const card of cards) if (card.column > last) last = card.column;
+		return last + 1;
+	}
+
 	/**
-	 * `phase "Checkout"` — one stretch of the wall.
+	 * `lane "Customer"` — one swimlane.
 	 *
-	 * A phase may hold cards and nothing else. Nesting one phase inside another
-	 * would be describing a hierarchy the wall does not have: the wall is a line,
-	 * and a phase is a stretch of it.
+	 * A lane may hold cards and nothing else. Nesting one lane inside another
+	 * would be describing a hierarchy the board does not have: the board is a
+	 * grid, and a lane is a row of it.
 	 */
-	function parsePhase(phases: PhaseNode[]): boolean {
-		if (!at('keyword', 'phase')) return false;
+	function parseLane(lanes: LaneNode[]): boolean {
+		if (!at('keyword', 'lane')) return false;
 		advance();
-		const title = expectString('phase', 'A phase is quoted: phase "Checkout"');
+		const title = expectString('lane', 'A lane is quoted: lane "Customer"');
 		if (title === undefined) {
 			synchronize();
 			return true;
@@ -169,9 +227,70 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 
 		const notes: string[] = [];
 		const cards: CardNode[] = [];
-		phases.push({ title, notes, cards });
-		parseBody('phase', () => parseCard(cards) || parseNote(notes));
+		lanes.push({ title, notes, cards });
+		parseBody('lane', () => parseCard(cards) || parseNote(notes));
 		return true;
+	}
+
+	/**
+	 * `level process-modelling` — at most one per storm, big picture by default.
+	 *
+	 * A bare word rather than a quoted string, because it is one of three fixed
+	 * values rather than free text: `level "big-pcture"` should be caught here
+	 * and not become a storm nobody can open.
+	 *
+	 * Omitting it means big picture, which is where the practice starts and what
+	 * a file written before this setting existed was. That default is the reason
+	 * older files keep opening.
+	 */
+	function parseLevel(state: { value: Level | null; token: Token | null }): boolean {
+		if (!at('keyword', 'level')) return false;
+		const keyword = advance();
+
+		if (!at('ident') || !isLevel(peek().value)) {
+			problemAt(
+				peek(),
+				`Expected a level after \`level\`, found ${describe(peek())}.`,
+				`One of: ${LEVELS.join(', ')}.`,
+			);
+			synchronize();
+			return true;
+		}
+		const value = advance().value as Level;
+
+		if (state.token !== null) {
+			problemAt(
+				keyword,
+				'The level is declared twice. A storm is run at one level.',
+				`Already declared on line ${state.token.line}.`,
+			);
+			return true;
+		}
+		state.value = value;
+		state.token = keyword;
+		return true;
+	}
+
+	/**
+	 * Every card the declared level has no colour for.
+	 *
+	 * A mismatch is an error rather than a silent promotion of the level. The
+	 * level is a statement about which workshop this is, and quietly deepening it
+	 * because somebody wrote one `command` would change what the file claims
+	 * about itself without anybody deciding to. Reported at each offending
+	 * keyword, with the level that would admit it — so the fix is one word, and
+	 * the message says which word.
+	 */
+	function checkLevel(level: Level): void {
+		const allowed = new Set(kindsFor(level));
+		for (const { kind, token } of placed) {
+			if (allowed.has(kind)) continue;
+			problemAt(
+				token,
+				`A ${cardLabel[kind].toLowerCase()} is not part of ${levelLabel[level].toLowerCase()} event storming.`,
+				`It arrives with ${levelLabel[levelOfKind[kind]].toLowerCase()}. Write \`level ${levelOfKind[kind]}\` at the top of the storm.`,
+			);
+		}
 	}
 
 	/**
@@ -229,15 +348,16 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 
 		let title = 'Untitled event storm';
 		const product: { value: string | null; token: Token | null } = { value: null, token: null };
+		const level: { value: Level | null; token: Token | null } = { value: null, token: null };
 		const notes: string[] = [];
-		const phases: PhaseNode[] = [];
+		const lanes: LaneNode[] = [];
 		/*
-		 * Cards written at the top level, before any `phase` line.
+		 * Cards written at the top level, before any `lane` line.
 		 *
 		 * Legal, and the shape a real file takes early: chaotic exploration
 		 * produces a heap of events long before anybody agrees where one stretch
 		 * of the wall ends and the next begins. They are gathered into a single
-		 * unnamed phase below, so the board always has a wall to put them on.
+		 * unnamed lane below, so the board always has a row to put them on.
 		 */
 		const loose: CardNode[] = [];
 
@@ -247,7 +367,12 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 			if (parsed !== undefined) title = parsed;
 			parseBody(
 				'eventstorm',
-				() => parseProduct(product) || parsePhase(phases) || parseCard(loose) || parseNote(notes),
+				() =>
+					parseProduct(product) ||
+					parseLevel(level) ||
+					parseLane(lanes) ||
+					parseCard(loose) ||
+					parseNote(notes),
 			);
 		}
 
@@ -265,18 +390,25 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 			if (!at('eof') && !at('keyword', 'eventstorm')) advance();
 		}
 
-		// Loose cards go in front of the named phases, because they were written
-		// before anybody drew a boundary — and because a card silently appended to
-		// somebody's last phase would be claiming it belongs there.
-		const all = loose.length > 0 ? [{ ...emptyPhase(), cards: loose }, ...phases] : phases;
+		// Loose cards go in a lane of their own, above the named ones. They were
+		// written before anybody drew a lane, and appending them to somebody's
+		// first lane would be claiming they belong to it.
+		const all = loose.length > 0 ? [{ ...emptyLane(), cards: loose }, ...lanes] : lanes;
+
+		// Every card is known by now, so the level can be checked against all of
+		// them at once rather than as each is read — which is what lets `level` be
+		// written at the bottom of the file as well as the top.
+		const chosen = level.value ?? 'big-picture';
+		checkLevel(chosen);
 
 		return {
 			title,
 			product: product.value,
+			level: chosen,
 			notes: [...notes],
-			// A board always has a wall, even an empty one: the practice starts with
-			// paper on a wall, and the first `+` needs somewhere to be.
-			phases: all.length > 0 ? all : [emptyPhase()],
+			// A board always has a lane, even an empty one: the practice starts with
+			// paper on a wall, and the first empty square needs somewhere to be.
+			lanes: all.length > 0 ? all : [emptyLane()],
 		};
 	}
 
@@ -284,7 +416,7 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 }
 
 function blank(title: string): EventStormDocument {
-	return { title, product: null, notes: [], phases: [emptyPhase()] };
+	return { title, product: null, level: 'big-picture', notes: [], lanes: [emptyLane()] };
 }
 
 function describe(token: Token): string {

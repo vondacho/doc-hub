@@ -41,7 +41,7 @@ export function Toolbar({
 	onSave,
 	onOpenSaved,
 	saveState,
-	onAddPhase,
+	onAddLane,
 	onUndo,
 	onRedo,
 	zoom,
@@ -52,6 +52,10 @@ export function Toolbar({
 	onZoomReset,
 	fullscreen,
 	onToggleFullscreen,
+	boardIsDark,
+	themePinned,
+	onFlipTheme,
+	onFollowPage,
 	detailShown,
 	canToggleDetail,
 	onToggleAllDetail,
@@ -74,7 +78,7 @@ export function Toolbar({
 	onOpenSaved: () => void;
 	/** What the browser's copy last did, for the line beside the title. */
 	saveState: { at: number } | { error: string } | null;
-	onAddPhase: () => void;
+	onAddLane: () => void;
 	onUndo: () => void;
 	onRedo: () => void;
 	zoom: number;
@@ -85,6 +89,12 @@ export function Toolbar({
 	onZoomReset: () => void;
 	fullscreen: boolean;
 	onToggleFullscreen: () => void;
+	/** What the board is showing now, whether pinned or following the page. */
+	boardIsDark: boolean;
+	/** Whether the visitor has pinned it, as opposed to following along. */
+	themePinned: boolean;
+	onFlipTheme: () => void;
+	onFollowPage: () => void;
 	detailShown: boolean;
 	canToggleDetail: boolean;
 	onToggleAllDetail: () => void;
@@ -155,7 +165,7 @@ export function Toolbar({
 
 					<span className="mx-1 h-6 w-px bg-slate-200 dark:bg-slate-700" aria-hidden="true" />
 
-					<IconButton icon="addActivity" label="Add a phase" onClick={onAddPhase} />
+					<IconButton icon="addActivity" label="Add a lane" onClick={onAddLane} />
 				{/* Two buttons and not one with a menu: there are two kinds, the
 				    choice is the whole decision, and a sprint is added far more
 				    often than a release. */}
@@ -206,6 +216,26 @@ export function Toolbar({
 						{Math.round(zoom * 100)}%
 					</button>
 					<IconButton icon="zoomIn" label="Zoom in" onClick={onZoomIn} disabled={!canZoomIn} />
+					{/*
+					 * The board's own night/day switch.
+					 *
+					 * The icon is what you would get, not what you have — the usual
+					 * convention for these, and the one that makes a single button
+					 * legible without a label. Shift-clicking hands the board back to
+					 * the page, which is the third state; it is on the modifier rather
+					 * than on a third press because a three-way button whose third
+					 * state is invisible is a button nobody can predict, and the
+					 * accessible name says so out loud.
+					 */}
+					<IconButton
+						icon={boardIsDark ? 'sun' : 'moon'}
+						label={
+							themePinned
+								? `Show the board in ${boardIsDark ? 'daylight' : 'the dark'}. Shift-click to follow the page again.`
+								: `Show the board in ${boardIsDark ? 'daylight' : 'the dark'}`
+						}
+						onClick={(event) => (event.shiftKey ? onFollowPage() : onFlipTheme())}
+					/>
 					<IconButton
 						icon={fullscreen ? 'fullscreenExit' : 'fullscreen'}
 						label={fullscreen ? 'Leave fullscreen' : 'Fullscreen the board'}

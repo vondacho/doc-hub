@@ -8,10 +8,42 @@
  * build-time dependency between two components that otherwise have none. Keep
  * them in step by hand; they are eleven values.
  *
- * Dark mode follows the OS, as it does in doc-portal. If either ever grows an
- * explicit toggle, switch to a `@custom-variant dark` driven by a data-attribute
- * rather than scattering a second mechanism through the components.
+ * Dark mode follows the OS *unless something says otherwise*, which is the
+ * `@custom-variant` below. That is the change this file's earlier note asked
+ * for: one mechanism, defined once, rather than a second one scattered through
+ * the components.
  */
+
+/*
+ * `dark:` applies when the OS says dark, or when an ancestor says so — and an
+ * ancestor can say the opposite.
+ *
+ * Two rules, and the order of the conditions in the first is the whole trick.
+ *
+ *   1. The OS is in dark mode, *and* nothing between here and the root has
+ *      opted out with `data-theme="light"`.
+ *   2. Something between here and the root has opted in with
+ *      `data-theme="dark"`, whatever the OS thinks.
+ *
+ * So a page with no attribute anywhere behaves exactly as it did before this
+ * existed — it follows the OS — and a subtree that carries one is an island of
+ * the opposite. That is what lets the board be light on a dark page without a
+ * second palette, a second set of classes, or any component knowing about it.
+ *
+ * `:where()` throughout, so none of this adds specificity. A variant that made
+ * `dark:bg-night` outrank a later `bg-white` would be a very confusing thing to
+ * debug six months from now.
+ */
+@custom-variant dark {
+  @media (prefers-color-scheme: dark) {
+    &:where(:not([data-theme='light'], [data-theme='light'] *)) {
+      @slot;
+    }
+  }
+  &:where([data-theme='dark'], [data-theme='dark'] *) {
+    @slot;
+  }
+}
 
 @theme {
   --color-ink: oklch(0.24 0.03 255);
@@ -35,11 +67,13 @@
   --color-critical: #d03b3b;
 
   /*
-   * The five colours of Big Picture event storming.
+   * The five loud colours of Big Picture event storming.
    *
    * Orange domain event, yellow actor, magenta external system, red hotspot,
    * green opportunity — Alberto Brandolini's, and the convention on every wall
-   * this technique has ever been run on. They are the notation, not a palette:
+   * this technique has ever been run on. Big picture has a sixth card, the
+   * bounded context, but it is defined with the quiet ones below: it is a line
+   * drawn around notes rather than a note, and it is coloured accordingly. They are the notation, not a palette:
    * somebody who has stood at one of these walls has to recognise this board
    * without being told, so these were never ours to choose.
    *
@@ -90,6 +124,61 @@
   --color-hotspot-night-edge: oklch(0.5 0.1 25);
   --color-opportunity-night: oklch(0.33 0.05 150);
   --color-opportunity-night-edge: oklch(0.5 0.08 150);
+
+  /*
+   * The five that arrive with the deeper levels.
+   *
+   * Process modelling brings the causal chain — command, policy, read model —
+   * and software design brings the aggregate. The bounded context is here too,
+   * though it belongs to big picture: it is grouped by *weight* rather than by
+   * level, because on a real wall it is not a sticky note at all.
+   *
+   * ## Two pairs sit close, and both are inherent to the notation
+   *
+   * `--color-aggregate` is a pale yellow and `--color-actor` is a yellow: five
+   * degrees apart in hue, because the physical notes *are* both yellow and
+   * moving either would stop the board looking like the wall. They are pulled
+   * apart on chroma instead — an aggregate is nearly bare paper, an actor is
+   * plainly coloured — which is the same trick the event/actor pair uses above.
+   *
+   * `--color-context` and `--color-ui` are both near-neutral and sit near
+   * `--color-command`, and all three are separated the same way — by chroma
+   * first, then by lightness. A screen is *white* in the practice, which is the
+   * one colour a board painted on white paper cannot use literally; it is the
+   * lightest card here, with an edge dark enough to hold its shape. A context is
+   * a step darker and faintly blue, because on a real wall it is not a note at
+   * all but a line drawn around a region, and this board has no way to draw a
+   * region.
+   *
+   * And the rule that travels with the status palette travels here too: colour
+   * is never the only signal. Every card names its kind in its accessible name,
+   * and the legend on the board says what each colour holds.
+   */
+  --color-command: oklch(0.89 0.07 250);
+  --color-command-edge: oklch(0.6 0.12 250);
+  --color-policy: oklch(0.89 0.07 300);
+  --color-policy-edge: oklch(0.6 0.13 300);
+  --color-readmodel: oklch(0.91 0.06 190);
+  --color-readmodel-edge: oklch(0.62 0.1 190);
+  --color-aggregate: oklch(0.95 0.03 95);
+  --color-aggregate-edge: oklch(0.74 0.05 95);
+  --color-context: oklch(0.9 0.02 265);
+  --color-context-edge: oklch(0.65 0.03 265);
+  --color-ui: oklch(0.98 0.004 250);
+  --color-ui-edge: oklch(0.62 0.02 250);
+
+  --color-command-night: oklch(0.33 0.05 250);
+  --color-command-night-edge: oklch(0.5 0.08 250);
+  --color-policy-night: oklch(0.33 0.05 300);
+  --color-policy-night-edge: oklch(0.5 0.08 300);
+  --color-readmodel-night: oklch(0.33 0.04 190);
+  --color-readmodel-night-edge: oklch(0.5 0.07 190);
+  --color-aggregate-night: oklch(0.36 0.02 95);
+  --color-aggregate-night-edge: oklch(0.53 0.04 95);
+  --color-context-night: oklch(0.34 0.01 265);
+  --color-context-night-edge: oklch(0.5 0.02 265);
+  --color-ui-night: oklch(0.42 0.006 250);
+  --color-ui-night-edge: oklch(0.6 0.012 250);
 }
 
 html {

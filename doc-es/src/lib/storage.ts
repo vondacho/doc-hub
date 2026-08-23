@@ -42,6 +42,19 @@
 const LAST_OPENED = 'doc-es:last-opened';
 
 /**
+ * The board's own light/dark override, when the visitor has set one.
+ *
+ * A view preference rather than a board, which is why it is kept here beside
+ * `LAST_OPENED` rather than under a board key: it belongs to this browser, not
+ * to any one storm, and it survives opening a different one.
+ *
+ * Colons, like `LAST_OPENED`, precisely so it can never collide with a board key
+ * or be listed as one — `storageKey` only ever produces `[a-z0-9-]` and one
+ * underscore.
+ */
+const BOARD_THEME = 'doc-es:board-theme';
+
+/**
  * Where a board is kept: `<product>_<title>`.
  *
  * The same stem the export filename uses, so the entry in `localStorage` and the
@@ -210,5 +223,34 @@ export function lastOpened(): string | null {
 		return key !== null && storage.getItem(key) !== null ? key : null;
 	} catch {
 		return null;
+	}
+}
+
+/**
+ * Whether the board has been pinned to light or dark, or `null` to follow the
+ * page.
+ *
+ * Three states rather than two, and the third is the default. A board that
+ * started pinned would be overriding a choice the visitor made at the operating
+ * system, which is a rude thing for one panel of one page to do — so it follows
+ * along until somebody says otherwise, and then remembers that they did.
+ */
+export type BoardTheme = 'light' | 'dark';
+
+export function loadTheme(): BoardTheme | null {
+	const value = load(BOARD_THEME);
+	return value === 'light' || value === 'dark' ? value : null;
+}
+
+export function saveTheme(theme: BoardTheme | null): void {
+	const storage = store();
+	if (storage === null) return;
+	try {
+		if (theme === null) storage.removeItem(BOARD_THEME);
+		else storage.setItem(BOARD_THEME, theme);
+	} catch {
+		// A preference that could not be remembered is not worth telling anybody
+		// about: the board is already showing what they asked for, and it will
+		// simply not be showing it next time.
 	}
 }

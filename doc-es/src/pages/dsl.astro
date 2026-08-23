@@ -18,27 +18,47 @@ const spans = (text: string): readonly string[] => text.split('`');
 const rules: { title: string; body: string }[] = [
   {
     title: 'One storm, and one wall',
-    body: 'A file holds one `eventstorm` block. A second is an error rather than a merge: two walls in one file is almost always a bad paste. A storm always has at least one `phase`, even when nobody has named one — the practice starts with paper on a wall, and the board needs somewhere to put the first note.',
+    body: 'A file holds one `eventstorm` block. A second is an error rather than a merge: two walls in one file is almost always a bad paste. A storm always has at least one `lane`, even when nobody has named one — the practice starts with paper on a wall, and the board needs a row to put the first note on.',
   },
   {
     title: 'The keyword is the colour',
     body: 'A card is written with the keyword of its kind — `event`, `actor`, `system`, `hotspot`, `opportunity` — and there is no separate colour or type annotation. A card whose keyword said one thing and whose annotation said another would be a state the file could express and the board could not.',
   },
   {
-    title: 'Declaration order is time',
-    body: 'Left to right, and top to bottom inside a phase. There is no index and no timestamp: an ordinal is a second copy of what the list already says, and the copy is what drifts. Reorder the wall by moving a note, not by editing a number.',
+    title: 'The board is a grid: lanes down, time across',
+    body: 'A `lane` is a horizontal swimlane — a department, an actor, a subsystem — and `@column` on a card says where along the timeline it sits. Column 4 is the same moment in every lane, which is what lets two notes side by side mean *simultaneous*, and what lets a lane have a visible gap where its neighbour is busy.',
   },
   {
-    title: 'A phase is a stretch of wall, not a bounded context',
-    body: 'The practice’s last step is finding the seams — clusters that share a language and change together. A `phase` is where you record one once the room agrees, and naming it a context would be claiming the workshop’s output before the workshop has produced it. Phases do not nest: the wall is a line.',
+    title: 'A column is a coordinate, not a list position',
+    body: 'Which is why cards carry `@3` where the other two boards refuse index fields. There, a card’s position *was* its place in a list, so an index would have been a second copy of the same fact. Here the board is two-dimensional and the column is the only record of when a note happens. Lane order is still a list, and still has no index.',
   },
   {
-    title: 'Cards may be written before any phase',
-    body: 'Chaotic exploration produces a heap of events long before anybody agrees where one stretch of wall ends. So a card is legal at the top level, and every such card is gathered into one unnamed phase on import. Export then writes that phase out explicitly — the one place this format normalises rather than renders.',
+    title: 'Several notes may share one square',
+    body: 'A moment often turns out to involve an actor, a system and an event at once, so notes stack at one point of one lane. They are written with the same `@column` and keep the order they appear in — the only record of a stacking order there is.',
   },
   {
-    title: 'Only Big Picture is implemented',
-    body: 'Event storming runs at three levels, each adding elements to the one before. This board has the Big Picture five. Process modelling’s `command`, `policy` and read model, and software design’s `aggregate`, are not offered yet — a card you can place and cannot mean anything by is worse than one that is not there. They are additive when they come.',
+    title: '`@column` may be left out, and is always written back',
+    body: 'A card with no `@` takes the square after the last one written in its lane, so a run of events typed straight down needs no numbering. Export always writes the number out: the coordinate is the fact, and leaving it implicit would make a file’s meaning depend on the order of the lines around it.',
+  },
+  {
+    title: 'The board is meant to feel endless',
+    body: 'There is always one empty column past the rightmost note and a control to add a lane under the last. Reaching the end creates the next square. It is not literally unbounded — the grid draws what is used plus one, with a floor so a fresh board looks like a board — because genuine infinity means a virtualised grid, and that would cost the thing that makes a wall readable: seeing all of it at once.',
+  },
+  {
+    title: 'Cards may be written before any lane',
+    body: 'Chaotic exploration produces a heap of events long before anybody agrees which lane they belong to. So a card is legal at the top level, and every such card is gathered into one unnamed lane on import. Export then writes that lane out explicitly — the one place this format normalises rather than renders.',
+  },
+  {
+    title: 'Three levels, and the notation is cumulative',
+    body: '`level big-picture`, `level process-modelling` or `level software-design`. Big picture has six colours, `context` among them — finding the seams is the last phase of a big picture, not a software-design activity. Process modelling adds `command`, `policy` and `readmodel`; software design adds `aggregate` and `ui` — the component, and the screen a person decides on, which completes the human path `read model → screen → command`. Each level keeps everything the shallower ones have — a process model still has domain events and hotspots on it, it has *more*, never different.',
+  },
+  {
+    title: 'The level is declared, not inferred',
+    body: 'It is a statement of intent: a session that has decided it is modelling a process decided that before placing its first command. Inferring it from the cards would mean the level changed under the room as somebody added one, and a facilitator could never set it up in advance. Omitting it means `big-picture`, which is where the practice starts — and is why files written before this setting existed still open.',
+  },
+  {
+    title: 'A card the level does not admit is an error',
+    body: 'Not a silent promotion. Quietly deepening the level because somebody wrote one `command` would change what the file claims about itself without anybody deciding to. The message names the level that *would* admit the card, so the fix is one word and the error says which. The board enforces the same rule from the other side: it will not let the level be lowered past the notes already on the wall.',
   },
   {
     title: 'Braces, not indentation',
@@ -74,8 +94,9 @@ const rules: { title: string; body: string }[] = [
         <pre class="text-xs leading-relaxed"><code>{SAMPLE_SOURCE}</code></pre>
       </div>
       <p class="mt-3 max-w-prose text-sm text-ink-muted dark:text-slate-400">
-        It is deliberately a wall you would not call finished: there is a hotspot nobody has resolved
-        and an opportunity nobody has acted on, which is what a wall looks like at the end of a session.
+        A process model: three lanes over one timeline, notes stacked at column 5, a gap in the customer’s
+        lane while the others are busy, and a hotspot nobody has resolved. The payment lane carries the
+        level’s whole point — a command, the event it causes, and the policy that reacts to it.
       </p>
     </section>
 
@@ -102,11 +123,17 @@ const rules: { title: string; body: string }[] = [
       <div class="mt-3 overflow-x-auto rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-night-raised">
         <pre class="text-xs leading-relaxed"><code>{`File       = EventStorm , EOF ;
 EventStorm = 'eventstorm' , String ,
-             [ '{' , { Product | Phase | Card | Note } , '}' ] ;
+             [ '{' , { Product | Level | Lane | Card | Note } , '}' ] ;
 Product    = 'product'  , String ;   (* at most one *)
-Phase      = 'phase'    , String , [ '{' , { Card | Note } , '}' ] ;
-Card       = Kind , String , [ '{' , { Note } , '}' ] ;
-Kind       = 'event' | 'actor' | 'system' | 'hotspot' | 'opportunity' ;
+Level      = 'level'    , ( 'big-picture' | 'process-modelling'
+                          | 'software-design' ) ;   (* at most one; default big-picture *)
+Lane       = 'lane'     , String , [ '{' , { Card | Note } , '}' ] ;
+Card       = Kind , String , [ Column ] , [ '{' , { Note } , '}' ] ;
+Column     = '@' , Integer ;   (* one-based; defaults to the next square *)
+Kind       = 'event' | 'actor' | 'system' | 'hotspot' | 'opportunity'
+           | 'context'                                     (* big picture *)
+           | 'command' | 'policy' | 'readmodel'            (* process modelling *)
+           | 'aggregate' | 'ui' ;                          (* software design *)
 Note       = 'note'     , String ;
 String     = '"' , { Char | Escape | Splice } , '"' ;
 Escape     = '\\\\' , ( '"' | '\\\\' | 'n' | 't' ) ;

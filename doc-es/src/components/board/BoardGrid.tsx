@@ -1,55 +1,80 @@
 /**
- * The wall: phases as columns, cards stacked in time order inside each.
+ * The board: a chessboard of squares, lanes down the side and time across.
  *
- * Time runs left to right, which is the one rule the practice states as an
- * instruction — "arrange all domain events on a single timeline from left to
- * right". A phase is a stretch of that line, and reading order is down a column
- * and then on to the next.
+ * The two axes mean different things, and that is the whole layout.
  *
- * Columns rather than one long row, which is what a physical wall actually is.
- * A row of sixty events is eight metres of paper in a room and a horizontal
- * scrollbar on a screen, and a screen has the vertical space a wall does not. So
- * the timeline is folded: across the phases, down within one. doc-sm and doc-em
- * fold the same way for the same reason, which also means all three boards read
- * alike.
+ * **Horizontal is time.** Column 4 is the same moment in every lane, which is
+ * the one thing this arrangement says that a list of events cannot: two notes
+ * side by side are simultaneous, and a lane that is empty where its neighbour is
+ * busy has a visible hole in it.
  *
- * ## The empty board is a row of `+`
+ * **Vertical is parallel tracks**, plus depth. A lane is a department, an actor,
+ * a subsystem — whatever the room is separating — and within one square the
+ * notes stack, because a moment often turns out to involve an actor, a system
+ * and an event at once.
  *
- * A fresh storm is one unnamed phase holding nothing, and what it shows is one
- * dashed square per kind, each with a `+` and each tinted with that kind's own
- * colour. That is the legend and the first move in the same control: the five
- * colours *are* the notation, and somebody who has never seen the board learns
- * them by adding one.
+ * Square cards, on a squared surface. This is the one board of the three that
+ * does not read as columns of text: a wall of sticky notes is a grid of roughly
+ * equal squares, and making the cards any other shape would make the arrangement
+ * stop looking like the thing it is a picture of. The text inside is small and
+ * clamped for the same reason — a note that grew to fit its words would push its
+ * neighbours out of alignment and the grid would stop being a grid.
  *
- * The strip stays at the foot of every phase for the whole life of the board.
- * On a wall you never run out of somewhere to stick a note, and a `+` that
- * appeared only on hover would hide the one thing a chaotic-exploration phase
- * does over and over.
+ * ## Endless in the direction that matters
  *
- * What is kept from doc-em, deliberately: the em-based sizing so one font-size
- * scales the whole board, the sticky header, the padding living outside the
- * scrollport. Those were bought with real bugs; none of them is re-learned here.
+ * There is always one empty column past the rightmost note, and a control to add
+ * a lane under the last one. Reaching the end creates the next square, so the
+ * surface never runs out from under the workshop.
+ *
+ * It is not literally unbounded: the grid renders `columnCount` columns, which is
+ * whatever is used plus one, with a floor so a fresh board looks like a board.
+ * Genuine infinity would mean a virtualised grid, which is a great deal of
+ * machinery for a wall that in practice runs to a few dozen columns — and it
+ * would cost the thing that makes this readable, which is that the whole storm
+ * is on screen at once at the far zoom stops.
  */
 
-import { SortableContext, horizontalListSortingStrategy, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { useDroppable } from '@dnd-kit/core';
-import { useLayoutEffect, useRef } from 'react';
-import { CARD_KINDS, cardLabel, cardMeaning, type CardKind } from '../../lib/eventstorm/model.ts';
-import { swatchClass } from '../../lib/board/kinds.ts';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { cardLabel, kindsFor, type CardKind } from '../../lib/eventstorm/model.ts';
+import { cardClass } from '../../lib/board/kinds.ts';
 import type { BoardAction } from '../../lib/board/reducer.ts';
-import type { BoardState, Id } from '../../lib/board/state.ts';
-import { Card } from './Card.tsx';
-import type { CardMenuAction } from './CardMenu.tsx';
+import { cardsAt, cellKey, columnCount, type BoardState, type Id } from '../../lib/board/state.ts';
+import { CardMenu, type CardMenuAction } from './CardMenu.tsx';
+import { KindPalette } from './KindPalette.tsx';
 import { Icon } from './Icon.tsx';
 
-/** One phase column. Wide enough for a sentence-length note at 100%. */
-const COLUMN = '13em';
+/** One square, in `em`, so a single font-size scales the whole board. */
+const SQUARE = '7.5em';
+/** The lane rail down the left. Wide enough for a name and its controls. */
+const RAIL = '9em';
 
-/** Font-size at 100%, in px. Everything on the board is `em` against this. */
-export const BASE_FONT = 20.8;
+/**
+ * Font-size at 100%, in px. Everything on the board is `em` against this.
+ *
+ * 25.6 rather than 16, which is 16 × 1.6: what used to be the *top* zoom stop is
+ * now the bottom one. The squares were too small to read a four-word note in at
+ * the old 100%, so nobody ever worked at it — the stops below what this board
+ * needs are stops nobody visits, and a zoom range whose first half is unusable
+ * is really a shorter range that starts in the wrong place.
+ *
+ * The stops themselves are unchanged at 100–160% (see `ZOOM_STOPS` in
+ * EventStormBoard). Moving the base rather than the multipliers keeps the
+ * percentages the toolbar shows meaning what they say — 100% is this board's
+ * natural size, whatever that happens to be in pixels — and it is one number
+ * rather than five.
+ *
+ * Larger than doc-sm's and doc-em's 20.8 because this board's cards are squares
+ * with clamped text rather than columns that grow to fit. A square has to be big
+ * enough to read at rest; a column can be narrow and still legible.
+ */
+export const BASE_FONT = 25.6;
 
-const PHASE_ROW = 1;
-const CARDS_ROW = 2;
+/** Row 1 is the column ruler; lanes start under it. */
+const RULER_ROW = 1;
+const FIRST_LANE_ROW = 2;
 
 export function BoardGrid({
 	board,
@@ -71,13 +96,11 @@ export function BoardGrid({
 }) {
 	const scroller = useRef<HTMLDivElement>(null);
 
-	// A new document is a new wall; leaving the scroll where the last one ended
-	// puts the visitor in the middle of something they have not seen.
 	useLayoutEffect(() => {
 		scroller.current?.scrollTo({ left: 0, top: 0 });
 	}, [documentKey]);
 
-	const columns = Math.max(1, board.phaseOrder.length);
+	const columns = columnCount(board);
 
 	return (
 		<div
@@ -85,55 +108,97 @@ export function BoardGrid({
 				fullscreen ? 'flex min-h-0 flex-1 flex-col rounded-xl p-4' : 'rounded-2xl p-3'
 			}`}
 		>
-			{/* The padding is out here, so nothing scrolls through a strip the
-			    sticky row cannot reach. */}
 			<div
 				ref={scroller}
 				className={`board-scroll ${fullscreen ? 'min-h-0 flex-1' : ''}`}
 				style={{ maxHeight: fullscreen ? '100%' : '75vh', fontSize: `${BASE_FONT * zoom}px` }}
 			>
 				<div
-					className="grid min-w-max gap-[0.4em]"
-					style={{ gridTemplateColumns: `repeat(${columns}, minmax(${COLUMN}, 1fr))` }}
+					className="grid min-w-max gap-[0.25em]"
+					style={{ gridTemplateColumns: `${RAIL} repeat(${columns}, ${SQUARE})` }}
 				>
-					{/* Opaque behind the header row: the headers are opaque but the
-					    grid's gaps are not. */}
+					{/* Opaque behind the ruler and behind the rail, so squares scroll
+					    under both rather than through them. The rail is the lower of
+					    the two so the corner belongs to the ruler. */}
 					<div
 						aria-hidden="true"
-						style={{ gridColumn: '1 / -1', gridRow: PHASE_ROW }}
-						className="sticky top-0 z-[5] -mb-[0.2em] bg-white pb-[0.2em] dark:bg-night-raised"
+						style={{ gridColumn: '1 / -1', gridRow: RULER_ROW }}
+						className="sticky top-0 z-[5] -mb-[0.15em] bg-white pb-[0.15em] dark:bg-night-raised"
+					/>
+					<div
+						aria-hidden="true"
+						style={{ gridColumn: 1, gridRow: `1 / ${FIRST_LANE_ROW + board.laneOrder.length + 1}` }}
+						className="sticky left-0 z-[3] -mr-[0.15em] bg-white pr-[0.15em] dark:bg-night-raised"
 					/>
 
-					<SortableContext items={[...board.phaseOrder]} strategy={horizontalListSortingStrategy}>
-						{board.phaseOrder.map((phaseId, index) => {
-							const phase = board.phases[phaseId];
-							if (!phase) return null;
-							return (
-								<PhaseHeader
-									key={phaseId}
-									board={board}
-									dispatch={dispatch}
-									phaseId={phaseId}
-									index={index}
-									column={index + 1}
-									expanded={expanded}
-									onToggleDetail={onToggleDetail}
-								/>
-							);
-						})}
+					{/* The corner. Sticks both ways, so it outranks both. */}
+					<div
+						style={{ gridColumn: 1, gridRow: RULER_ROW }}
+						className="sticky top-0 left-0 z-30 flex items-end px-[0.4em] pb-[0.2em] text-[0.62em] font-semibold tracking-[0.14em] text-ink-muted uppercase dark:text-slate-400"
+					>
+						Lanes
+					</div>
+
+					{/*
+					 * The column ruler.
+					 *
+					 * Numbers rather than nothing, because a column is a coordinate the
+					 * file writes down — `@5` in the text is this 5 on the board — and
+					 * without them the two are impossible to line up by eye when
+					 * hand-editing.
+					 */}
+					{Array.from({ length: columns }, (_, i) => (
+						<div
+							key={`ruler-${i}`}
+							style={{ gridColumn: i + 2, gridRow: RULER_ROW }}
+							className="sticky top-0 z-10 flex items-end justify-center pb-[0.2em] text-[0.62em] tabular-nums text-ink-muted dark:text-slate-400"
+						>
+							{i + 1}
+						</div>
+					))}
+
+					<SortableContext items={[...board.laneOrder]} strategy={verticalListSortingStrategy}>
+						{board.laneOrder.map((laneId, index) => (
+							<LaneLabel
+								key={laneId}
+								board={board}
+								dispatch={dispatch}
+								laneId={laneId}
+								index={index}
+								row={FIRST_LANE_ROW + index}
+								expanded={expanded}
+								onToggleDetail={onToggleDetail}
+							/>
+						))}
 					</SortableContext>
 
-					{board.phaseOrder.map((phaseId, index) => (
-						<PhaseColumn
-							key={`col-${phaseId}`}
-							board={board}
-							dispatch={dispatch}
-							phaseId={phaseId}
-							column={index + 1}
-							expanded={expanded}
-							onToggleDetail={onToggleDetail}
-						/>
-					))}
+					{board.laneOrder.flatMap((laneId, index) =>
+						Array.from({ length: columns }, (_, i) => (
+							<Square
+								key={`${laneId}-${i + 1}`}
+								board={board}
+								dispatch={dispatch}
+								laneId={laneId}
+								column={i + 1}
+								row={FIRST_LANE_ROW + index}
+								expanded={expanded}
+								onToggleDetail={onToggleDetail}
+							/>
+						)),
+					)}
+
+					{/* One more lane, always available under the last. The vertical axis
+					    is as open as the horizontal one, and this is its empty column. */}
+					<button
+						type="button"
+						onClick={() => dispatch({ type: 'addLane', index: board.laneOrder.length })}
+						aria-label="Add a lane"
+						style={{ gridColumn: 1, gridRow: FIRST_LANE_ROW + board.laneOrder.length }}
+						className="sticky left-0 z-[4] my-[0.15em] flex items-center justify-center gap-[0.3em] rounded-[0.3em] border border-dashed border-slate-300 py-[0.4em] text-[0.7em] text-ink-muted transition hover:border-brand hover:text-brand focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand motion-reduce:transition-none dark:border-slate-600 dark:text-slate-400 dark:hover:border-sky-400 dark:hover:text-sky-400"
+					>
+						<Icon name="plus" className="h-[1em] w-[1em]" />
+						Lane
+					</button>
 				</div>
 			</div>
 		</div>
@@ -141,106 +206,177 @@ export function BoardGrid({
 }
 
 /**
- * A phase's header: its name, its notes, and the moves that apply to it.
+ * A lane's label in the left rail: its name, its notes, and its moves.
  *
- * Sticky, so the name of the stretch you are reading stays visible while its
- * cards scroll past. It is not a sticky note itself — a phase is a boundary
- * somebody drew on the wall, not something written on one — so it is plain
- * rather than tinted.
+ * Not a sticky note — a lane is a line somebody drew on the wall, not something
+ * written on one — so it is plain rather than tinted, exactly as doc-sm's band
+ * labels are.
  */
-function PhaseHeader({
+function LaneLabel({
 	board,
 	dispatch,
-	phaseId,
+	laneId,
 	index,
-	column,
+	row,
 	expanded,
 	onToggleDetail,
 }: {
 	board: BoardState;
 	dispatch: (action: BoardAction) => void;
-	phaseId: Id;
+	laneId: Id;
 	index: number;
-	column: number;
+	row: number;
 	expanded: ReadonlySet<Id>;
 	onToggleDetail: (id: Id) => void;
 }) {
-	const phase = board.phases[phaseId];
-	if (!phase) return null;
-	const last = board.phaseOrder.length - 1;
+	const lane = board.lanes[laneId];
+	const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+		id: laneId,
+		data: { type: 'lane' },
+	});
+	const [editing, setEditing] = useState(false);
+	const input = useRef<HTMLInputElement>(null);
 
-	return (
-		<div
-			style={{ gridColumn: column, gridRow: PHASE_ROW }}
-			className="sticky top-0 z-10 rounded-[0.4em] border border-slate-300 bg-white px-[0.5em] py-[0.4em] dark:border-slate-600 dark:bg-night-raised"
-		>
-			<Card
-				id={phaseId}
-				kind="phase"
-				title={phase.title}
-				notes={phase.notes}
-				fixed
-				data={{ type: 'phase' }}
-				detailOpen={expanded.has(phaseId)}
-				onToggleDetail={() => onToggleDetail(phaseId)}
-				onRetitle={(title) => dispatch({ type: 'retitlePhase', id: phaseId, title })}
-				onNotes={(text) => dispatch({ type: 'setPhaseNotes', id: phaseId, text })}
-				position={`phase ${index + 1} of ${board.phaseOrder.length}`}
-				menu={phaseMenu(board, dispatch, phaseId, index, last)}
-				bare
-			/>
-		</div>
-	);
-}
+	useEffect(() => {
+		if (editing) {
+			input.current?.focus();
+			input.current?.select();
+		}
+	}, [editing]);
 
-function PhaseColumn({
-	board,
-	dispatch,
-	phaseId,
-	column,
-	expanded,
-	onToggleDetail,
-}: {
-	board: BoardState;
-	dispatch: (action: BoardAction) => void;
-	phaseId: Id;
-	column: number;
-	expanded: ReadonlySet<Id>;
-	onToggleDetail: (id: Id) => void;
-}) {
-	const phase = board.phases[phaseId];
-	const { setNodeRef, isOver } = useDroppable({ id: `phase:${phaseId}`, data: { accepts: 'card', phaseId } });
-	if (!phase) return null;
+	if (!lane) return null;
+	const last = board.laneOrder.length - 1;
+	const open = expanded.has(laneId);
+
+	const commit = (value: string) => {
+		setEditing(false);
+		dispatch({ type: 'retitleLane', id: laneId, title: value });
+	};
 
 	return (
 		<div
 			ref={setNodeRef}
-			style={{ gridColumn: column, gridRow: CARDS_ROW }}
-			className={`flex min-h-[6em] flex-col gap-[0.3em] rounded-[0.4em] border border-dashed p-[0.3em] transition-colors motion-reduce:transition-none ${
+			style={{
+				gridColumn: 1,
+				gridRow: row,
+				transform: CSS.Translate.toString(transform),
+				transition,
+				opacity: isDragging ? 0.35 : undefined,
+			}}
+			className="group sticky left-0 z-[4] flex flex-col justify-center px-[0.4em] py-[0.3em]"
+		>
+			{editing ? (
+				<input
+					ref={input}
+					defaultValue={lane.title}
+					aria-label="Rename this lane"
+					onBlur={(event) => commit(event.target.value)}
+					onKeyDown={(event) => {
+						if (event.key === 'Enter') commit(event.currentTarget.value);
+						if (event.key === 'Escape') setEditing(false);
+					}}
+					className="w-full rounded-sm border border-slate-300 px-1 py-0.5 text-[0.72em] focus-visible:outline-2 focus-visible:outline-brand dark:border-slate-600 dark:bg-black/30"
+				/>
+			) : (
+				<div className="flex items-start gap-[0.2em]">
+					<button
+						type="button"
+						{...attributes}
+						{...listeners}
+						onClick={() => setEditing(true)}
+						aria-label={`Lane ${lane.title}, ${index + 1} of ${board.laneOrder.length}`}
+						className="min-w-0 flex-1 cursor-grab text-left text-[0.78em] leading-snug font-semibold break-words focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand active:cursor-grabbing"
+					>
+						{lane.title}
+					</button>
+					{lane.notes.length > 0 && (
+						<button
+							type="button"
+							onClick={() => onToggleDetail(laneId)}
+							aria-expanded={open}
+							aria-label={`${open ? 'Hide' : 'Show'} the notes on ${lane.title}`}
+							className="shrink-0 rounded-sm text-ink-muted hover:text-brand focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand dark:text-slate-400"
+						>
+							<Icon name={open ? 'up' : 'down'} className="h-[0.9em] w-[0.9em]" />
+						</button>
+					)}
+					<CardMenu label={`Lane ${lane.title}`} actions={laneMenu(board, dispatch, laneId, index, last)} />
+				</div>
+			)}
+
+			{open && lane.notes.length > 0 && (
+				<p className="mt-[0.2em] text-[0.66em] leading-snug break-words whitespace-pre-line text-ink-muted dark:text-slate-400">
+					{lane.notes.join('\n\n')}
+				</p>
+			)}
+		</div>
+	);
+}
+
+/**
+ * One square of the board: a drop target, a stack of notes, and a way in.
+ *
+ * Every square exists in the DOM, unlike `cells`, which only holds the occupied
+ * ones. An empty square is a drop target and a place to put the first note, so
+ * it has to be there — it is one dashed outline and costs nothing.
+ *
+ * The `+` appears on hover or focus. There are lanes × columns of these and a
+ * permanent control on each would be a screen of plus signs; the strip that
+ * opens is the legend as well as the control, so it teaches the notation at the
+ * moment somebody is choosing a colour.
+ */
+function Square({
+	board,
+	dispatch,
+	laneId,
+	column,
+	row,
+	expanded,
+	onToggleDetail,
+}: {
+	board: BoardState;
+	dispatch: (action: BoardAction) => void;
+	laneId: Id;
+	column: number;
+	row: number;
+	expanded: ReadonlySet<Id>;
+	onToggleDetail: (id: Id) => void;
+}) {
+	const key = cellKey(laneId, column);
+	const { setNodeRef, isOver } = useDroppable({ id: `square:${key}`, data: { accepts: 'card', cell: key } });
+	const ids = cardsAt(board, laneId, column);
+	const lane = board.lanes[laneId];
+	const where = `${lane?.title ?? 'this lane'}, column ${column}`;
+
+	return (
+		<div
+			ref={setNodeRef}
+			// `minHeight` as an inline style, not a class. Tailwind scans source text
+			// and cannot see a class name built at runtime, so `min-h-[${SQUARE}]`
+			// would compile, run, and produce squares with no height — a failure
+			// with no error attached. Same trap kinds.ts documents for the colours.
+			style={{ gridColumn: column + 1, gridRow: row, minHeight: SQUARE }}
+			className={`group/sq relative flex flex-col gap-[0.15em] rounded-[0.3em] border border-dashed p-[0.15em] transition-colors motion-reduce:transition-none ${
 				isOver
 					? 'border-brand bg-brand/5 dark:border-sky-400 dark:bg-sky-400/10'
-					: 'border-slate-200 dark:border-slate-700'
+					: 'border-slate-200/70 dark:border-slate-700/70'
 			}`}
 		>
-			<ul aria-label={`Cards in ${phase.title}`} className="flex flex-col gap-[0.3em]">
-				<SortableContext items={[...phase.cardIds]} strategy={verticalListSortingStrategy}>
-					{phase.cardIds.map((id, index) => {
+			<ul aria-label={`Notes at ${where}`} className="flex flex-col gap-[0.15em]">
+				<SortableContext items={[...ids]} strategy={verticalListSortingStrategy}>
+					{ids.map((id, index) => {
 						const card = board.cards[id];
 						if (!card) return null;
 						return (
 							<li key={id}>
-								<Card
+								<StickyNote
 									id={id}
-									kind={card.kind}
-									title={card.title}
-									notes={card.notes}
-									position={`${index + 1} of ${phase.cardIds.length} in "${phase.title}"`}
-									data={{ type: 'card', phaseId }}
-									detailOpen={expanded.has(id)}
-									onToggleDetail={() => onToggleDetail(id)}
-									onRetitle={(title) => dispatch({ type: 'retitleCard', id, title })}
-									onNotes={(text) => dispatch({ type: 'setCardNotes', id, text })}
-									menu={cardMenu(board, dispatch, id, card.kind)}
+									board={board}
+									dispatch={dispatch}
+									cell={key}
+									position={`${index + 1} of ${ids.length} at ${where}`}
+									expanded={expanded}
+									onToggleDetail={onToggleDetail}
 								/>
 							</li>
 						);
@@ -248,49 +384,144 @@ function PhaseColumn({
 				</SortableContext>
 			</ul>
 
-			<AddStrip phase={phase.title} onAdd={(kind) => dispatch({ type: 'addCard', phaseId, kind })} />
+			{/* Only the kinds this level admits. The strip is the legend as well as
+			    the control, so offering a colour the notation does not currently
+			    have would be teaching the wrong notation. Hovering one shows the
+			    note it would make — see KindPalette. */}
+			<div className="opacity-0 transition group-hover/sq:opacity-100 focus-within:opacity-100 motion-reduce:transition-none">
+				<KindPalette
+					kinds={kindsFor(board.level)}
+					where={where}
+					onAdd={(kind) => dispatch({ type: 'addCard', laneId, column, kind })}
+				/>
+			</div>
 		</div>
 	);
 }
 
 /**
- * One dashed square per kind, each with a `+`, tinted with that kind's colour.
+ * One note: a square of colour with a few words on it.
  *
- * The legend and the first move in one control — see the note at the top of this
- * file. Always present, never on hover: adding a note is what this board is for,
- * and a control that hides itself makes the commonest action the hardest to
- * find.
+ * The words are clamped rather than allowed to grow the note. A wall is a grid
+ * of equal squares, and a note that stretched to fit its text would push its
+ * neighbours out of line — the arrangement is the information here, so the
+ * arrangement wins and the full text lives in the title attribute and the
+ * accessible name.
  *
- * The label names the kind in words, because colour is never the only signal
- * here and a row of five coloured squares would otherwise be five identical
- * buttons to anybody who is not looking at hue.
+ * That is also a nudge the practice itself makes: a domain event is three or
+ * four words in the past tense. A note that does not fit is usually two notes.
  */
-function AddStrip({ phase, onAdd }: { phase: string; onAdd: (kind: CardKind) => void }) {
+function StickyNote({
+	id,
+	board,
+	dispatch,
+	cell,
+	position,
+	expanded,
+	onToggleDetail,
+}: {
+	id: Id;
+	board: BoardState;
+	dispatch: (action: BoardAction) => void;
+	cell: string;
+	position: string;
+	expanded: ReadonlySet<Id>;
+	onToggleDetail: (id: Id) => void;
+}) {
+	const card = board.cards[id];
+	const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+		id,
+		data: { type: 'card', cell },
+	});
+	const [editing, setEditing] = useState(false);
+	const input = useRef<HTMLTextAreaElement>(null);
+
+	useEffect(() => {
+		if (editing) {
+			input.current?.focus();
+			input.current?.select();
+		}
+	}, [editing]);
+
+	if (!card) return null;
+	const open = expanded.has(id);
+	const label = `${cardLabel[card.kind]}: ${card.title}, ${position}`;
+
 	return (
-		<div className="mt-[0.1em] flex flex-wrap gap-[0.25em]">
-			{CARD_KINDS.map((kind) => (
-				<button
-					key={kind}
-					type="button"
-					onClick={() => onAdd(kind)}
-					title={`${cardLabel[kind]} — ${cardMeaning[kind]}`}
-					aria-label={`Add ${cardLabel[kind].toLowerCase()} to ${phase}`}
-					className={`flex h-[1.7em] w-[1.7em] items-center justify-center rounded-[0.25em] border border-dashed opacity-70 transition hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand motion-reduce:transition-none ${swatchClass[kind]}`}
-				>
-					<Icon name="plus" className="h-[0.9em] w-[0.9em]" />
-				</button>
-			))}
+		<div
+			ref={setNodeRef}
+			style={{
+				transform: CSS.Translate.toString(transform),
+				transition,
+				opacity: isDragging ? 0.35 : undefined,
+			}}
+			className={`relative rounded-[0.2em] border px-[0.25em] py-[0.2em] text-[0.6em] leading-tight shadow-sm ${cardClass[card.kind]}`}
+		>
+			{editing ? (
+				<textarea
+					ref={input}
+					rows={3}
+					defaultValue={card.title}
+					aria-label={`Rewrite this ${cardLabel[card.kind].toLowerCase()}`}
+					onBlur={(event) => {
+						setEditing(false);
+						dispatch({ type: 'retitleCard', id, title: event.target.value });
+					}}
+					onKeyDown={(event) => {
+						// One note, one line of words: Enter is a verdict, not a break.
+						if (event.key === 'Enter') {
+							event.preventDefault();
+							event.currentTarget.blur();
+						}
+						if (event.key === 'Escape') {
+							event.preventDefault();
+							setEditing(false);
+						}
+					}}
+					className="w-full resize-none bg-white/70 text-[1em] leading-tight text-ink focus-visible:outline-2 focus-visible:outline-brand dark:bg-black/30 dark:text-slate-100"
+				/>
+			) : (
+				<div className="flex items-start gap-[0.1em]">
+					<button
+						type="button"
+						{...attributes}
+						{...listeners}
+						onClick={() => setEditing(true)}
+						title={card.title}
+						aria-label={label}
+						className="line-clamp-4 min-w-0 flex-1 cursor-grab text-left break-words hyphens-auto focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand active:cursor-grabbing"
+					>
+						{card.title}
+					</button>
+					{card.notes.length > 0 && (
+						<button
+							type="button"
+							onClick={() => onToggleDetail(id)}
+							aria-expanded={open}
+							aria-label={`${open ? 'Hide' : 'Show'} the notes on ${card.title}`}
+							className="shrink-0 opacity-60 hover:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand"
+						>
+							<Icon name={open ? 'up' : 'down'} className="h-[1em] w-[1em]" />
+						</button>
+					)}
+					<CardMenu label={label} actions={cardMenu(board, dispatch, id, card.kind)} />
+				</div>
+			)}
+
+			{open && card.notes.length > 0 && (
+				<p className="mt-[0.15em] break-words whitespace-pre-line opacity-80">{card.notes.join('\n\n')}</p>
+			)}
 		</div>
 	);
 }
 
 /**
- * Re-colouring a card is offered, and it is the commonest correction there is.
+ * Re-colouring a note is offered, and it is the commonest correction there is.
  *
  * Half of what a wall does in its second hour is discovering that a note is the
  * wrong colour — an "event" that is really a hotspot, a "system" that is really
  * an actor. On paper you rewrite it on a different sticky; here it is one click,
- * and the card keeps its words and its place.
+ * and the note keeps its words and its square.
  */
 function cardMenu(
 	board: BoardState,
@@ -309,56 +540,57 @@ function cardMenu(
 					text: card && card.notes.length > 0 ? `${card.notes.join('\n\n')}\n\nNew note` : 'New note',
 				}),
 		},
-		...CARD_KINDS.filter((kind) => kind !== current).map((kind, position) => ({
-			label: `Make it ${cardLabel[kind].toLowerCase()}`,
-			separated: position === 0,
-			run: () => dispatch({ type: 'setCardKind', id, kind }),
-		})),
-		{ label: 'Delete this card', separated: true, run: () => dispatch({ type: 'removeCard', id }) },
+		// Re-colouring is offered only within this level's notation, for the same
+		// reason the `+` strip is: a board must not be able to place a card the
+		// file it writes could not describe.
+		...kindsFor(board.level)
+			.filter((kind) => kind !== current)
+			.map((kind, position) => ({
+				label: `Make it ${cardLabel[kind].toLowerCase()}`,
+				separated: position === 0,
+				run: () => dispatch({ type: 'setCardKind', id, kind }),
+			})),
+		{ label: 'Remove this note', separated: true, run: () => dispatch({ type: 'removeCard', id }) },
 	];
 }
 
-function phaseMenu(
+function laneMenu(
 	board: BoardState,
 	dispatch: (action: BoardAction) => void,
 	id: Id,
 	index: number,
 	last: number,
 ): CardMenuAction[] {
-	const phase = board.phases[id];
-	const only = board.phaseOrder.length === 1;
+	const lane = board.lanes[id];
+	const only = board.laneOrder.length === 1;
 	return [
 		{
 			label: 'Add a note',
 			run: () =>
 				dispatch({
-					type: 'setPhaseNotes',
+					type: 'setLaneNotes',
 					id,
-					text: phase && phase.notes.length > 0 ? `${phase.notes.join('\n\n')}\n\nNew note` : 'New note',
+					text: lane && lane.notes.length > 0 ? `${lane.notes.join('\n\n')}\n\nNew note` : 'New note',
 				}),
 		},
 		{
-			label: 'Move earlier',
+			label: 'Move up',
 			separated: true,
-			run: index > 0 ? () => dispatch({ type: 'movePhase', id, index: index - 1 }) : undefined,
+			run: index > 0 ? () => dispatch({ type: 'moveLane', id, index: index - 1 }) : undefined,
 			disabledReason: index > 0 ? undefined : 'It is already first.',
 		},
 		{
-			label: 'Move later',
-			run: index < last ? () => dispatch({ type: 'movePhase', id, index: index + 1 }) : undefined,
+			label: 'Move down',
+			run: index < last ? () => dispatch({ type: 'moveLane', id, index: index + 1 }) : undefined,
 			disabledReason: index < last ? undefined : 'It is already last.',
 		},
+		{ label: 'Add a lane below', separated: true, run: () => dispatch({ type: 'addLane', index: index + 1 }) },
 		{
-			label: 'Add a phase after it',
+			// The last one is emptied rather than deleted — otherwise there is no
+			// square left to place anything on. The label says which.
+			label: only ? 'Clear the wall' : 'Delete the lane and its notes',
 			separated: true,
-			run: () => dispatch({ type: 'addPhase', index: index + 1 }),
-		},
-		{
-			// The last one is emptied rather than deleted — otherwise there is
-			// nowhere to put a card and no `+` to press. The label says which.
-			label: only ? 'Clear the wall' : 'Delete the phase and its cards',
-			separated: true,
-			run: () => dispatch({ type: 'removePhase', id }),
+			run: () => dispatch({ type: 'removeLane', id }),
 		},
 	];
 }

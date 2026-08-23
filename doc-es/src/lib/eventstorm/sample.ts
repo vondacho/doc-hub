@@ -8,16 +8,33 @@
  * notation instead of the domain.
  *
  * It is deliberately a wall you would *not* call finished. The events are in
- * time order and the phases are named, but there is a hotspot nobody has
+ * time order and the lanes are named, but there is a hotspot nobody has
  * resolved and an opportunity nobody has acted on — which is what a wall looks
  * like at the end of the session rather than a week later. A tidy example would
  * teach the notation and hide the point of the technique, which is that the
  * disagreements are the output.
  *
- * All five Big Picture colours appear, because the notation is otherwise only
- * described on the format page and this is what people copy from. The actor and
- * the external system sit next to the events they touch rather than in a row of
- * their own: on a real wall they are placed against the moment they matter.
+ * It is a **process-modelling** storm rather than a big-picture one, so all five
+ * big-picture colours appear *and* the three the deeper level adds. The notation
+ * is otherwise only described on the format page, and this is what people copy
+ * from — a sample that showed half of it would leave the other half looking
+ * theoretical.
+ *
+ * The payment lane carries the level's whole point in four squares: a command at
+ * 3, the event it causes at 4, the policy that reacts at 5 and the event that
+ * reacts to *it*. That is `event → policy → command → system → event` read off
+ * the wall, which is the chain process modelling exists to make visible. The actor and
+ * the external system sit at the same column as the events they touch rather
+ * than in a lane of their own: on a real wall they are placed against the moment
+ * they matter, and on this board that means the same square.
+ *
+ * It is also laid out to show what the grid is *for*, which a single row could
+ * not. Three lanes run in parallel over one timeline. Several notes share a
+ * column — column 5 carries a refusal, an acceptance and the hotspot between
+ * them — which is the stacking the vertical axis exists to allow. And the
+ * customer's lane is empty from column 4 to 7 while the payment and kitchen
+ * lanes are busy, which is a gap: a visible hole on a wall, and a thing a list
+ * cannot say at all.
  */
 
 export const SAMPLE_FILENAME = 'ordering-a-pizza.eventstorm';
@@ -28,32 +45,37 @@ export const SAMPLE_SOURCE = `// Event storm exported by doc-es.
 
 eventstorm "Ordering a pizza" {
   product "client-onboarding"
+  level process-modelling
 
-  phase "Choosing" {
-    actor "Hungry customer"
-    event "Menu opened"
-    event "Pizza added to the basket"
-    event "Basket emptied and started again" {
+  lane "Customer" {
+    actor "Hungry customer" @1
+    event "Menu opened" @1
+    event "Pizza added to the basket" @2
+    event "Basket emptied and started again" @2 {
       note "Happens more than anybody expected. Worth\\
            understanding before it is designed away."
     }
-    opportunity "Remember the last order"
+    event "Order placed" @3
+    event "Pizza delivered" @8
   }
 
-  phase "Paying" {
-    event "Payment requested"
-    system "Payment provider"
-    event "Payment refused"
-    event "Payment accepted"
-    hotspot "Nobody agrees whether a refused payment cancels the order"
+  lane "Payments" {
+    command "Take the payment" @3
+    event "Payment requested" @4
+    system "Payment provider" @4
+    policy "Whenever a payment is refused, hold the order" @5
+    event "Payment refused" @5
+    event "Payment accepted" @5
+    hotspot "Nobody agrees whether a refused payment cancels the order" @5
   }
 
-  phase "Making and delivering" {
-    event "Order sent to the kitchen"
-    actor "Kitchen staff"
-    event "Pizza put in the oven"
-    event "Pizza handed to the driver"
-    event "Pizza delivered"
+  lane "Kitchen" {
+    readmodel "Orders waiting" @6
+    event "Order sent to the kitchen" @6
+    actor "Kitchen staff" @6
+    event "Pizza put in the oven" @6
+    opportunity "Tell the customer when it goes in the oven" @6
+    event "Pizza handed to the driver" @7
   }
 }
 `;

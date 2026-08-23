@@ -2,7 +2,7 @@
  * What went wrong, and where.
  *
  * Deliberately free of domain vocabulary: this file knows about positions and
- * messages, not about phases or cards. It is one of the four modules copied
+ * messages, not about lanes or notes. It is one of the four modules copied
  * verbatim from doc-sm (with lexer.ts, history.ts and files.ts), so nothing
  * domain-specific may land here — that is what made the copy a copy.
  *

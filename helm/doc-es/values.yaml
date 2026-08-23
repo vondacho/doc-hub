@@ -1,0 +1,160 @@
+# Default values for doc-es.
+# Tuned for a local single-node cluster (Rancher Desktop / Docker Desktop).
+
+replicaCount: 1
+
+image:
+  repository: doc-es
+  # Defaults to .Chart.AppVersion when empty.
+  tag: ""
+  # IfNotPresent so a locally built image is used without a registry push.
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+# Port the standalone @astrojs/node server listens on. Injected as PORT and
+# used as the container port, so the two cannot drift apart.
+containerPort: 4324
+
+serviceAccount:
+  create: true
+  annotations: {}
+  # Defaults to the fullname template when empty.
+  name: ""
+
+podAnnotations: {}
+podLabels: {}
+
+# Update strategy, applied as-is. The board is stateless, so a rolling update
+# is always safe here.
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxSurge: 1
+    maxUnavailable: 0
+
+podSecurityContext:
+  runAsNonRoot: true
+  # Must match the "app" user baked into doc-es/Dockerfile. 1000 is
+  # deliberately avoided there — the node base image already uses it.
+  runAsUser: 10001
+  runAsGroup: 10001
+  fsGroup: 10001
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+service:
+  type: ClusterIP
+  port: 4324
+
+# On by default, matching the dev-hub chart: a browser frontend nobody can open
+# is not a useful default, and *.localhost costs nothing on a local cluster.
+ingress:
+  enabled: true
+  # Empty uses the cluster's default IngressClass. Rancher Desktop ships
+  # "traefik" as the default.
+  className: ""
+  annotations: {}
+  hosts:
+    - host: doc-es.localhost
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    # No CPU limit: the Node server is bursty at startup and during SSR.
+    memory: 512Mi
+
+# Probes hit the /healthz route served by src/pages/healthz.ts. Node boots
+# fast, so the startup budget is tight.
+probes:
+  path: /healthz
+  startup:
+    enabled: true
+    initialDelaySeconds: 2
+    periodSeconds: 2
+    failureThreshold: 15
+  liveness:
+    enabled: true
+    periodSeconds: 10
+    failureThreshold: 3
+  readiness:
+    enabled: true
+    periodSeconds: 5
+    failureThreshold: 3
+
+# ---------------------------------------------------------------------------
+# Application configuration.
+# Rendered into a ConfigMap and injected wholesale via envFrom.
+#
+# Every value here is a **browser-facing link** — resolved by the visitor's
+# browser, so an in-cluster address would be wrong in all three.
+#
+# There is no in-cluster address at all in this chart, and that is the whole
+# shape of doc-es: an event storm is a file the visitor picked, parsed in their
+# browser and exported back out. This server is asked for a page and nothing
+# else. No registry call, no ticketing adapter, no Secret, no volume.
+#
+# src/lib/links.ts reads each one through process.env at call time and falls back
+# to the same default the chart ships, so an unset value and the default look
+# identical in the page.
+# ---------------------------------------------------------------------------
+app:
+  # doc-hub's own portal — the catalogue the product being mapped comes from.
+  docPortalUrl: http://doc-portal.localhost
+
+  # dev-hub's write-up of the practice. Linked rather than restated: the board
+  # renders the technique, and the hub explains when to run a session and who
+  # should be in the room.
+  practiceUrl: http://dev-portal.localhost/doc/practices/event-storming/
+
+  # The registry's admin UI, as the browser sees it — where somebody goes to
+  # register a product that is missing from the picker.
+  registryUrl: http://doc-registry.localhost
+
+  # The same registry as *this server* sees it, read once per render of the
+  # board page to fill the product picker. An in-cluster address, not the host
+  # the cluster uses. doc-registry is a release in this same namespace, so the
+  # Service name is enough — cross-namespace would need
+  # doc-registry.<namespace>.svc.
+  #
+  # An unreachable registry is not an outage here. doc-portal answers 503 when
+  # its catalog fetch fails, because a catalog it cannot read is the page. This
+  # page is a board, and the registry only fills one control, so a failure
+  # degrades to a text box for the shortname and the board opens as usual.
+  registryApiUrl: http://doc-registry:1337
+
+  # doc-sm, the board downstream of this one. The seams found on the wall
+  # become bounded contexts, and the work they imply is cut into a story map —
+  # which is why the link points that way and not the reverse.
+  storyMapperUrl: http://doc-sm.localhost
+
+  # Arbitrary extra entries, merged verbatim into the same ConfigMap and so
+  # injected as env vars too:
+  #   extraConfig:
+  #     LOG_LEVEL: debug
+  extraConfig: {}
+
+# Flags passed to the Node process, e.g. "--max-old-space-size=384".
+nodeOptions: ""
+
+# Additional raw environment variables (full valueFrom syntax available).
+extraEnv: []
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

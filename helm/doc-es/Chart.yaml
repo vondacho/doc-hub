@@ -1,0 +1,22 @@
+apiVersion: v2
+name: doc-es
+description: Event storming board — domain events on a timeline, the actors and systems around them, and the open hotspots, read from and written to an .eventstorm file
+type: application
+
+# Chart version. Bump on every change to the chart itself.
+version: 0.1.0
+
+# Version of doc-es shipped by default. Matches "version" in
+# doc-es/package.json and is used as the default image tag.
+appVersion: "0.0.1"
+
+keywords:
+  - astro
+  - example-mapping
+  - bdd
+  - living-documentation
+home: https://github.com/vondacho/doc-hub
+sources:
+  - https://github.com/vondacho/doc-hub/tree/main/doc-es
+maintainers:
+  - name: Olivier von Dach
