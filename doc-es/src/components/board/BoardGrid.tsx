@@ -84,6 +84,8 @@ export function BoardGrid({
 	documentKey,
 	expanded,
 	onToggleDetail,
+	selected,
+	onSelect,
 }: {
 	board: BoardState;
 	dispatch: (action: BoardAction) => void;
@@ -93,6 +95,9 @@ export function BoardGrid({
 	documentKey: number;
 	expanded: ReadonlySet<Id>;
 	onToggleDetail: (id: Id) => void;
+	/** The card whose text the source pane is emphasising, if any. */
+	selected: { kind: 'lane' | 'card'; id: Id } | null;
+	onSelect: (pick: { kind: 'lane' | 'card'; id: Id }) => void;
 }) {
 	const scroller = useRef<HTMLDivElement>(null);
 
@@ -181,6 +186,8 @@ export function BoardGrid({
 								row={FIRST_LANE_ROW + index}
 								expanded={expanded}
 								onToggleDetail={onToggleDetail}
+								selected={selected?.kind === 'lane' && selected.id === laneId}
+								onSelect={() => onSelect({ kind: 'lane', id: laneId })}
 							/>
 						))}
 					</SortableContext>
@@ -196,6 +203,8 @@ export function BoardGrid({
 								row={FIRST_LANE_ROW + index}
 								expanded={expanded}
 								onToggleDetail={onToggleDetail}
+								selected={selected}
+								onSelect={onSelect}
 							/>
 						)),
 					)}
@@ -233,6 +242,8 @@ function LaneLabel({
 	row,
 	expanded,
 	onToggleDetail,
+	selected,
+	onSelect,
 }: {
 	board: BoardState;
 	dispatch: (action: BoardAction) => void;
@@ -241,6 +252,8 @@ function LaneLabel({
 	row: number;
 	expanded: ReadonlySet<Id>;
 	onToggleDetail: (id: Id) => void;
+	selected: boolean;
+	onSelect: () => void;
 }) {
 	const lane = board.lanes[laneId];
 	const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
@@ -346,6 +359,8 @@ function Square({
 	row,
 	expanded,
 	onToggleDetail,
+	selected,
+	onSelect,
 }: {
 	board: BoardState;
 	dispatch: (action: BoardAction) => void;
@@ -354,6 +369,9 @@ function Square({
 	row: number;
 	expanded: ReadonlySet<Id>;
 	onToggleDetail: (id: Id) => void;
+	/** Passed through to the notes: a square is not itself selectable. */
+	selected: { kind: 'lane' | 'card'; id: Id } | null;
+	onSelect: (pick: { kind: 'lane' | 'card'; id: Id }) => void;
 }) {
 	const key = cellKey(laneId, column);
 	const { setNodeRef, isOver } = useDroppable({ id: `square:${key}`, data: { accepts: 'card', cell: key } });
@@ -390,6 +408,8 @@ function Square({
 									position={`${index + 1} of ${ids.length} at ${where}`}
 									expanded={expanded}
 									onToggleDetail={onToggleDetail}
+									selected={selected?.kind === 'card' && selected.id === id}
+									onSelect={() => onSelect({ kind: 'card', id })}
 								/>
 							</li>
 						);
@@ -432,6 +452,8 @@ function StickyNote({
 	position,
 	expanded,
 	onToggleDetail,
+	selected,
+	onSelect,
 }: {
 	id: Id;
 	board: BoardState;
@@ -440,6 +462,9 @@ function StickyNote({
 	position: string;
 	expanded: ReadonlySet<Id>;
 	onToggleDetail: (id: Id) => void;
+	/** Whether the source pane is emphasising this note's declaration. */
+	selected: boolean;
+	onSelect: () => void;
 }) {
 	const card = board.cards[id];
 	const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
@@ -468,7 +493,12 @@ function StickyNote({
 				transition,
 				opacity: isDragging ? 0.35 : undefined,
 			}}
-			className={`relative rounded-[0.2em] border px-[0.25em] py-[0.2em] text-[0.6em] leading-tight shadow-sm ${cardClass[card.kind]}`}
+			onClick={onSelect}
+			// The ring is `inset` so selecting does not grow the note and shift the
+			// wall around it.
+			className={`relative rounded-[0.2em] border px-[0.25em] py-[0.2em] text-[0.6em] leading-tight shadow-sm ${
+				selected ? 'ring-2 ring-brand ring-inset dark:ring-sky-400' : ''
+			} ${cardClass[card.kind]}`}
 		>
 			{editing ? (
 				<textarea

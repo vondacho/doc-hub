@@ -28,7 +28,7 @@ import { sortableKeyboardCoordinates } from '@dnd-kit/sortable';
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { clearFileInput, downloadText, filenameFor, readTextFile } from '../../lib/files.ts';
 import * as storage from '../../lib/storage.ts';
-import { toBoard } from '../../lib/board/convert.ts';
+import { lanePositionOf, positionOf, toBoard } from '../../lib/board/convert.ts';
 import { applyAction, isEdit } from '../../lib/board/apply.ts';
 import {
 	canRedo,
@@ -157,6 +157,37 @@ export default function EventStormBoard({
 	 * open while somebody types in the pane beside it.
 	 */
 	const board = useMemo(() => toBoard(document_ ?? EMPTY_DOCUMENT), [document_]);
+
+	/**
+	 * The card whose text the source pane is emphasising.
+	 *
+	 * A kind and an id rather than a span, because the span is a fact about the
+	 * *current* parse and this outlives several of them: a note stays selected
+	 * while you type in the pane beside it, and positional ids mean the id still
+	 * names the same note as long as nothing above it moved.
+	 */
+	const [selected, setSelected] = useState<{ kind: 'lane' | 'card'; id: Id } | null>(null);
+
+	/**
+	 * Where the selected card is written, for the source pane to emphasise.
+	 *
+	 * The whole declaration — keyword, title, `@column` and any notes — rather
+	 * than just the words on the note, because what is selected is the card and
+	 * the card is all of it.
+	 *
+	 * Null when nothing is selected, when the text no longer parses, or when the
+	 * id names a card that is no longer there. All three mean the same thing to
+	 * the pane: emphasise nothing.
+	 */
+	const highlight = useMemo(() => {
+		if (selected === null || parsed.document === null) return null;
+		if (selected.kind === 'lane') {
+			const at = lanePositionOf(selected.id);
+			return at === null ? null : (parsed.document.lanes[at]?.span ?? null);
+		}
+		const at = positionOf(selected.id);
+		return at === null ? null : (parsed.document.lanes[at.lane]?.cards[at.card]?.span ?? null);
+	}, [selected, parsed.document]);
 
 	/** Which panels are showing, and how the width is divided between them. */
 	const [panes, setPanes] = useState<storage.Panes>('both');
@@ -691,7 +722,13 @@ export default function EventStormBoard({
 						style={panes === 'both' ? { flexBasis: `${split}%` } : undefined}
 					>
 						<div className="min-h-0 flex-1 overflow-auto">
-							<Editor value={source} onChange={edit} problems={problems} revealLine={revealLine} />
+							<Editor
+								value={source}
+								onChange={edit}
+								problems={problems}
+								revealLine={revealLine}
+								highlight={highlight}
+							/>
 						</div>
 						<SourceProblems
 							problems={problems}
@@ -749,6 +786,8 @@ export default function EventStormBoard({
 					documentKey={documentKey}
 					expanded={expanded}
 					onToggleDetail={toggleDetail}
+					selected={selected}
+					onSelect={setSelected}
 				/>
 				)}
 

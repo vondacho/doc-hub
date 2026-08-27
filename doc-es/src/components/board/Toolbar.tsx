@@ -28,13 +28,14 @@ import { ProductPicker } from './ProductPicker.tsx';
 /**
  * The three layouts, in the order the picker offers them.
  *
- * Both first because it is the default and the one most people stay on; then
- * the two single panes, source before board, matching the order they sit in on
- * screen.
+ * Left to right as the panes sit on screen: source alone, source beside the
+ * wall, wall alone. That puts the default in the *middle* of the three rather
+ * than at the head of them — the picker reads as a slider between two extremes,
+ * which is what it is. doc-sm's order, button for button.
  */
 const PANE_CHOICES: readonly { panes: Panes; icon: IconName; label: string }[] = [
-	{ panes: 'both', icon: 'panesBoth', label: 'Show the source and the wall' },
 	{ panes: 'source', icon: 'panesSource', label: 'Show the source only' },
+	{ panes: 'both', icon: 'panesBoth', label: 'Show the source and the wall' },
 	{ panes: 'board', icon: 'panesBoard', label: 'Show the wall only' },
 ];
 
