@@ -79,3 +79,18 @@ eventstorm "Ordering a pizza" {
   }
 }
 `;
+
+/**
+ * An empty storm, as text.
+ *
+ * The board opens on this. It has to be a real, parseable file rather than an
+ * empty string, because the text is the document now: a gesture needs somewhere
+ * to splice, and "add the first lane" needs a `{` to put it inside.
+ *
+ * No lane, deliberately. A storm with a lane is one somebody has started, and
+ * the island shows the choice — load the example, or put up the wall — rather
+ * than a grid of empty squares nobody asked for.
+ */
+export const EMPTY_SOURCE = `eventstorm "Untitled event storm" {
+}
+`;

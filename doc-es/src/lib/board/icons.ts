@@ -85,6 +85,30 @@ export const icons = {
 	folder: 'M3 6h6l2 3h10v10H3zM3 6v13',
 	/** A milestone flag — a release, as distinct from a sprint's plain band. */
 	flag: 'M6 21V4h11l-2 4 2 4H6',
+	/*
+	 * Two swatches and the words beside them: a key, which is what a legend is.
+	 *
+	 * The same shape ba-ddd-mapper draws for the same button, redrawn on this
+	 * grid — the toggle exists in both lineages now, and a control that means the
+	 * same thing should look the same in both.
+	 */
+	legend: 'M4 5h5v5H4zM4 14h5v5H4zM12 7.5h8M12 16.5h8',
+	/*
+	 * The three pane layouts, drawn as what they show rather than as arrows.
+	 *
+	 * One frame in each so they read as a set; inside it, lines of text for the
+	 * source, two notes for the board, and a split down the middle for both.
+	 * ba-ddd-mapper's picker draws the same three.
+	 */
+	/*
+	 * A drum: the database glyph everybody reads as "stored", which is what this
+	 * browser's copy is. ba-ddd-mapper draws the same shape for the same button.
+	 * An arc rather than an ellipse element, because every icon here is one path.
+	 */
+	store: 'M4 6c0-1.1 3.6-2 8-2s8 .9 8 2-3.6 2-8 2-8-.9-8-2M4 6v12c0 1.1 3.6 2 8 2s8-.9 8-2V6M4 12c0 1.1 3.6 2 8 2s8-.9 8-2',
+	panesBoth: 'M3 5h18v14H3zM12 5v14',
+	panesSource: 'M3 5h18v14H3zM6 9h12M6 12h9M6 15h12',
+	panesBoard: 'M3 5h18v14H3zM6 9h5v5H6zM14 9h4v4h-4z',
 } as const;
 
 export type IconName = keyof typeof icons;

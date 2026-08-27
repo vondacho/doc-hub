@@ -28,7 +28,8 @@ import { sortableKeyboardCoordinates } from '@dnd-kit/sortable';
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { clearFileInput, downloadText, filenameFor, readTextFile } from '../../lib/files.ts';
 import * as storage from '../../lib/storage.ts';
-import { resetIds, toBoard, toDocument } from '../../lib/board/convert.ts';
+import { toBoard } from '../../lib/board/convert.ts';
+import { applyAction, isEdit } from '../../lib/board/apply.ts';
 import {
 	canRedo,
 	canUndo,
@@ -38,18 +39,19 @@ import {
 	type HistoryAction,
 } from '../../lib/board/history.ts';
 import { cardClass } from '../../lib/board/kinds.ts';
-import { reduce, resetsHistory, type BoardAction } from '../../lib/board/reducer.ts';
+import { resetsHistory, type BoardAction } from '../../lib/board/gestures.ts';
 import { cardsWithDetail, type BoardState, type Id } from '../../lib/board/state.ts';
-import { cardLabel, emptyDocument, type CardKind } from '../../lib/eventstorm/model.ts';
+import { cardLabel, type CardKind, type EventStormDocument } from '../../lib/eventstorm/model.ts';
 import { Legend } from './Legend.tsx';
 import { parse } from '../../lib/eventstorm/parser.ts';
 import { EventStormParseError, type Problem } from '../../lib/eventstorm/problems.ts';
 import { SAMPLE_SOURCE } from '../../lib/eventstorm/sample.ts';
-import { serialize } from '../../lib/eventstorm/serialize.ts';
+import { EMPTY_SOURCE } from '../../lib/eventstorm/sample.ts';
 import { BASE_FONT, BoardGrid } from './BoardGrid.tsx';
-import { OpenDialog } from './OpenDialog.tsx';
-import { PreviewDialog } from './PreviewDialog.tsx';
-import { ProblemList } from './ProblemList.tsx';
+import { StoreState } from './StoreState.tsx';
+import { Divider } from './Divider.tsx';
+import { Editor } from './Editor.tsx';
+import { SourceProblems } from './SourceProblems.tsx';
 import type { Product } from '../../lib/products.ts';
 import { Toolbar } from './Toolbar.tsx';
 
@@ -67,7 +69,33 @@ const AUTOSAVE_DELAY_MS = 1_000;
 const ZOOM_STOPS = [1, 1.15, 1.3, 1.45, 1.6] as const;
 const DEFAULT_ZOOM_INDEX = 0;
 
-const step = undoable<BoardState, BoardAction>(reduce, { limit: HISTORY_LIMIT, resets: resetsHistory });
+/**
+ * History over text.
+ *
+ * The "reducer" is a replace: every gesture has already been turned into a new
+ * source string by the time it gets here, so folding it in is just taking the
+ * new one. `undoable` supplies the stack, the limit and the reset rule.
+ */
+/**
+ * One entry in the undo stack: what the visitor did, and the file it produced.
+ *
+ * The gesture travels alongside the text because history still needs to know
+ * *which* gesture it was — an import clears the stack, an edit does not. The
+ * fold itself is a replace: the splice has already happened by the time a
+ * commit gets here.
+ */
+interface Commit {
+	readonly action: BoardAction;
+	readonly text: string;
+}
+
+const step = undoable<string, Commit>((_, commit) => commit.text, {
+	limit: HISTORY_LIMIT,
+	resets: (commit) => resetsHistory(commit.action),
+});
+
+/** What an unwritten storm is, so the projection always has something to build. */
+const EMPTY_DOCUMENT = parse(EMPTY_SOURCE);
 
 export default function EventStormBoard({
 	products,
@@ -81,26 +109,69 @@ export default function EventStormBoard({
 	/** The registry's admin UI, for the "register one" links. Browser-facing. */
 	registryUrl: string;
 }) {
+	/*
+	 * The document is the text. Everything else on this screen is derived.
+	 *
+	 * History holds *source strings* rather than board states, which is the whole
+	 * of what changed here: a step back is the file as it was, so undo takes back
+	 * a drag and a typed line in exactly the same way. `History<T>` was already
+	 * generic, so it needed nothing.
+	 */
 	const [history, send] = useReducer(
-		step as (state: History<BoardState>, action: BoardAction | HistoryAction) => History<BoardState>,
+		step as (state: History<string>, action: Commit | HistoryAction) => History<string>,
 		undefined,
-		/*
-		 * A board opens with one empty lane and a full width of empty squares.
-		 *
-		 * Not a blank page: the practice starts with paper on a wall, and the wall
-		 * exists before anybody has written on it. See the note at the top of
-		 * BoardGrid for why the grid is drawn wider than the work on it.
-		 */
-		() => initialHistory(toBoard(emptyDocument())),
+		() => initialHistory(EMPTY_SOURCE),
 	);
-	const board = history.present;
+	const source = history.present;
 
-	const [problems, setProblems] = useState<readonly Problem[]>([]);
+	/**
+	 * The last parse that succeeded, and whether the text has moved on since.
+	 *
+	 * The board keeps drawing the last good document while the text is broken.
+	 * That is what lets somebody type a half-finished line without the wall
+	 * disappearing underneath them — and the problems panel says the board is
+	 * behind, so the state is never a silent lie.
+	 */
+	const parsed = useMemo(() => {
+		try {
+			return { document: parse(source), problems: [] as readonly Problem[] };
+		} catch (error) {
+			if (!(error instanceof EventStormParseError)) throw error;
+			return { document: null, problems: error.problems };
+		}
+	}, [source]);
+
+	const lastGood = useRef<EventStormDocument | null>(null);
+	if (parsed.document !== null) lastGood.current = parsed.document;
+
+	const document_ = parsed.document ?? lastGood.current;
+	const problems = parsed.problems;
+	const stale = parsed.document === null && lastGood.current !== null;
+
+	/**
+	 * The board, projected from the parsed document.
+	 *
+	 * Rebuilt on every parse, which is affordable because ids are positional —
+	 * see `convert.ts`. A card nobody moved keeps its id across the rebuild, so
+	 * React keeps its element, dnd-kit keeps its drag and an open menu stays
+	 * open while somebody types in the pane beside it.
+	 */
+	const board = useMemo(() => toBoard(document_ ?? EMPTY_DOCUMENT), [document_]);
+
+	/** Which panels are showing, and how the width is divided between them. */
+	const [panes, setPanes] = useState<storage.Panes>('both');
+	const [split, setSplit] = useState(42);
+	const [revealLine, setRevealLine] = useState<number | null>(null);
+	const [problemsCollapsed, setProblemsCollapsed] = useState(false);
 	const [dirty, setDirty] = useState(false);
 	const [stored, setStored] = useState<{ at: number } | { error: string } | null>(null);
 	const [opening, setOpening] = useState(false);
-	const [savedKeys, setSavedKeys] = useState<readonly string[]>([]);
-	const [previewing, setPreviewing] = useState(false);
+	/*
+	 * Read when the panel opens rather than kept in step as the board changes.
+	 * Another tab may have written since, and a stale account of the store is
+	 * worse than no account of it.
+	 */
+	const [store, setStore] = useState<storage.Inventory>({ boards: [], bytes: 0 });
 	const [documentKey, setDocumentKey] = useState(0);
 	const [zoomIndex, setZoomIndex] = useState(DEFAULT_ZOOM_INDEX);
 	const [expanded, setExpanded] = useState<ReadonlySet<Id>>(new Set());
@@ -115,62 +186,107 @@ export default function EventStormBoard({
 	 * the whole island with it.
 	 */
 	const [boardTheme, setBoardTheme] = useState<storage.BoardTheme | null>(null);
+	/**
+	 * The notation row. Shown until somebody says otherwise — see `loadLegend`.
+	 *
+	 * ba-ddd-mapper's toggle, in the same place on the bar and with the same
+	 * default: the person who needs a legend most is the one who has not seen
+	 * this board before, and they will not go looking for a switch.
+	 */
+	const [legend, setLegend] = useState(true);
 	/** What the page is showing right now, so the toggle can offer the opposite. */
 	const [pageIsDark, setPageIsDark] = useState(false);
 	const [dragging, setDragging] = useState<{ kind: CardKind | 'lane'; title: string } | null>(null);
 	const stage = useRef<HTMLDivElement>(null);
 
-	const dispatch = useCallback((action: BoardAction) => {
-		send(action);
-		setDirty(true);
-	}, []);
+	/**
+	 * A gesture from the grid, carried out on the text.
+	 *
+	 * The action shapes are unchanged, which is why nothing below the toolbar had
+	 * to be rewritten — see `apply.ts`. What changed is what happens to one: it
+	 * is translated into a splice, and the new text is what history records.
+	 *
+	 * A gesture against a document that does not currently parse is dropped. The
+	 * spans it would splice describe text that has since been edited by hand, and
+	 * applying them would write to the wrong bytes. The problems panel already
+	 * says the board is behind; the grid is a read-only picture until it is not.
+	 */
+	const dispatch = useCallback(
+		(action: BoardAction) => {
+			if (!isEdit(action) || parsed.document === null) return;
+			const next = applyAction(source, parsed.document, board, action);
+			if (next === source) return;
+			send({ action, text: next });
+			setDirty(true);
+		},
+		[source, parsed.document, board],
+	);
+
+	/** Text typed in the pane. Recorded exactly as a gesture is. */
+	const edit = useCallback(
+		(next: string) => {
+			if (next === source) return;
+			send({ action: { type: 'applyText', text: next }, text: next });
+			setDirty(true);
+		},
+		[source],
+	);
 
 	/* ---- opening and saving ------------------------------------------------ */
 
-	const load = useCallback((source: string) => {
-		try {
-			resetIds();
-			const next = toBoard(parse(source));
-			setProblems([]);
-			send({ type: 'import', board: next });
-			setDocumentKey((n) => n + 1);
-			setDirty(false);
-		} catch (error) {
-			if (!(error instanceof EventStormParseError)) throw error;
-			// The board is untouched. That is the whole contract of a failed import.
-			setProblems(error.problems);
-		}
-	}, []);
-
-	const applyPreview = useCallback((source: string): readonly Problem[] => {
-		try {
-			resetIds();
-			const next = toBoard(parse(source));
-			// `applyText`, not `import`: this is an edit of the storm you already
-			// have, and undoing it must bring the old board back.
-			send({ type: 'applyText', board: next });
-			setDirty(true);
-			return [];
-		} catch (error) {
-			if (!(error instanceof EventStormParseError)) throw error;
-			return error.problems;
-		}
-	}, []);
-
-	const preview = useMemo(() => (previewing ? serialize(toDocument(board)) : ''), [previewing, board]);
-
-	const exportFile = useCallback(() => {
-		downloadText(filenameFor(board.product, board.title), serialize(toDocument(board)));
+	/**
+	 * Open a file: the text becomes the document, whatever state it is in.
+	 *
+	 * It no longer refuses a file that does not parse, and that is the change
+	 * this whole rewrite makes possible. The old contract — "a failed import
+	 * never touches the board" — existed because the board *was* the state and a
+	 * half-parsed file could not become one. Now the file is the state: it opens
+	 * in the pane with its problems listed beneath it, which is the only way
+	 * anybody was ever going to fix it.
+	 */
+	const load = useCallback((text: string) => {
+		send({ action: { type: 'import', text }, text });
+		setDocumentKey((n) => n + 1);
 		setDirty(false);
-	}, [board]);
+	}, []);
+
+	/**
+	 * The file, exported exactly as it sits in the pane.
+	 *
+	 * No serialisation step. What you have been editing is what lands on disk —
+	 * comments, blank lines, your own column alignment and all — which is the
+	 * thing the old export could not promise.
+	 */
+	const exportFile = useCallback(() => {
+		downloadText(filenameFor(board.product, board.title), source);
+		setDirty(false);
+	}, [board.product, board.title, source]);
 
 	/* ---- the browser's copy ------------------------------------------------ */
 
 	const key = storageKeyOf(board);
 
-	const persist = useCallback((state: BoardState) => {
-		const result = storage.save(storageKeyOf(state), serialize(toDocument(state)));
-		setStored(storage.failed(result) ? { error: result.error } : { at: Date.now() });
+	/**
+	 * The text the store is known to hold.
+	 *
+	 * What autosave compares against, and the reason it no longer keys off
+	 * `dirty`. `dirty` means "there are changes you have not *exported*" — it
+	 * says so on the toolbar — which is a different question from "does the
+	 * browser's copy match what is on screen". Keying the background save off it
+	 * meant an imported file that nobody then edited was never written at all:
+	 * `load` clears `dirty`, so there was nothing to trigger a save. That hole
+	 * was survivable while a Save button existed to cover it.
+	 */
+	const savedText = useRef<string | null>(null);
+
+	const persist = useCallback((state: BoardState, text: string) => {
+		const result = storage.save(storageKeyOf(state), text);
+		if (storage.failed(result)) {
+			setStored({ error: result.error });
+			return;
+		}
+		savedText.current = text;
+		setStored({ at: Date.now() });
 	}, []);
 
 	/** Follow a rename, so one board keeps one entry. See doc-em for the argument. */
@@ -181,26 +297,62 @@ export default function EventStormBoard({
 		if (was !== null && was !== key) storage.rename(was, key);
 	}, [key]);
 
+	/**
+	 * The background save: the only save there is.
+	 *
+	 * ba-ddd-mapper's model, and the Save button is gone with it. A button that
+	 * has to be pressed to keep your work is a button somebody will not press,
+	 * and it was never the thing that made the work safe — the file you export
+	 * is. What the browser's copy is for is surviving a closed tab, and that is a
+	 * job for the tool rather than for the visitor.
+	 *
+	 * Compared against the text last written rather than against a flag, so
+	 * anything that changes the document is covered: typing in the pane, a drag
+	 * on the wall, an imported file, the example.
+	 */
 	useEffect(() => {
-		if (!dirty) return;
-		const timer = setTimeout(() => persist(board), AUTOSAVE_DELAY_MS);
+		// A board nobody has written anything on yet is not work to be preserved,
+		// and saving it would put an "Untitled event storm" in the store panel of
+		// everybody who ever opened the page. The mapper's `blank(source)` guard.
+		if (source === EMPTY_SOURCE || source === savedText.current) return;
+		const timer = setTimeout(() => persist(board, source), AUTOSAVE_DELAY_MS);
 		return () => clearTimeout(timer);
-	}, [board, dirty, persist]);
+	}, [board, source, persist]);
+
+	/**
+	 * Write now, rather than at the end of the debounce.
+	 *
+	 * Called whenever this component is about to stop being the only thing that
+	 * knows the current text — the tab closing, or the store panel opening
+	 * another board over this one. A line typed a moment ago should be there when
+	 * the next thing looks.
+	 */
+	const flush = useCallback(() => {
+		if (source === EMPTY_SOURCE || source === savedText.current) return;
+		persist(board, source);
+	}, [board, source, persist]);
+
+	// Registered once and read through a ref, so the listener is not torn down
+	// and rebuilt on every keystroke.
+	const flushNow = useRef(flush);
+	flushNow.current = flush;
+	useEffect(() => {
+		const onHide = () => flushNow.current();
+		window.addEventListener('pagehide', onHide);
+		return () => window.removeEventListener('pagehide', onHide);
+	}, []);
 
 	useEffect(() => {
 		const last = storage.lastOpened();
 		if (last === null) return;
 		const text = storage.load(last);
 		if (text === null) return;
-		try {
-			resetIds();
-			send({ type: 'import', board: toBoard(parse(text)) });
-			setDocumentKey((n) => n + 1);
-			previousKey.current = last;
-		} catch (error) {
-			if (!(error instanceof EventStormParseError)) throw error;
-			setProblems(error.problems);
-		}
+		send({ action: { type: 'import', text }, text });
+		setDocumentKey((n) => n + 1);
+		previousKey.current = last;
+		// It came *from* the store, so the store already holds it. Without this
+		// the first autosave would write the same bytes back for no reason.
+		savedText.current = text;
 		// Mount only. `board` is deliberately not a dependency: this restores the
 		// last session, it does not keep re-reading storage.
 		// eslint-disable-next-line react-hooks/exhaustive-deps
@@ -264,6 +416,9 @@ export default function EventStormBoard({
 	}, []);
 
 	useEffect(() => setBoardTheme(storage.loadTheme()), []);
+	useEffect(() => setLegend(storage.loadLegend()), []);
+	useEffect(() => setPanes(storage.loadPanes()), []);
+	useEffect(() => setSplit(storage.loadSplit()), []);
 
 	/**
 	 * Follow the OS while the board is not pinned.
@@ -435,7 +590,21 @@ export default function EventStormBoard({
 			ref={stage}
 			data-theme={boardTheme ?? undefined}
 			className={`flex flex-col gap-4 bg-white text-ink dark:bg-night dark:text-slate-100 ${
-				fullscreen ? 'h-screen overflow-hidden p-4' : ''
+				fullscreen
+					? 'h-screen overflow-hidden p-4'
+					: /*
+					   * A height, which this board never needed before: a pane that
+					   * scrolls its own contents has to be told how tall it is, and
+					   * "as tall as the page" is not a number. ba-ddd-mapper's frame.
+					   *
+					   * `overflow-hidden` with it, and not as a belt-and-braces: a
+					   * fixed height whose contents are free to be taller is a box
+					   * that spills, and what it spills onto is the page footer. The
+					   * grid inside now fills this height rather than guessing at one
+					   * — see BoardGrid — and this makes that structural rather than
+					   * a thing the next component to be added has to remember.
+					   */
+						'h-[calc(100vh-15rem)] min-h-[34rem] overflow-hidden'
 			}`}
 		>
 			<Toolbar
@@ -458,10 +627,8 @@ export default function EventStormBoard({
 					load(text);
 				}}
 				onExport={exportFile}
-				onPreview={() => setPreviewing(true)}
-				onSave={() => persist(board)}
-				onOpenSaved={() => {
-					setSavedKeys(storage.saved());
+				onOpenStore={() => {
+					setStore(storage.inventory());
 					setOpening(true);
 				}}
 				onLoadSample={() => load(SAMPLE_SOURCE)}
@@ -483,6 +650,16 @@ export default function EventStormBoard({
 					setBoardTheme(null);
 					storage.saveTheme(null);
 				}}
+				panes={panes}
+				onPanes={(next) => {
+					setPanes(next);
+					storage.savePanes(next);
+				}}
+				legendShown={legend}
+				onToggleLegend={() => {
+					setLegend(!legend);
+					storage.saveLegend(!legend);
+				}}
 				detailShown={anyExpanded}
 				canToggleDetail={detailed.length > 0}
 				onToggleAllDetail={() =>
@@ -490,10 +667,66 @@ export default function EventStormBoard({
 				}
 			/>
 
-			<Legend board={board} onLevel={(level) => dispatch({ type: 'setLevel', level })} />
+			{/* Not gated the way doc-sm's and doc-em's are: the level picker lives in
+			    here and is a control, not notation. The toggle hides the colours it
+			    explains and leaves the choice of workshop on screen. */}
+			<Legend
+				board={board}
+				shown={legend}
+				onLevel={(level) => dispatch({ type: 'setLevel', level })}
+			/>
 
-			{problems.length > 0 && <ProblemList problems={problems} />}
+			<div className="flex min-h-0 flex-1 flex-col lg:flex-row">
+				{/* The source first in the DOM and first when stacked: on a narrow
+				    viewport this is a thing you read, and the text is the storm. */}
+				{panes !== 'board' && (
+					<section
+						aria-label="Source"
+						className={`flex min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border border-slate-300 dark:border-slate-700 ${
+							panes === 'both' ? '' : 'flex-1'
+						}`}
+						/* The split is a proportion between two panes and means nothing
+						   to one, which grows instead — and the stored percentage is
+						   left alone, so coming back to two restores the proportions. */
+						style={panes === 'both' ? { flexBasis: `${split}%` } : undefined}
+					>
+						<div className="min-h-0 flex-1 overflow-auto">
+							<Editor value={source} onChange={edit} problems={problems} revealLine={revealLine} />
+						</div>
+						<SourceProblems
+							problems={problems}
+							stale={stale}
+							collapsed={problemsCollapsed}
+							onToggle={() => setProblemsCollapsed((was) => !was)}
+							onReveal={(line) => setRevealLine(line)}
+						/>
+					</section>
+				)}
 
+				{panes === 'both' && (
+					<Divider
+						onMove={(percent) => {
+							setSplit(percent);
+							storage.saveSplit(percent);
+						}}
+					/>
+				)}
+
+				{panes !== 'source' && (
+					/*
+					 * `min-w-0`, and it is load-bearing.
+					 *
+					 * A flex item's `min-width` defaults to `auto`, which means it will
+					 * not shrink below the minimum width of its contents. The wall's
+					 * grid is `min-w-max` — it has to be, it is a row of fixed-width
+					 * squares — so this section asked for the whole grid's width and got
+					 * it, squeezing the source pane next to it down to nothing. Both
+					 * panes were showing; one of them was zero pixels wide.
+					 *
+					 * ba-ddd-mapper never had to write this: its graph is an SVG that
+					 * scales to whatever it is given, so it has no minimum to insist on.
+					 */
+					<section aria-label="The wall" className="flex min-h-0 min-w-0 flex-1 flex-col gap-4">
 			<DndContext
 				sensors={sensors}
 				collisionDetection={collisionDetection}
@@ -540,29 +773,33 @@ export default function EventStormBoard({
 					)}
 				</DragOverlay>
 			</DndContext>
+					</section>
+				)}
+			</div>
 
-			<OpenDialog
+			<StoreState
 				open={opening}
-				keys={savedKeys}
+				state={store}
 				current={key}
 				onOpen={(pick) => {
+					// Before this board stops being the one on screen: there may be up
+					// to a second of typing still sitting in the debounce.
+					flush();
 					const text = storage.load(pick);
 					setOpening(false);
-					if (text !== null) load(text);
+					if (text !== null) {
+						load(text);
+						savedText.current = text;
+					}
 				}}
 				onDelete={(pick) => {
 					storage.remove(pick);
-					setSavedKeys(storage.saved());
+					// Re-read rather than splice the row out of the list: if the delete
+					// did not take — a store that throws is why every call here is
+					// wrapped — the row is still there, which is the truth.
+					setStore(storage.inventory());
 				}}
 				onClose={() => setOpening(false)}
-			/>
-
-			<PreviewDialog
-				open={previewing}
-				filename={filenameFor(board.product, board.title)}
-				text={preview}
-				onApply={applyPreview}
-				onClose={() => setPreviewing(false)}
 			/>
 		</div>
 	);

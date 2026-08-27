@@ -53,6 +53,9 @@ const LAST_OPENED = 'doc-es:last-opened';
  * underscore.
  */
 const BOARD_THEME = 'doc-es:board-theme';
+const LEGEND = 'doc-es:legend';
+const PANES = 'doc-es:panes';
+const SPLIT = 'doc-es:split';
 
 /**
  * Where a board is kept: `<product>_<title>`.
@@ -161,30 +164,6 @@ export function load(key: string): string | null {
 	}
 }
 
-/**
- * Every saved board, newest name first is *not* what this returns.
- *
- * Alphabetical, because there is no timestamp to sort by — an entry is the file
- * and nothing else, and adding a `savedAt` would mean a second thing to keep in
- * step with the first for the sake of a sort order. Alphabetical by
- * `<product>_<title>` groups a product's boards together, which is the ordering
- * somebody scanning the list is actually using.
- */
-export function saved(): readonly string[] {
-	const storage = store();
-	if (storage === null) return [];
-	try {
-		const keys: string[] = [];
-		for (let i = 0; i < storage.length; i += 1) {
-			const key = storage.key(i);
-			if (key !== null && BOARD_KEY.test(key)) keys.push(key);
-		}
-		return keys.sort((a, b) => a.localeCompare(b));
-	} catch {
-		return [];
-	}
-}
-
 export function remove(key: string): void {
 	const storage = store();
 	if (storage === null) return;
@@ -253,4 +232,162 @@ export function saveTheme(theme: BoardTheme | null): void {
 		// about: the board is already showing what they asked for, and it will
 		// simply not be showing it next time.
 	}
+}
+
+/**
+ * Whether the legend is showing.
+ *
+ * On unless somebody has turned it off, which is the right default for a
+ * notation: the person who needs it most is the one who has not seen this board
+ * before, and they are exactly the person who will not go looking for a switch.
+ *
+ * Stored as the *exception* rather than as a boolean — an absent key means on,
+ * and only "off" is written. A visitor who has never touched the control leaves
+ * nothing behind, and the day the default changes it changes for them too.
+ */
+export function loadLegend(): boolean {
+	return load(LEGEND) !== 'off';
+}
+
+export function saveLegend(shown: boolean): void {
+	const storage = store();
+	if (storage === null) return;
+	try {
+		if (shown) storage.removeItem(LEGEND);
+		else storage.setItem(LEGEND, 'off');
+	} catch {
+		// As above: nothing worth interrupting anybody for.
+	}
+}
+
+
+/**
+ * Which panels are on screen.
+ *
+ * Both by default: the board is what somebody came for and the source is what
+ * it is made of, and hiding either on arrival would be choosing for them. The
+ * setting is remembered because it is a working posture — somebody editing the
+ * file wants the text wide, and they want it wide tomorrow too.
+ */
+export type Panes = 'both' | 'source' | 'board';
+
+export function loadPanes(): Panes {
+	const value = load(PANES);
+	return value === 'source' || value === 'board' ? value : 'both';
+}
+
+export function savePanes(panes: Panes): void {
+	const storage = store();
+	if (storage === null) return;
+	try {
+		if (panes === 'both') storage.removeItem(PANES);
+		else storage.setItem(PANES, panes);
+	} catch {
+		// As with the legend: a preference that could not be remembered is not
+		// worth interrupting anybody for.
+	}
+}
+
+/**
+ * How wide the source pane is, as a percentage of the window.
+ *
+ * A percentage rather than pixels, so the split survives a window resize and a
+ * move to another screen. Kept when a single pane is showing: the proportion is
+ * about two panes and means nothing to one, so coming back to both restores what
+ * was there rather than resetting to the default.
+ */
+export function loadSplit(): number {
+	const value = Number(load(SPLIT));
+	return Number.isFinite(value) && value >= 20 && value <= 75 ? value : 42;
+}
+
+export function saveSplit(percent: number): void {
+	const storage = store();
+	if (storage === null) return;
+	try {
+		storage.setItem(SPLIT, String(Math.round(percent)));
+	} catch {
+		// As above.
+	}
+}
+
+// ---------------------------------------------------------------------------
+// What this browser is holding
+// ---------------------------------------------------------------------------
+
+/**
+ * One stored board, as the store actually holds it.
+ *
+ * Simpler than ba-ddd-mapper's `StoredDocument`, and for a reason worth writing
+ * down: that one is a *pair* — a `.ddd` beside its `.dddview` — because the map
+ * keeps an arrangement the file cannot express, node positions and edge curves.
+ * A wall has no such thing. Where a note sits is `@column`, which is in the
+ * file, so a board is one entry and there is no sidecar to go missing.
+ */
+export interface StoredBoard {
+	/** The storage key, which is also what the export is named after. */
+	readonly key: string;
+	/** UTF-16 units, key included — the unit the quota is counted in. */
+	readonly bytes: number;
+	/** The storm's title, read out of the text so the list is not just slugs. */
+	readonly title: string | null;
+}
+
+export interface Inventory {
+	readonly boards: readonly StoredBoard[];
+	readonly bytes: number;
+}
+
+/**
+ * The boards this origin holds, and only those.
+ *
+ * The one place that enumerates the store rather than addressing it by name.
+ * Autosave is silent by design — it has to be, or it would be a dialog every
+ * second — and the cost of that silence is a visitor who cannot say what has
+ * accumulated under their own browser. This is the answer, and it is
+ * deliberately a *reading*: nothing here writes and nothing here deletes.
+ *
+ * Boards only. The theme, the legend, the panes, the split and the pointer to
+ * the last board opened all live in the store too, and none of them is a thing
+ * anybody opens a panel to look at — they are settings, and a list that mixed
+ * them in with somebody's work would be a dump of the store rather than an
+ * account of it. They are excluded structurally rather than by a filter:
+ * `BOARD_KEY` cannot match a key with a colon in it, and every setting has one.
+ */
+export function inventory(): Inventory {
+	const storage = store();
+	if (storage === null) return { boards: [], bytes: 0 };
+
+	const boards: StoredBoard[] = [];
+	let bytes = 0;
+
+	try {
+		for (let i = 0; i < storage.length; i += 1) {
+			const key = storage.key(i);
+			if (key === null || !BOARD_KEY.test(key)) continue;
+
+			const text = storage.getItem(key) ?? '';
+			const size = key.length + text.length;
+			bytes += size;
+			boards.push({ key, bytes: size, title: titleIn(text) });
+		}
+	} catch {
+		// A store that throws mid-scan reports what it managed to read.
+	}
+
+	return { boards: boards.sort((a, b) => a.key.localeCompare(b.key)), bytes };
+}
+
+/**
+ * The storm's title, by looking rather than by parsing.
+ *
+ * A regular expression over the first line that declares one, because this is a
+ * list and not an editor: an entry that will not parse is exactly the entry
+ * somebody opens this panel to find, and a reader that threw on it would hide
+ * the one row that matters. Null when there is nothing to read, and the row
+ * shows its key alone.
+ */
+function titleIn(text: string): string | null {
+	const found = /^\s*eventstorm\s+"((?:[^"\\]|\\.)*)"/m.exec(text);
+	return found?.[1] === undefined ? null : found[1].replace(/\\(.)/g, '$1');
 }

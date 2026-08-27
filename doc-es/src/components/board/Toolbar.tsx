@@ -20,8 +20,23 @@
 import { useRef, useState } from 'react';
 import { EVENTSTORM_ACCEPT } from '../../lib/files.ts';
 import type { Product } from '../../lib/products.ts';
+import type { Panes } from '../../lib/storage.ts';
 import { IconButton } from './IconButton.tsx';
+import type { IconName } from '../../lib/board/icons.ts';
 import { ProductPicker } from './ProductPicker.tsx';
+
+/**
+ * The three layouts, in the order the picker offers them.
+ *
+ * Both first because it is the default and the one most people stay on; then
+ * the two single panes, source before board, matching the order they sit in on
+ * screen.
+ */
+const PANE_CHOICES: readonly { panes: Panes; icon: IconName; label: string }[] = [
+	{ panes: 'both', icon: 'panesBoth', label: 'Show the source and the wall' },
+	{ panes: 'source', icon: 'panesSource', label: 'Show the source only' },
+	{ panes: 'board', icon: 'panesBoard', label: 'Show the wall only' },
+];
 
 export function Toolbar({
 	title,
@@ -35,11 +50,11 @@ export function Toolbar({
 	canRedo,
 	onTitle,
 	onPickFile,
+	panes,
+	onPanes,
 	onExport,
-	onPreview,
 	onLoadSample,
-	onSave,
-	onOpenSaved,
+	onOpenStore,
 	saveState,
 	onAddLane,
 	onUndo,
@@ -56,6 +71,8 @@ export function Toolbar({
 	themePinned,
 	onFlipTheme,
 	onFollowPage,
+	legendShown,
+	onToggleLegend,
 	detailShown,
 	canToggleDetail,
 	onToggleAllDetail,
@@ -71,11 +88,12 @@ export function Toolbar({
 	canRedo: boolean;
 	onTitle: (title: string) => void;
 	onPickFile: (file: File, input: HTMLInputElement) => void;
+	/** Which panels are showing. The picker leads the view group. */
+	panes: Panes;
+	onPanes: (panes: Panes) => void;
 	onExport: () => void;
-	onPreview: () => void;
 	onLoadSample: () => void;
-	onSave: () => void;
-	onOpenSaved: () => void;
+	onOpenStore: () => void;
 	/** What the browser's copy last did, for the line beside the title. */
 	saveState: { at: number } | { error: string } | null;
 	onAddLane: () => void;
@@ -95,6 +113,9 @@ export function Toolbar({
 	themePinned: boolean;
 	onFlipTheme: () => void;
 	onFollowPage: () => void;
+	/** Whether the notation is on screen. The button is a toggle, not an action. */
+	legendShown: boolean;
+	onToggleLegend: () => void;
 	detailShown: boolean;
 	canToggleDetail: boolean;
 	onToggleAllDetail: () => void;
@@ -160,21 +181,63 @@ export function Toolbar({
 				</span>
 
 				<div className="flex flex-wrap items-center gap-1">
+					{/* The one control that adds to the wall. */}
+					<IconButton icon="addActivity" label="Add a lane" onClick={onAddLane} />
+
+					<span className="mx-1 h-6 w-px bg-slate-200 dark:bg-slate-700" aria-hidden="true" />
+
+					{/* What was just done to it. */}
 					<IconButton icon="undo" label="Undo" onClick={onUndo} disabled={!canUndo} />
 					<IconButton icon="redo" label="Redo" onClick={onRedo} disabled={!canRedo} />
 
 					<span className="mx-1 h-6 w-px bg-slate-200 dark:bg-slate-700" aria-hidden="true" />
 
-					<IconButton icon="addActivity" label="Add a lane" onClick={onAddLane} />
-				{/* Two buttons and not one with a menu: there are two kinds, the
-				    choice is the whole decision, and a sprint is added far more
-				    often than a release. */}
-					<IconButton icon="example" label="Load the example" onClick={onLoadSample} />
+					{/*
+					 * The layout picker leads the view group, because it decides what
+					 * the rest of these are even acting on. ba-ddd-mapper's, button for
+					 * button and in its order.
+					 *
+					 * It replaced the preview dialog. Previewing the file was worth a
+					 * modal only while the file was something the board *rendered* on
+					 * demand; now it is the document, it is on screen beside the wall,
+					 * and a dialog showing you what you are already looking at would be
+					 * a second copy to keep in step.
+					 */}
+					<span role="group" aria-label="Panels" className="flex items-center gap-1">
+						{PANE_CHOICES.map((choice) => (
+							<IconButton
+								key={choice.panes}
+								icon={choice.icon}
+								label={choice.label}
+								pressed={panes === choice.panes}
+								onClick={() => onPanes(choice.panes)}
+							/>
+						))}
+					</span>
 
-					<span className="mx-1 h-6 w-px bg-slate-200 dark:bg-slate-700" aria-hidden="true" />
+					{/* Beside the controls that decide what else is showing, because it
+					    is the same question: which of the board's own furniture is on
+					    screen. ba-ddd-mapper puts its legend toggle in the same place,
+					    for the same reason. */}
+					<IconButton
+						icon="legend"
+						label={legendShown ? 'Hide the legend' : 'Show the legend'}
+						onClick={onToggleLegend}
+						pressed={legendShown}
+					/>
 
-					<IconButton icon="save" label="Save to this browser now" onClick={onSave} />
-					<IconButton icon="folder" label="Open a board saved in this browser" onClick={onOpenSaved} />
+					<IconButton
+						icon={detailShown ? 'collapseAll' : 'expandAll'}
+						label={
+							!canToggleDetail
+								? 'No card on this board has a note yet'
+								: detailShown
+									? 'Hide every note'
+									: 'Show every note'
+						}
+						onClick={onToggleAllDetail}
+						disabled={!canToggleDetail}
+					/>
 
 					<span className="mx-1 h-6 w-px bg-slate-200 dark:bg-slate-700" aria-hidden="true" />
 
@@ -189,23 +252,33 @@ export function Toolbar({
 							if (file) onPickFile(file, event.target);
 						}}
 					/>
-					<IconButton icon="preview" label="Preview the .eventstorm file" onClick={onPreview} />
-					<IconButton icon="exportFile" label="Export the .eventstorm file" onClick={onExport} tone="primary" />
+					{/*
+					 * Plain, where doc-sm and doc-em still fill it.
+					 *
+					 * The filled treatment was there because Export was the only way work
+					 * left this tab: it was the one control that saved anything, so it
+					 * was the one control that had to be findable. Neither half of that
+					 * is true here any more — the board writes itself to this browser a
+					 * second after it stops changing, and the store panel says what it
+					 * holds. Export is now one file gesture among four, and a filled
+					 * button claiming otherwise would be pointing at the wrong thing.
+					 */}
+					<IconButton icon="exportFile" label="Export the .eventstorm file" onClick={onExport} />
+
+					{/* No Save button. The board writes itself to this browser a second
+					    after it stops changing, as ba-ddd-mapper's editors do — see the
+					    background save in EventStormBoard. What is left here is the way
+					    to *see* what was written. */}
+					<IconButton icon="store" label="What this browser is holding" onClick={onOpenStore} />
+					{/* The example sits with the file controls rather than beside Add:
+					    it replaces the document, which is what everything else in this
+					    group does. ba-ddd-mapper keeps its sample here too. */}
+					<IconButton icon="example" label="Load the example" onClick={onLoadSample} />
 
 					<span className="mx-1 h-6 w-px bg-slate-200 dark:bg-slate-700" aria-hidden="true" />
 
-					<IconButton
-						icon={detailShown ? 'collapseAll' : 'expandAll'}
-						label={
-							!canToggleDetail
-								? 'No card on this board has a note yet'
-								: detailShown
-									? 'Hide every note'
-									: 'Show every note'
-						}
-						onClick={onToggleAllDetail}
-						disabled={!canToggleDetail}
-					/>
+					{/* How the wall is being looked at: its own theme, how close, and
+					    whether it has the whole screen. None of them change the file. */}
 					<IconButton icon="zoomOut" label="Zoom out" onClick={onZoomOut} disabled={!canZoomOut} />
 					<button
 						type="button"
@@ -216,6 +289,14 @@ export function Toolbar({
 						{Math.round(zoom * 100)}%
 					</button>
 					<IconButton icon="zoomIn" label="Zoom in" onClick={onZoomIn} disabled={!canZoomIn} />
+					<IconButton
+						icon={fullscreen ? 'fullscreenExit' : 'fullscreen'}
+						label={fullscreen ? 'Leave fullscreen' : 'Fullscreen the board'}
+						onClick={onToggleFullscreen}
+					/>
+
+					<span className="mx-1 h-6 w-px bg-slate-200 dark:bg-slate-700" aria-hidden="true" />
+
 					{/*
 					 * The board's own night/day switch.
 					 *
@@ -236,12 +317,8 @@ export function Toolbar({
 						}
 						onClick={(event) => (event.shiftKey ? onFollowPage() : onFlipTheme())}
 					/>
-					<IconButton
-						icon={fullscreen ? 'fullscreenExit' : 'fullscreen'}
-						label={fullscreen ? 'Leave fullscreen' : 'Fullscreen the board'}
-						onClick={onToggleFullscreen}
-					/>
-			</div>
+
+				</div>
 			</div>
 		</div>
 	);

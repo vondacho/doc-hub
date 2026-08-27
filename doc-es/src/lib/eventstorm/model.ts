@@ -280,6 +280,26 @@ export function isCardKind(value: unknown): value is CardKind {
  * line of text on it, placed somewhere on a grid. What differs is what the
  * colour *means*, and meaning is not structure.
  */
+/**
+ * A half-open byte range in the source, and where it starts in human terms.
+ *
+ * The reason this exists is the reason every gesture on this board is a splice:
+ * the `.eventstorm` file is the artefact, it lands in a pull request, and
+ * everything outside the edited range has to come back byte-identical —
+ * comments, blank lines and somebody's own column alignment included. A board
+ * that re-serialised itself after every drag would rewrite the whole file each
+ * time, and the diff would be unreadable.
+ *
+ * `start` and `end` are 0-based indices into the source string. `line` and
+ * `column` are 1-based and are what the problems panel shows.
+ */
+export interface Span {
+	readonly start: number;
+	readonly end: number;
+	readonly line: number;
+	readonly column: number;
+}
+
 export interface CardNode {
 	readonly kind: CardKind;
 	/** The words on the note. One line, in the room's own language. */
@@ -307,6 +327,22 @@ export interface CardNode {
 	 */
 	readonly column: number;
 	readonly notes: readonly string[];
+	/** The whole declaration, keyword to closing brace. */
+	readonly span: Span;
+	/** The kind keyword alone — `event`, `actor` — for a change of kind. */
+	readonly kindSpan: Span;
+	/** The quoted title alone, for a rename. */
+	readonly titleSpan: Span;
+	/**
+	 * The `@4` alone, or `null` on a card written without one.
+	 *
+	 * Null is why a move has to know how to *insert* an ordinal as well as
+	 * replace one: a hand-written file may leave it off, and the first drag of
+	 * such a card is the moment it acquires a column in the text.
+	 */
+	readonly columnSpan: Span | null;
+	/** The `{ … }` holding the notes, or null on a card that has none. */
+	readonly notesSpan: Span | null;
 }
 
 /**
@@ -324,6 +360,12 @@ export interface LaneNode {
 	readonly title: string;
 	readonly notes: readonly string[];
 	readonly cards: readonly CardNode[];
+	/** The whole `lane "…" { … }`, for a removal or a reorder. */
+	readonly span: Span;
+	readonly titleSpan: Span;
+	/** The `{` that opens the lane, so a new card knows where to land. */
+	readonly openBrace: number;
+	readonly notesSpan: Span | null;
 }
 
 export interface EventStormDocument {
@@ -373,19 +415,59 @@ export interface EventStormDocument {
 	 * parses to no lanes rather than to a lane nobody drew.
 	 */
 	readonly lanes: readonly LaneNode[];
+
+	/** The quoted storm title, for a rename from the toolbar. */
+	readonly titleSpan: Span;
+	/**
+	 * The whole `product "…"` line, or null when the file has none.
+	 *
+	 * Null means the picker has to *write* a line rather than replace one, and
+	 * the two are different splices — which is why the span is nullable rather
+	 * than a zero-width position.
+	 */
+	readonly productSpan: Span | null;
+	/** The whole `level …` line, or null when the file leaves it default. */
+	readonly levelSpan: Span | null;
+	/** The `{` that opens the storm, so a first lane knows where to land. */
+	readonly openBrace: number;
+	readonly notesSpan: Span | null;
+	/** The text this was parsed from, verbatim. Every edit splices into it. */
+	readonly source: string;
 }
 
 /** What an unnamed lane is called. A wall before anybody has divided it. */
 export const UNNAMED_LANE = 'The wall';
 
+/**
+ * A span pointing at nothing.
+ *
+ * For nodes that were never in a file: a synthesised lane, an empty document,
+ * the unnamed lane the parser gathers loose cards into. An edit spliced at an
+ * empty span at offset 0 would write to the top of the file, so the callers in
+ * `edit.ts` check for a document with no `source` before they splice at all.
+ */
+export const NOWHERE: Span = { start: 0, end: 0, line: 1, column: 1 };
+
 export function emptyDocument(title = 'Untitled event storm'): EventStormDocument {
 	// Big picture, because that is where the practice starts and where a board
 	// opened by somebody who has not chosen yet should be.
-	return { title, product: null, level: 'big-picture', notes: [], lanes: [] };
+	return {
+		title,
+		titleSpan: NOWHERE,
+		product: null,
+		productSpan: null,
+		level: 'big-picture',
+		levelSpan: null,
+		notes: [],
+		notesSpan: null,
+		lanes: [],
+		openBrace: -1,
+		source: '',
+	};
 }
 
 export function emptyLane(title = UNNAMED_LANE): LaneNode {
-	return { title, notes: [], cards: [] };
+	return { title, notes: [], cards: [], span: NOWHERE, titleSpan: NOWHERE, openBrace: -1, notesSpan: null };
 }
 
 /**

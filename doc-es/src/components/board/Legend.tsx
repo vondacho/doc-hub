@@ -16,6 +16,14 @@
  * where that setting does. The page keeps a `<noscript>` copy of the big-picture
  * five, which is the level a storm is at unless somebody says otherwise.
  *
+ * ## The toggle hides the colours, not the choice
+ *
+ * The bar can turn this legend off, as ba-ddd-mapper's can. What it turns off is
+ * the swatch list — the reference text somebody who knows event storming does
+ * not need on screen. The level control stays: it is the setting that decides
+ * what this board *is*, and a switch labelled "legend" that also took away the
+ * only way back to Big Picture would be a trap.
+ *
  * ## A level that would orphan notes is disabled, not hidden
  *
  * Going deeper is always allowed. Coming back up is not, once the wall carries
@@ -27,14 +35,24 @@
 
 import { kindsFor, cardLabel, cardMeaning, LEVELS, levelLabel, levelMeaning, type Level } from '../../lib/eventstorm/model.ts';
 import { swatchClass } from '../../lib/board/kinds.ts';
-import { orphanedBy } from '../../lib/board/reducer.ts';
+import { orphanedBy } from '../../lib/board/gestures.ts';
 import type { BoardState } from '../../lib/board/state.ts';
 
 export function Legend({
 	board,
+	shown,
 	onLevel,
 }: {
 	board: BoardState;
+	/**
+	 * Whether the colours are showing.
+	 *
+	 * It gates the swatches and **not** the level control above them. Turning a
+	 * legend off is a claim about reference text — that you already know the
+	 * notation — and the choice of which workshop this is would be the one thing
+	 * in here that a visitor could no longer reach.
+	 */
+	shown: boolean;
 	onLevel: (level: Level) => void;
 }) {
 	const kinds = kindsFor(board.level);
@@ -87,6 +105,7 @@ export function Legend({
 			 * changed — the notation gaining three colours is a more useful thing to
 			 * hear than "process modelling selected".
 			 */}
+			{shown && (
 			<ul aria-live="polite" className="flex flex-wrap gap-x-6 gap-y-2 text-sm">
 				{kinds.map((kind) => (
 					<li key={kind} className="flex items-center gap-2">
@@ -96,6 +115,7 @@ export function Legend({
 					</li>
 				))}
 			</ul>
+			)}
 		</section>
 	);
 }

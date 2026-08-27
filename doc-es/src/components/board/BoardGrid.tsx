@@ -40,7 +40,7 @@ import { useDroppable } from '@dnd-kit/core';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { cardLabel, kindsFor, type CardKind } from '../../lib/eventstorm/model.ts';
 import { cardClass } from '../../lib/board/kinds.ts';
-import type { BoardAction } from '../../lib/board/reducer.ts';
+import type { BoardAction } from '../../lib/board/gestures.ts';
 import { cardsAt, cellKey, columnCount, type BoardState, type Id } from '../../lib/board/state.ts';
 import { CardMenu, type CardMenuAction } from './CardMenu.tsx';
 import { KindPalette } from './KindPalette.tsx';
@@ -103,15 +103,28 @@ export function BoardGrid({
 	const columns = columnCount(board);
 
 	return (
+		/*
+		 * The grid fills the height it is given and scrolls inside it — in both
+		 * states, which is what changed when the board grew a frame.
+		 *
+		 * It used to size itself: `max-height: 75vh` outside fullscreen, and no
+		 * part in any flex height chain. That worked while the page scrolled and
+		 * the board was simply a tall block on it. Inside a frame of a fixed
+		 * height it does not: 75vh plus a toolbar plus a legend is taller than the
+		 * frame, so the grid ran out of the bottom of it and over the footer.
+		 *
+		 * `fullscreen` was standing in for "am I in a frame?" all along. The answer
+		 * is now always yes, so only the padding and the corner still differ.
+		 */
 		<div
-			className={`relative border border-slate-200 bg-white dark:border-slate-700 dark:bg-night-raised ${
-				fullscreen ? 'flex min-h-0 flex-1 flex-col rounded-xl p-4' : 'rounded-2xl p-3'
+			className={`relative flex min-h-0 min-w-0 flex-1 flex-col border border-slate-200 bg-white dark:border-slate-700 dark:bg-night-raised ${
+				fullscreen ? 'rounded-xl p-4' : 'rounded-2xl p-3'
 			}`}
 		>
 			<div
 				ref={scroller}
-				className={`board-scroll ${fullscreen ? 'min-h-0 flex-1' : ''}`}
-				style={{ maxHeight: fullscreen ? '100%' : '75vh', fontSize: `${BASE_FONT * zoom}px` }}
+				className="board-scroll min-h-0 flex-1"
+				style={{ maxHeight: '100%', fontSize: `${BASE_FONT * zoom}px` }}
 			>
 				<div
 					className="grid min-w-max gap-[0.25em]"

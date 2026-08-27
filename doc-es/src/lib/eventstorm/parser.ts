@@ -37,6 +37,7 @@ import {
 	type EventStormDocument,
 	type LaneNode,
 	type Level,
+	type Span,
 } from './model.ts';
 import { EventStormParseError, isSaturated, report, type Problem } from './problems.ts';
 
@@ -48,7 +49,7 @@ import { EventStormParseError, isSaturated, report, type Problem } from './probl
 export function parse(source: string): EventStormDocument {
 	const problems: Problem[] = [];
 	const tokens = tokenize(source, problems);
-	const document = createParser(tokens, problems).parseFile();
+	const document = createParser(tokens, problems, source).parseFile();
 
 	if (problems.length > 0) throw new EventStormParseError(problems);
 	return document;
@@ -69,7 +70,7 @@ const cardExample: Record<CardKind, string> = {
 	context: 'context "Ordering"',
 };
 
-function createParser(tokens: readonly Token[], problems: Problem[]) {
+function createParser(tokens: readonly Token[], problems: Problem[], source: string) {
 	let position = 0;
 
 	const peek = (ahead = 0): Token => tokens[Math.min(position + ahead, tokens.length - 1)]!;
@@ -83,16 +84,49 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 	/** Every card written, with its keyword's position, for the level check. */
 	const placed: { kind: CardKind; token: Token }[] = [];
 
+	/*
+	 * Spans, built from what the lexer already records.
+	 *
+	 * Every token carries `offset` and `length`, so nothing here needed a change
+	 * to the lexer: a span is two arithmetic operations on tokens the parser is
+	 * holding anyway. `line` and `column` come from the *first* token, because
+	 * that is where a problems entry points and where the editor scrolls to.
+	 */
+	const tokenSpan = (token: Token): Span => ({
+		start: token.offset,
+		end: token.offset + token.length,
+		line: token.line,
+		column: token.column,
+	});
+
+	/** The last token consumed — where a declaration that just closed ends. */
+	const previous = (): Token => tokens[Math.max(0, Math.min(position - 1, tokens.length - 1))]!;
+
+	/** From one token through whatever was consumed last. */
+	const spanFrom = (from: Token, to: Token = previous()): Span => ({
+		start: from.offset,
+		end: Math.max(from.offset + from.length, to.offset + to.length),
+		line: from.line,
+		column: from.column,
+	});
+
 	function problemAt(token: Token, message: string, hint?: string): void {
 		report(problems, { message, line: token.line, column: token.column, length: token.length, hint });
 	}
 
-	function expectString(after: string, hint: string): string | undefined {
+	/**
+	 * The quoted string, as a token rather than as its text.
+	 *
+	 * The token, because every caller now needs two things from it: the value,
+	 * and where it sits — a rename is a splice over exactly these bytes and
+	 * nothing else on the line.
+	 */
+	function expectString(after: string, hint: string): Token | undefined {
 		if (!at('string')) {
 			problemAt(peek(), `Expected a quoted title after \`${after}\`, found ${describe(peek())}.`, hint);
 			return undefined;
 		}
-		return advance().value;
+		return advance();
 	}
 
 	/**
@@ -113,9 +147,17 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 		}
 	}
 
-	function parseBody(owner: string, item: () => boolean): void {
-		if (!at('lbrace')) return;
-		advance();
+	/**
+	 * A `{ … }` body, and where its braces are.
+	 *
+	 * The offsets are what lets a new declaration be written *inside* an existing
+	 * block: a card added to a lane is spliced one step in from the lane's `{`,
+	 * and a lane with no block at all has to grow one. Null means the declaration
+	 * was written without a body.
+	 */
+	function parseBody(owner: string, item: () => boolean): { open: number; close: number } | null {
+		if (!at('lbrace')) return null;
+		const open = advance();
 
 		while (!at('rbrace') && !at('eof') && !isSaturated(problems)) {
 			if (item()) continue;
@@ -124,19 +166,31 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 			if (!at('rbrace') && !at('eof') && !atDeclaration()) advance();
 		}
 
-		if (at('rbrace')) advance();
-		else problemAt(peek(), `\`${owner}\` is not closed — no \`}\` before the end of the file.`);
+		if (at('rbrace')) {
+			const close = advance();
+			return { open: open.offset, close: close.offset + close.length };
+		}
+
+		problemAt(peek(), `\`${owner}\` is not closed — no \`}\` before the end of the file.`);
+		return { open: open.offset, close: source.length };
 	}
 
-	function parseNote(notes: string[]): boolean {
+	function parseNote(notes: string[], span?: { first: Token | null; last: Token | null }): boolean {
 		if (!at('keyword', 'note')) return false;
-		advance();
+		const keyword = advance();
 		const text = expectString('note', 'A note is quoted: note "Two departments mean different things here."');
 		if (text === undefined) {
 			synchronize();
 			return true;
 		}
-		notes.push(wrapNote(text));
+		notes.push(wrapNote(text.value));
+		// The run of `note` lines, first keyword to last string: what a rewrite of
+		// the notes replaces, and where a first note is inserted when there are
+		// none. Tracked here because only this function knows which lines they are.
+		if (span) {
+			span.first ??= keyword;
+			span.last = text;
+		}
 		return true;
 	}
 
@@ -174,6 +228,7 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 		 * corrected coordinate is a card that is not where the file says it is.
 		 */
 		let column = nextColumn(cards);
+		let columnSpan: Span | null = null;
 		while (at('at')) {
 			const sigil = advance();
 			if (!at('ident') || !/^\d+$/.test(peek().value)) {
@@ -184,21 +239,39 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 				);
 				continue;
 			}
-			const value = Number(advance().value);
+			const ordinal = advance();
+			const value = Number(ordinal.value);
 			if (value < 1) {
 				problemAt(sigil, 'Columns start at 1.', 'Column 1 is the left-hand edge of the wall.');
 				continue;
 			}
 			column = value;
+			// `@` through the digits, so a move replaces the whole annotation
+			// rather than leaving a stray sigil behind.
+			columnSpan = spanFrom(sigil, ordinal);
 		}
 
 		const notes: string[] = [];
-		cards.push({ kind, title, column, notes });
+		const noteRun: { first: Token | null; last: Token | null } = { first: null, last: null };
 		// Where this card was written, so a level mismatch can be reported at the
 		// keyword rather than at the top of the file. Cleared as the tree is built;
 		// nothing outside this parser sees it.
 		placed.push({ kind, token: keyword });
-		parseBody(cardKeyword[kind], () => parseNote(notes));
+		// Pushed *after* the body rather than before it, which is the one shape
+		// change spans forced: a declaration's span is not known until its closing
+		// brace has been read.
+		parseBody(cardKeyword[kind], () => parseNote(notes, noteRun));
+		cards.push({
+			kind,
+			title: title.value,
+			column,
+			notes,
+			span: spanFrom(keyword),
+			kindSpan: tokenSpan(keyword),
+			titleSpan: tokenSpan(title),
+			columnSpan,
+			notesSpan: noteRun.first === null ? null : spanFrom(noteRun.first, noteRun.last ?? noteRun.first),
+		});
 		return true;
 	}
 
@@ -218,7 +291,7 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 	 */
 	function parseLane(lanes: LaneNode[]): boolean {
 		if (!at('keyword', 'lane')) return false;
-		advance();
+		const keyword = advance();
 		const title = expectString('lane', 'A lane is quoted: lane "Customer"');
 		if (title === undefined) {
 			synchronize();
@@ -227,8 +300,19 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 
 		const notes: string[] = [];
 		const cards: CardNode[] = [];
-		lanes.push({ title, notes, cards });
-		parseBody('lane', () => parseCard(cards) || parseNote(notes));
+		const noteRun: { first: Token | null; last: Token | null } = { first: null, last: null };
+		const body = parseBody('lane', () => parseCard(cards) || parseNote(notes, noteRun));
+		lanes.push({
+			title: title.value,
+			notes,
+			cards,
+			span: spanFrom(keyword),
+			titleSpan: tokenSpan(title),
+			// -1 for a lane written with no block. `addCard` grows one rather than
+			// splicing into a brace that is not there.
+			openBrace: body?.open ?? -1,
+			notesSpan: noteRun.first === null ? null : spanFrom(noteRun.first, noteRun.last ?? noteRun.first),
+		});
 		return true;
 	}
 
@@ -243,7 +327,7 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 	 * a file written before this setting existed was. That default is the reason
 	 * older files keep opening.
 	 */
-	function parseLevel(state: { value: Level | null; token: Token | null }): boolean {
+	function parseLevel(state: { value: Level | null; token: Token | null; span: Span | null }): boolean {
 		if (!at('keyword', 'level')) return false;
 		const keyword = advance();
 
@@ -256,7 +340,8 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 			synchronize();
 			return true;
 		}
-		const value = advance().value as Level;
+		const ordinal = advance();
+		const value = ordinal.value as Level;
 
 		if (state.token !== null) {
 			problemAt(
@@ -268,6 +353,7 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 		}
 		state.value = value;
 		state.token = keyword;
+		state.span = spanFrom(keyword, ordinal);
 		return true;
 	}
 
@@ -300,7 +386,11 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 	 * about one product, and two declarations mean a bad merge, which is exactly
 	 * the thing worth surfacing rather than silently resolving.
 	 */
-	function parseProduct(state: { value: string | null; token: Token | null }): boolean {
+	function parseProduct(state: {
+		value: string | null;
+		token: Token | null;
+		span: Span | null;
+	}): boolean {
 		if (!at('keyword', 'product')) return false;
 		const keyword = advance();
 		const value = expectString('product', 'A product is its shortname, quoted: product "client-onboarding"');
@@ -316,8 +406,9 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 			);
 			return true;
 		}
-		state.value = value;
+		state.value = value.value;
 		state.token = keyword;
+		state.span = spanFrom(keyword, value);
 		return true;
 	}
 
@@ -343,13 +434,24 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 					hint: 'An event storm starts with: eventstorm "Its title" { … }',
 				});
 			}
-			return blank('Untitled event storm');
+			return blank('Untitled event storm', source);
 		}
 
 		let title = 'Untitled event storm';
-		const product: { value: string | null; token: Token | null } = { value: null, token: null };
-		const level: { value: Level | null; token: Token | null } = { value: null, token: null };
+		let titleSpan: Span = tokenSpan(peek());
+		let openBrace = -1;
+		const product: { value: string | null; token: Token | null; span: Span | null } = {
+			value: null,
+			token: null,
+			span: null,
+		};
+		const level: { value: Level | null; token: Token | null; span: Span | null } = {
+			value: null,
+			token: null,
+			span: null,
+		};
 		const notes: string[] = [];
+		const noteRun: { first: Token | null; last: Token | null } = { first: null, last: null };
 		const lanes: LaneNode[] = [];
 		/*
 		 * Cards written at the top level, before any `lane` line.
@@ -364,16 +466,20 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 		if (at('keyword', 'eventstorm')) {
 			advance();
 			const parsed = expectString('eventstorm', 'The storm is titled: eventstorm "Ordering a pizza"');
-			if (parsed !== undefined) title = parsed;
-			parseBody(
+			if (parsed !== undefined) {
+				title = parsed.value;
+				titleSpan = tokenSpan(parsed);
+			}
+			const body = parseBody(
 				'eventstorm',
 				() =>
 					parseProduct(product) ||
 					parseLevel(level) ||
 					parseLane(lanes) ||
 					parseCard(loose) ||
-					parseNote(notes),
+					parseNote(notes, noteRun),
 			);
+			openBrace = body?.open ?? -1;
 		}
 
 		while (!at('eof')) {
@@ -403,7 +509,13 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 
 		return {
 			title,
+			titleSpan,
 			product: product.value,
+			productSpan: product.span,
+			levelSpan: level.span,
+			openBrace,
+			notesSpan: noteRun.first === null ? null : spanFrom(noteRun.first, noteRun.last ?? noteRun.first),
+			source,
 			level: chosen,
 			notes: [...notes],
 			// No lanes is a legal storm: a file that names none is one nobody has
@@ -416,8 +528,29 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 	return { parseFile };
 }
 
-function blank(title: string): EventStormDocument {
-	return { title, product: null, level: 'big-picture', notes: [], lanes: [] };
+const NOWHERE: Span = { start: 0, end: 0, line: 1, column: 1 };
+
+/**
+ * A storm that was not there.
+ *
+ * Every span is empty and `source` is empty with them, which is the honest
+ * answer: there is no text, so there is nowhere for a gesture to splice. The
+ * board renders the empty state on this and offers to make a real one.
+ */
+function blank(title: string, source: string): EventStormDocument {
+	return {
+		title,
+		titleSpan: NOWHERE,
+		product: null,
+		productSpan: null,
+		level: 'big-picture',
+		levelSpan: null,
+		notes: [],
+		notesSpan: null,
+		lanes: [],
+		openBrace: -1,
+		source,
+	};
 }
 
 function describe(token: Token): string {
