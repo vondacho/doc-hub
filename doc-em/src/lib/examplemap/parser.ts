@@ -41,6 +41,9 @@ import {
 	type StepClause,
 	type StoryNode,
 	type StoryStatus,
+	NOWHERE,
+	type AnnotationSpans,
+	type Span,
 } from './model.ts';
 import { ExampleMapParseError, isSaturated, report, type Problem } from './problems.ts';
 
@@ -52,7 +55,7 @@ import { ExampleMapParseError, isSaturated, report, type Problem } from './probl
 export function parse(source: string): ExampleMapDocument {
 	const problems: Problem[] = [];
 	const tokens = tokenize(source, problems);
-	const document = createParser(tokens, problems).parseFile();
+	const document = createParser(tokens, problems, source).parseFile();
 
 	if (problems.length > 0) throw new ExampleMapParseError(problems);
 	return document;
@@ -65,10 +68,38 @@ const stepExample: Record<StepClause, string> = {
 	then: 'the voucher is refused',
 };
 
-function createParser(tokens: readonly Token[], problems: Problem[]) {
+function createParser(tokens: readonly Token[], problems: Problem[], source: string) {
 	let position = 0;
 
 	const peek = (ahead = 0): Token => tokens[Math.min(position + ahead, tokens.length - 1)]!;
+
+	/*
+	 * Spans, built from what the lexer already records.
+	 *
+	 * Every token carries `offset` and `length`, so none of this needed a change
+	 * to the lexer. `line` and `column` come from the first token, which is where
+	 * a problems entry points and where the editor scrolls to.
+	 */
+	const tokenSpan = (token: Token): Span => ({
+		start: token.offset,
+		end: token.offset + token.length,
+		line: token.line,
+		column: token.column,
+	});
+	const previous = (): Token => tokens[Math.max(0, Math.min(position - 1, tokens.length - 1))]!;
+	const spanFrom = (from: Token, to: Token = previous()): Span => ({
+		start: from.offset,
+		end: Math.max(from.offset + from.length, to.offset + to.length),
+		line: from.line,
+		column: from.column,
+	});
+
+	type NoteRun = { first: Token | null; last: Token | null };
+	const noteRun = (): NoteRun => ({ first: null, last: null });
+	const runSpan = (run: NoteRun): Span | null =>
+		run.first === null ? null : spanFrom(run.first, run.last ?? run.first);
+
+	const NO_ANNOTATIONS: AnnotationSpans = { release: null, ticket: null, status: null };
 	const at = (kind: TokenKind, value?: string): boolean => {
 		const token = peek();
 		return token.kind === kind && (value === undefined || token.value === value);
@@ -108,8 +139,8 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 		}
 	};
 
-	function expectString(after: string, hint: string): string | undefined {
-		if (at('string')) return advance().value;
+	function expectString(after: string, hint: string): Token | undefined {
+		if (at('string')) return advance();
 		problemAt(peek(), `Expected a quoted title after \`${after}\`, found ${describe(peek())}.`, hint);
 		return undefined;
 	}
@@ -125,8 +156,9 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 		}
 	}
 
-	function parseBody(owner: string, item: () => boolean): void {
-		if (!at('lbrace')) return;
+	/** A `{ … }` body, and where its braces are. Null when written without one. */
+	function parseBody(owner: string, item: () => boolean): { open: number; close: number } | null {
+		if (!at('lbrace')) return null;
 		const open = advance();
 
 		while (!at('rbrace') && !at('eof') && !isSaturated(problems)) {
@@ -136,32 +168,37 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 		}
 
 		if (at('rbrace')) {
-			advance();
-			return;
+			const close = advance();
+			return { open: open.offset, close: close.offset + close.length };
 		}
 		problemAt(
 			peek(),
 			`Expected \`}\` to close \`${owner}\`, found ${describe(peek())}.`,
 			`The \`{\` on line ${open.line} is never closed.`,
 		);
+		return { open: open.offset, close: source.length };
 	}
 
 	/** `note "…"` — one string, with `\n` or a trailing backslash for its breaks. */
-	function parseNote(notes: string[]): boolean {
+	function parseNote(notes: string[], run?: NoteRun): boolean {
 		if (!at('keyword', 'note')) return false;
-		advance();
+		const keyword = advance();
 		const text = expectString('note', 'A note is quoted: note "Ask the payments team"');
 		if (text === undefined) {
 			synchronize();
 			return true;
 		}
-		notes.push(wrapNote(text));
+		notes.push(wrapNote(text.value));
+		if (run) {
+			run.first ??= keyword;
+			run.last = text;
+		}
 		return true;
 	}
 
 	function parseQuestion(questions: QuestionNode[]): boolean {
 		if (!at('keyword', 'question')) return false;
-		advance();
+		const keyword = advance();
 		const title = expectString(
 			'question',
 			'A question is quoted: question "Is the expiry checked at apply or at pay?"',
@@ -171,8 +208,19 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 			return true;
 		}
 		const notes: string[] = [];
-		questions.push({ title, notes });
-		parseBody('question', () => parseNote(notes));
+		const run = noteRun();
+		const body = parseBody('question', () => parseNote(notes, run));
+		questions.push({
+			title: title.value,
+			notes,
+			spans: {
+				span: spanFrom(keyword),
+				titleSpan: tokenSpan(title),
+				annotations: NO_ANNOTATIONS,
+				openBrace: body?.open ?? -1,
+				notesSpan: runSpan(run),
+			},
+		});
 		return true;
 	}
 
@@ -184,10 +232,13 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 	 * be written in any order and reordered later without changing meaning; the
 	 * serializer puts them back in Gherkin's order on the way out.
 	 */
-	function parseStep(steps: Record<StepClause, string[]>): boolean {
+	function parseStep(
+		steps: Record<StepClause, string[]>,
+		spans?: Record<StepClause, Span[]>,
+	): boolean {
 		const clause = STEP_CLAUSES.find((candidate) => at('keyword', candidate));
 		if (clause === undefined) return false;
-		advance();
+		const keyword = advance();
 		const text = expectString(
 			clause,
 			`A step is quoted: ${clause} "${stepExample[clause]}"`,
@@ -198,13 +249,16 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 		}
 		// A step is one line of a scenario, so its own breaks are not meaningful;
 		// collapse them rather than writing a Gherkin file that will not parse.
-		steps[clause].push(text.replace(/\s*\n\s*/g, ' ').trim());
+		steps[clause].push(text.value.replace(/\s*\n\s*/g, ' ').trim());
+		// One span per step line, so editing the second `then` rewrites that line
+		// and leaves the first alone.
+		spans?.[clause].push(spanFrom(keyword, text));
 		return true;
 	}
 
 	function parseExample(examples: ExampleNode[]): boolean {
 		if (!at('keyword', 'example')) return false;
-		advance();
+		const keyword = advance();
 		const title = expectString(
 			'example',
 			'An example is quoted, with real values: example "A voucher that expired yesterday is refused"',
@@ -217,6 +271,7 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 		// and no status: an example is not a thing the tracker knows about, it is
 		// what makes the story true.
 		let delivery: string | null = null;
+		let deliverySpan: Span | null = null;
 		while (at('at')) {
 			const sigil = advance();
 			const name = parseReference(sigil, 'this example', 'a delivery');
@@ -226,18 +281,36 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 				continue;
 			}
 			delivery = name;
+			deliverySpan = spanFrom(sigil);
 		}
 
 		const notes: string[] = [];
+		const run = noteRun();
 		const steps: Record<StepClause, string[]> = { given: [], when: [], then: [] };
-		examples.push({ title, notes, delivery, given: steps.given, when: steps.when, then: steps.then });
-		parseBody('example', () => parseStep(steps) || parseNote(notes));
+		const stepSpans: Record<StepClause, Span[]> = { given: [], when: [], then: [] };
+		const body = parseBody('example', () => parseStep(steps, stepSpans) || parseNote(notes, run));
+		examples.push({
+			title: title.value,
+			notes,
+			delivery,
+			given: steps.given,
+			when: steps.when,
+			then: steps.then,
+			steps: stepSpans,
+			spans: {
+				span: spanFrom(keyword),
+				titleSpan: tokenSpan(title),
+				annotations: { release: deliverySpan, ticket: null, status: null },
+				openBrace: body?.open ?? -1,
+				notesSpan: runSpan(run),
+			},
+		});
 		return true;
 	}
 
 	function parseRule(rules: RuleNode[]): boolean {
 		if (!at('keyword', 'rule')) return false;
-		advance();
+		const keyword = advance();
 		const title = expectString('rule', 'A rule is quoted: rule "A voucher must not be expired"');
 		if (title === undefined) {
 			synchronize();
@@ -247,8 +320,24 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 		const notes: string[] = [];
 		const examples: ExampleNode[] = [];
 		const questions: QuestionNode[] = [];
-		rules.push({ title, notes, examples, questions });
-		parseBody('rule', () => parseExample(examples) || parseQuestion(questions) || parseNote(notes));
+		const run = noteRun();
+		const body = parseBody(
+			'rule',
+			() => parseExample(examples) || parseQuestion(questions) || parseNote(notes, run),
+		);
+		rules.push({
+			title: title.value,
+			notes,
+			examples,
+			questions,
+			spans: {
+				span: spanFrom(keyword),
+				titleSpan: tokenSpan(title),
+				annotations: NO_ANNOTATIONS,
+				openBrace: body?.open ?? -1,
+				notesSpan: runSpan(run),
+			},
+		});
 		return true;
 	}
 
@@ -269,6 +358,7 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 		need: { persona: string | null; want: string | null; soThat: string | null },
 		field: 'persona' | 'want' | 'soThat',
 		hint: string,
+		spans?: { persona: Span | null; want: Span | null; soThat: Span | null },
 	): boolean {
 		if (!at('keyword', word)) return false;
 		const keyword = advance();
@@ -285,7 +375,8 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 			);
 			return true;
 		}
-		need[field] = value.replace(/\s+/g, ' ').trim();
+		need[field] = value.value.replace(/\s+/g, ' ').trim();
+		if (spans) spans[field] = spanFrom(keyword, value);
 		return true;
 	}
 
@@ -298,7 +389,7 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 	 */
 	function parseOnce(
 		word: 'product' | 'space',
-		state: { value: string | null; token: Token | null },
+		state: { value: string | null; token: Token | null; span: Span | null },
 		hint: string,
 		twice: string,
 	): boolean {
@@ -313,8 +404,9 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 			problemAt(keyword, twice, `Already declared on line ${state.token.line}.`);
 			return true;
 		}
-		state.value = value;
+		state.value = value.value;
 		state.token = keyword;
+		state.span = spanFrom(keyword, value);
 		return true;
 	}
 
@@ -334,9 +426,17 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 		ticket: string | null;
 		status: StoryStatus;
 		release: string | null;
+		spans: AnnotationSpans;
 	} {
 		let ticket: string | null = null;
 		let status: StoryStatus | null = null;
+		// Each annotation's own span, sigil included, so setting a status leaves
+		// the ticket beside it on the same line alone.
+		const spans: { release: Span | null; ticket: Span | null; status: Span | null } = {
+			release: null,
+			ticket: null,
+			status: null,
+		};
 		let release: string | null = null;
 
 		while (at('at') || at('hash') || at('tilde')) {
@@ -350,6 +450,7 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 					continue;
 				}
 				release = name;
+				spans.release = spanFrom(sigil);
 				continue;
 			}
 
@@ -362,12 +463,14 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 					);
 					continue;
 				}
-				const value = advance().value;
+				const found = advance();
+				const value = found.value;
 				if (ticket !== null) {
 					problemAt(sigil, 'This story names two tickets.', 'A story links to one ticket.');
 					continue;
 				}
 				ticket = value;
+				spans.ticket = spanFrom(sigil, found);
 				continue;
 			}
 
@@ -393,10 +496,11 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 				continue;
 			}
 			status = word.value;
+			spans.status = spanFrom(sigil, word);
 		}
 
 		// Unlinked, unscheduled, and nothing said about it yet.
-		return { ticket, status: status ?? DEFAULT_STORY_STATUS, release };
+		return { ticket, status: status ?? DEFAULT_STORY_STATUS, release, spans };
 	}
 
 	/**
@@ -442,6 +546,9 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 		}
 
 		let kind: DeliveryKind = 'sprint';
+		// The keyword stands in when the kind word is missing, so a change of kind
+		// still has somewhere to write.
+		let kindSpan: Span = tokenSpan(keyword);
 		if (!at('keyword') || !isDeliveryKind(peek().value)) {
 			problemAt(
 				peek(),
@@ -449,7 +556,9 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 				'A delivery says which it is: delivery "1.0" release',
 			);
 		} else {
-			kind = advance().value as DeliveryKind;
+			const word = advance();
+			kind = word.value as DeliveryKind;
+			kindSpan = tokenSpan(word);
 		}
 
 		// `#ticket` and `points N` after the kind, in either order. A band takes no
@@ -458,7 +567,9 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 		// it never asks about. It takes no `@` either: a delivery is a point on the
 		// timeline, not a thing placed on one.
 		let ticket: string | null = null;
+		let ticketSpan: Span | null = null;
 		let points: number | null = null;
+		let pointsSpan: Span | null = null;
 
 		while (at('hash') || at('keyword', 'points')) {
 			if (at('hash')) {
@@ -471,12 +582,13 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 					);
 					continue;
 				}
-				const value = advance().value;
+				const found = advance();
 				if (ticket !== null) {
 					problemAt(sigil, 'This delivery names two tickets.', 'A delivery links to one ticket.');
 					continue;
 				}
-				ticket = value;
+				ticket = found.value;
+				ticketSpan = spanFrom(sigil, found);
 				continue;
 			}
 
@@ -505,17 +617,38 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 				continue;
 			}
 
-			const value = Number(advance().value);
+			const ordinal = advance();
+			const value = Number(ordinal.value);
 			if (points !== null) {
 				problemAt(word, 'This sprint is sized twice.', 'A sprint has one estimate.');
 				continue;
 			}
 			points = value;
+			pointsSpan = spanFrom(word, ordinal);
 		}
 
 		const notes: string[] = [];
-		deliveries.push({ node: { title, kind, ticket, points, notes }, token: keyword });
-		parseBody('delivery', () => parseNote(notes));
+		const run = noteRun();
+		const body = parseBody('delivery', () => parseNote(notes, run));
+		deliveries.push({
+			node: {
+				title: title.value,
+				kind,
+				ticket,
+				points,
+				notes,
+				kindSpan,
+				pointsSpan,
+				spans: {
+					span: spanFrom(keyword),
+					titleSpan: tokenSpan(title),
+					annotations: { release: null, ticket: ticketSpan, status: null },
+					openBrace: body?.open ?? -1,
+					notesSpan: runSpan(run),
+				},
+			},
+			token: keyword,
+		});
 		return true;
 	}
 
@@ -535,8 +668,14 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 			return true;
 		}
 
-		const { ticket, status, release } = parseStoryAnnotations();
+		const { ticket, status, release, spans } = parseStoryAnnotations();
 		const notes: string[] = [];
+		const run = noteRun();
+		const clauseSpans: { persona: Span | null; want: Span | null; soThat: Span | null } = {
+			persona: null,
+			want: null,
+			soThat: null,
+		};
 		const questions: QuestionNode[] = [];
 		const need: { persona: string | null; want: string | null; soThat: string | null } = {
 			persona: null,
@@ -546,18 +685,18 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 
 		// The clauses are read before the node is built, so a `want` written after
 		// a question still lands on the story — the body has no order.
-		parseBody(
+		const body = parseBody(
 			'story',
 			() =>
-				parseClause('as', need, 'persona', 'Who the story is for, quoted: as "Support engineer"') ||
-				parseClause('want', need, 'want', 'What they want, quoted: want "to redeem a voucher at checkout"') ||
-				parseClause('so', need, 'soThat', 'The outcome, quoted: so "the discount comes off the basket"') ||
+				parseClause('as', need, 'persona', 'Who the story is for, quoted: as "Support engineer"', clauseSpans) ||
+				parseClause('want', need, 'want', 'What they want, quoted: want "to redeem a voucher at checkout"', clauseSpans) ||
+				parseClause('so', need, 'soThat', 'The outcome, quoted: so "the discount comes off the basket"', clauseSpans) ||
 				parseQuestion(questions) ||
-				parseNote(notes),
+				parseNote(notes, run),
 		);
 
 		const node: StoryNode = {
-			title,
+			title: title.value,
 			notes,
 			ticket,
 			status,
@@ -566,6 +705,16 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 			want: need.want,
 			soThat: need.soThat,
 			questions,
+			personaSpan: clauseSpans.persona,
+			wantSpan: clauseSpans.want,
+			soThatSpan: clauseSpans.soThat,
+			spans: {
+				span: spanFrom(keyword),
+				titleSpan: tokenSpan(title),
+				annotations: spans,
+				openBrace: body?.open ?? -1,
+				notesSpan: runSpan(run),
+			},
 		};
 
 		if (state.token !== null) {
@@ -603,12 +752,23 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 					hint: 'An example map starts with: examplemap "Its title" { … }',
 				});
 			}
-			return blank('Untitled example map');
+			return blank('Untitled example map', source);
 		}
 
 		let title = 'Untitled example map';
-		const product: { value: string | null; token: Token | null } = { value: null, token: null };
-		const space: { value: string | null; token: Token | null } = { value: null, token: null };
+		let titleSpan: Span = tokenSpan(peek());
+		let openBrace = -1;
+		const run = noteRun();
+		const product: { value: string | null; token: Token | null; span: Span | null } = {
+			value: null,
+			token: null,
+			span: null,
+		};
+		const space: { value: string | null; token: Token | null; span: Span | null } = {
+			value: null,
+			token: null,
+			span: null,
+		};
 		const notes: string[] = [];
 		const rules: RuleNode[] = [];
 		const story: { value: StoryNode | null; token: Token | null } = { value: null, token: null };
@@ -616,8 +776,11 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 		if (at('keyword', 'examplemap')) {
 			advance();
 			const parsed = expectString('examplemap', 'The map is titled: examplemap "Redeem a voucher"');
-			if (parsed !== undefined) title = parsed;
-			parseBody(
+			if (parsed !== undefined) {
+				title = parsed.value;
+				titleSpan = tokenSpan(parsed);
+			}
+			const body = parseBody(
 				'examplemap',
 				() =>
 					parseOnce(
@@ -635,8 +798,9 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 					parseDelivery() ||
 					parseStory(story) ||
 					parseRule(rules) ||
-					parseNote(notes),
+					parseNote(notes, run),
 			);
+			openBrace = body?.open ?? -1;
 		}
 
 		while (!at('eof')) {
@@ -658,6 +822,12 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 
 		return {
 			title,
+			titleSpan,
+			productSpan: product.span,
+			spaceSpan: space.span,
+			openBrace,
+			notesSpan: runSpan(run),
+			source,
 			product: product.value,
 			space: space.value,
 			notes: [...notes],
@@ -718,6 +888,21 @@ function createParser(tokens: readonly Token[], problems: Problem[]) {
 	return { parseFile };
 }
 
-function blank(title: string): ExampleMapDocument {
-	return { title, product: null, space: null, notes: [], deliveries: [], story: null, rules: [] };
+/** A map that was not there. Every span is empty, and so is the source. */
+function blank(title: string, source: string): ExampleMapDocument {
+	return {
+		title,
+		titleSpan: NOWHERE,
+		product: null,
+		productSpan: null,
+		space: null,
+		spaceSpan: null,
+		notes: [],
+		notesSpan: null,
+		deliveries: [],
+		story: null,
+		rules: [],
+		openBrace: -1,
+		source,
+	};
 }

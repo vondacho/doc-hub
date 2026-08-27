@@ -27,7 +27,7 @@ import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-
 import { CSS } from '@dnd-kit/utilities';
 import { useEffect, useId, useRef, useState } from 'react';
 import { deliveryKindLabel, type DeliveryKind } from '../../lib/examplemap/model.ts';
-import type { BoardAction } from '../../lib/board/reducer.ts';
+import type { BoardAction } from '../../lib/board/gestures.ts';
 import type { BoardState, Id } from '../../lib/board/state.ts';
 import { IconButton } from './IconButton.tsx';
 

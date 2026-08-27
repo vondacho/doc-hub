@@ -76,3 +76,43 @@ export function downloadText(filename: string, text: string): void {
 export function filenameFor(product: string | null, title: string): string {
 	return `${storageKey(product, title)}${EXAMPLEMAP_EXTENSION}`;
 }
+
+/**
+ * Put text on the clipboard, by whichever route the browser allows.
+ *
+ * Lifted out of the preview dialog when that was replaced, because it is not a
+ * fact about dialogs: any surface offering to copy something needs both routes.
+ *
+ * The async API first, then a hidden textarea and `execCommand`. The fallback is
+ * deprecated and still the only thing that works in an insecure context or when
+ * the permission is refused, and `false` from both is what lets the caller say
+ * so rather than leaving a button that silently did nothing.
+ */
+export async function copyText(text: string): Promise<boolean> {
+	try {
+		if (window.isSecureContext && navigator.clipboard) {
+			await navigator.clipboard.writeText(text);
+			return true;
+		}
+	} catch {
+		// Permission refused, or a browser that rejects a write it did not tie to
+		// a gesture it recognises. Fall through rather than give up.
+	}
+
+	try {
+		const scratch = document.createElement('textarea');
+		scratch.value = text;
+		// Off-screen rather than hidden: `display: none` cannot be selected, and
+		// an element the viewport can see would scroll the page on focus.
+		scratch.setAttribute('readonly', '');
+		scratch.style.position = 'fixed';
+		scratch.style.top = '-1000px';
+		document.body.appendChild(scratch);
+		scratch.select();
+		const done = document.execCommand('copy');
+		document.body.removeChild(scratch);
+		return done;
+	} catch {
+		return false;
+	}
+}

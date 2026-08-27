@@ -10,12 +10,10 @@
  * toBoard is a deterministic function of its input.
  */
 
-import { STEP_CLAUSES, type ExampleMapDocument, type QuestionNode } from '../examplemap/model.ts';
+import type { ExampleMapDocument, QuestionNode } from '../examplemap/model.ts';
 import {
-	bands,
 	cellKey,
 	emptyBoard,
-	examplesIn,
 	UNSCHEDULED,
 	type BandId,
 	type BoardState,
@@ -27,16 +25,69 @@ import {
 	type Rule,
 } from './state.ts';
 
-let counter = 0;
-
 /** `r1`, `e4`, `q7`, `d2` — the prefix makes a stray id readable in a log. */
-export function nextId(prefix: 'r' | 'e' | 'q' | 'd'): Id {
-	counter += 1;
-	return `${prefix}${counter}`;
+/**
+ * ## Ids are positions, and that is the whole design
+ *
+ * The text is the source of truth, and text has no id column. A card's identity
+ * is therefore *where it is written*: `r2` is the third rule, `r2e0` its first
+ * example, `d1` the second band. Questions carry their parent — `r2q0` is the
+ * third rule's first question, `sq0` the story's.
+ *
+ * **A reparse yields the same id for a card nobody moved**, which is what lets
+ * the board keep React keys, an open card menu and a drag in flight across the
+ * keystroke-by-keystroke reparsing the editor pane causes.
+ *
+ * **An id decodes back to a position**, which is how a gesture finds the node
+ * whose span it is about to splice — see `edit.ts`.
+ *
+ * The cost, accepted deliberately: ids shift when text above them changes.
+ */
+
+/** `d1` — the second band of the timeline. */
+export function deliveryId(index: number): Id {
+	return `d${index}`;
 }
 
-export function resetIds(): void {
-	counter = 0;
+/** `r2` — the third rule, counting from the top of the file. */
+export function ruleId(index: number): Id {
+	return `r${index}`;
+}
+
+/** `r2e0` — the first example written under the third rule. */
+export function exampleId(rule: number, example: number): Id {
+	return `r${rule}e${example}`;
+}
+
+/** `r2q0` under a rule, `sq0` under the story. */
+export function questionId(parent: number | 'story', index: number): Id {
+	return parent === 'story' ? `sq${index}` : `r${parent}q${index}`;
+}
+
+/** Where an example is written, or null. */
+export function examplePositionOf(id: Id): { rule: number; example: number } | null {
+	const found = /^r(\d+)e(\d+)$/.exec(id);
+	return found === null ? null : { rule: Number(found[1]), example: Number(found[2]) };
+}
+
+/** Where a question is written — under a rule, or under the story. */
+export function questionPositionOf(id: Id): { rule: number | 'story'; question: number } | null {
+	const story = /^sq(\d+)$/.exec(id);
+	if (story) return { rule: 'story', question: Number(story[1]) };
+	const found = /^r(\d+)q(\d+)$/.exec(id);
+	return found === null ? null : { rule: Number(found[1]), question: Number(found[2]) };
+}
+
+/** Which rule an id names, or null. */
+export function rulePositionOf(id: Id): number | null {
+	const found = /^r(\d+)$/.exec(id);
+	return found === null ? null : Number(found[1]);
+}
+
+/** Which delivery an id names, or null. */
+export function deliveryPositionOf(id: Id): number | null {
+	const found = /^d(\d+)$/.exec(id);
+	return found === null ? null : Number(found[1]);
 }
 
 export function toBoard(document: ExampleMapDocument): BoardState {
@@ -53,8 +104,8 @@ export function toBoard(document: ExampleMapDocument): BoardState {
 	// titles cannot reach here — the parser rejects them, which is what makes a
 	// title a usable key at all.
 	const bandOf = new Map<string, Id>();
-	for (const delivery of document.deliveries) {
-		const id = nextId('d');
+	document.deliveries.forEach((delivery, deliveryIndex) => {
+		const id = deliveryId(deliveryIndex);
 		deliveries[id] = {
 			id,
 			title: delivery.title,
@@ -65,21 +116,21 @@ export function toBoard(document: ExampleMapDocument): BoardState {
 		};
 		deliveryOrder.push(id);
 		bandOf.set(delivery.title, id);
-	}
+	});
 
-	const addQuestions = (nodes: readonly QuestionNode[]): Id[] =>
-		nodes.map((node) => {
-			const id = nextId('q');
+	const addQuestions = (nodes: readonly QuestionNode[], parent: number | 'story'): Id[] =>
+		nodes.map((node, index) => {
+			const id = questionId(parent, index);
 			questions[id] = { id, title: node.title, notes: [...node.notes] };
 			return id;
 		});
 
-	const storyQuestions = addQuestions(document.story?.questions ?? []);
+	const storyQuestions = addQuestions(document.story?.questions ?? [], 'story');
 
-	for (const rule of document.rules) {
-		const ruleId = nextId('r');
-		for (const example of rule.examples) {
-			const id = nextId('e');
+	document.rules.forEach((rule, ruleIndex) => {
+		const rid = ruleId(ruleIndex);
+		rule.examples.forEach((example, exampleIndex) => {
+			const id = exampleId(ruleIndex, exampleIndex);
 			examples[id] = {
 				id,
 				title: example.title,
@@ -91,17 +142,17 @@ export function toBoard(document: ExampleMapDocument): BoardState {
 			// An unresolvable name cannot occur — the parser errors on one — so the
 			// fallback is for `null`, which is the ordinary unscheduled case.
 			const band: BandId = (example.delivery !== null ? bandOf.get(example.delivery) : undefined) ?? UNSCHEDULED;
-			const key = cellKey(ruleId, band);
+			const key = cellKey(rid, band);
 			(cells[key] ??= []).push(id);
-		}
-		rules[ruleId] = {
-			id: ruleId,
+		});
+		rules[rid] = {
+			id: rid,
 			title: rule.title,
 			notes: [...rule.notes],
-			questionIds: addQuestions(rule.questions),
+			questionIds: addQuestions(rule.questions, ruleIndex),
 		};
-		ruleOrder.push(ruleId);
-	}
+		ruleOrder.push(rid);
+	});
 
 	return {
 		...emptyBoard(document.title),
@@ -131,103 +182,4 @@ export function toBoard(document: ExampleMapDocument): BoardState {
 		cells,
 		questions,
 	};
-}
-
-export function toDocument(board: BoardState): ExampleMapDocument {
-	const question = (id: Id): QuestionNode[] => {
-		const card = board.questions[id];
-		return card ? [{ title: card.title, notes: [...card.notes] }] : [];
-	};
-
-	// Band id back to title, for the `@delivery` each card is tagged with. The
-	// inverse of the map `toBoard` built, and the reason neither direction has to
-	// guess: the file speaks titles, the board speaks ids, and the conversion is
-	// the only thing that knows both.
-	const titleOf = (band: BandId): string | null =>
-		band === UNSCHEDULED ? null : (board.deliveries[band]?.title ?? null);
-
-	return {
-		title: board.title,
-		product: board.product,
-		space: board.space,
-		notes: [...board.notes],
-		deliveries: board.deliveryOrder.flatMap((id) => {
-			const delivery = board.deliveries[id];
-			return delivery
-				? [
-						{
-							title: delivery.title,
-							kind: delivery.kind,
-							ticket: delivery.ticket,
-							points: delivery.points,
-							notes: [...delivery.notes],
-						},
-					]
-				: [];
-		}),
-		story:
-			board.story === null
-				? null
-				: {
-						title: board.story.title,
-						notes: [...board.story.notes],
-						ticket: board.story.ticket,
-						status: board.story.status,
-						release: board.story.release === null ? null : titleOf(board.story.release),
-						persona: board.story.persona,
-						want: board.story.want,
-						soThat: board.story.soThat,
-						questions: board.story.questions.flatMap(question),
-					},
-		rules: board.ruleOrder.flatMap((ruleId) => {
-			const rule = board.rules[ruleId];
-			if (!rule) return [];
-			return [
-				{
-					title: rule.title,
-					notes: [...rule.notes],
-					// Read down the timeline, so the file lists a rule's examples in
-					// the order the column shows them: earliest band first, and the
-					// unscheduled ones last.
-					examples: bands(board).flatMap((band) =>
-						examplesIn(board, ruleId, band).flatMap((id) => {
-							const card = board.examples[id];
-							if (!card) return [];
-							// Blank steps are dropped here rather than in the serializer, so
-							// that the document model — which is what `.examplemap` and the
-							// feature file are both written from — never carries a step that
-							// says nothing.
-							const written = (clause: (typeof STEP_CLAUSES)[number]) =>
-								card[clause].map((step) => step.trim()).filter((step) => step !== '');
-							return [
-								{
-									title: card.title,
-									notes: [...card.notes],
-									// Derived from the cell, never stored on the card — the
-									// argument for that is at the top of state.ts.
-									delivery: titleOf(band),
-									given: written('given'),
-									when: written('when'),
-									then: written('then'),
-								},
-							];
-						}),
-					),
-					questions: rule.questionIds.flatMap(question),
-				},
-			];
-		}),
-	};
-}
-
-/**
- * Rebuild a board from text the visitor edited in the preview.
- *
- * @throws {ExampleMapParseError} when the text does not parse; the caller shows
- *         the problems and leaves the board alone.
- */
-export function applyText(source: string, parse: (s: string) => ExampleMapDocument): BoardState {
-	const parsed = parse(source);
-	resetIds();
-	return toBoard(parsed);
 }

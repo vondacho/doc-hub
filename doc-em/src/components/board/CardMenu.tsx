@@ -9,7 +9,7 @@
  *
  * A disabled item always says why. A greyed-out control with no explanation is
  * indistinguishable from a bug, and the reasons here are real constraints from
- * canChangeKind() in src/lib/board/reducer.ts, not arbitrary policy. The reason
+ * canChangeKind() in src/lib/board/gestures.ts, not arbitrary policy. The reason
  * is wired through `aria-describedby` rather than a `title` attribute, because a
  * `title` is invisible to anyone navigating by keyboard.
  *

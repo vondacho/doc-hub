@@ -137,6 +137,45 @@ export function isDeliveryKind(value: unknown): value is DeliveryKind {
  * stale on its own, and it would make the file wrong rather than merely old. The
  * tracker holds the calendar; this holds the sequence.
  */
+/**
+ * A half-open byte range in the source, and where it starts in human terms.
+ *
+ * The reason this exists is the reason every gesture on this board is a splice:
+ * the `.examplemap` file is the artefact, it lands in a pull request, and
+ * everything outside the edited range has to come back byte-identical —
+ * comments, blank lines and somebody's own alignment included.
+ *
+ * `start` and `end` are 0-based indices into the source. `line` and `column` are
+ * 1-based and are what the problems panel shows.
+ */
+export interface Span {
+	readonly start: number;
+	readonly end: number;
+	readonly line: number;
+	readonly column: number;
+}
+
+/** Where a card's annotations sit, so each can be rewritten on its own. */
+export interface AnnotationSpans {
+	/** `@MVP` — the delivery an example is committed to. */
+	readonly release: Span | null;
+	/** `#CLONB-42` — the ticket it is linked to. */
+	readonly ticket: Span | null;
+	/** `~open` and friends. Null on a card left at the default. */
+	readonly status: Span | null;
+}
+
+/** What every declaration carries, so one helper can address any of them. */
+export interface NodeSpans {
+	/** The whole declaration, keyword to closing brace. */
+	readonly span: Span;
+	readonly titleSpan: Span;
+	readonly annotations: AnnotationSpans;
+	/** The `{` that opens it, or -1 when written without a body. */
+	readonly openBrace: number;
+	readonly notesSpan: Span | null;
+}
+
 export interface DeliveryNode {
 	readonly title: string;
 	readonly kind: DeliveryKind;
@@ -203,6 +242,9 @@ export interface DeliveryNode {
 	 */
 	readonly points: number | null;
 	readonly notes: readonly string[];
+	readonly kindSpan: Span;
+	readonly pointsSpan: Span | null;
+	readonly spans: NodeSpans;
 }
 
 /**
@@ -256,11 +298,15 @@ export interface ExampleNode {
 	readonly given: readonly string[];
 	readonly when: readonly string[];
 	readonly then: readonly string[];
+	readonly steps: { readonly given: readonly Span[]; readonly when: readonly Span[]; readonly then: readonly Span[] };
+	readonly spans: NodeSpans;
 }
 
 export interface QuestionNode {
 	readonly title: string;
 	readonly notes: readonly string[];
+
+	readonly spans: NodeSpans;
 }
 
 export interface RuleNode {
@@ -275,6 +321,8 @@ export interface RuleNode {
 	 * different and more useful statement than "the board has three questions".
 	 */
 	readonly questions: readonly QuestionNode[];
+
+	readonly spans: NodeSpans;
 }
 
 /**
@@ -361,6 +409,10 @@ export interface StoryNode {
 	readonly soThat: string | null;
 	/** Questions raised before any rule existed: doubts about the story itself. */
 	readonly questions: readonly QuestionNode[];
+	readonly personaSpan: Span | null;
+	readonly wantSpan: Span | null;
+	readonly soThatSpan: Span | null;
+	readonly spans: NodeSpans;
 }
 
 export interface ExampleMapDocument {
@@ -407,6 +459,17 @@ export interface ExampleMapDocument {
 	/** `null` until somebody names one. See `StoryNode` for why it is optional. */
 	readonly story: StoryNode | null;
 	readonly rules: readonly RuleNode[];
+
+	readonly titleSpan: Span;
+	/** The whole `product "…"` line, or null when the file has none. */
+	readonly productSpan: Span | null;
+	/** The whole `space "…"` line, or null. */
+	readonly spaceSpan: Span | null;
+	/** The `{` that opens the map, so a first rule knows where to land. */
+	readonly openBrace: number;
+	readonly notesSpan: Span | null;
+	/** The text this was parsed from, verbatim. Every edit splices into it. */
+	readonly source: string;
 }
 
 /**
@@ -498,10 +561,16 @@ export function emptyDocument(title = 'Untitled example map'): ExampleMapDocumen
 		title,
 		product: null,
 		space: null,
+		titleSpan: NOWHERE,
+		productSpan: null,
+		spaceSpan: null,
 		notes: [],
+		notesSpan: null,
 		deliveries: [],
 		story: null,
 		rules: [],
+		openBrace: -1,
+		source: '',
 	};
 }
 
@@ -524,6 +593,16 @@ export function emptyStory(title = UNDEFINED_STORY): StoryNode {
 		want: null,
 		soThat: null,
 		questions: [],
+		personaSpan: null,
+		wantSpan: null,
+		soThatSpan: null,
+		spans: {
+			span: NOWHERE,
+			titleSpan: NOWHERE,
+			annotations: { release: null, ticket: null, status: null },
+			openBrace: -1,
+			notesSpan: null,
+		},
 	};
 }
 
@@ -664,3 +743,12 @@ export function splitNotes(text: string): readonly string[] {
 export function joinNotes(notes: readonly string[]): string {
 	return notes.join('\n\n');
 }
+
+/**
+ * A span pointing at nothing.
+ *
+ * For a document that was never in a file. An edit spliced at an empty span
+ * would write to the top of whatever text was on screen, so `edit.ts` checks for
+ * a document with no `source` before it splices at all.
+ */
+export const NOWHERE: Span = { start: 0, end: 0, line: 1, column: 1 };

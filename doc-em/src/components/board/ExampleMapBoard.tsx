@@ -28,7 +28,15 @@ import { sortableKeyboardCoordinates } from '@dnd-kit/sortable';
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { clearFileInput, downloadText, filenameFor, readTextFile } from '../../lib/files.ts';
 import * as storage from '../../lib/storage.ts';
-import { resetIds, toBoard, toDocument } from '../../lib/board/convert.ts';
+import { format as formatSource } from '../../lib/format.ts';
+import {
+	deliveryPositionOf,
+	examplePositionOf,
+	questionPositionOf,
+	rulePositionOf,
+	toBoard,
+} from '../../lib/board/convert.ts';
+import { applyAction, isEdit } from '../../lib/board/apply.ts';
 import {
 	canRedo,
 	canUndo,
@@ -38,20 +46,22 @@ import {
 	type HistoryAction,
 } from '../../lib/board/history.ts';
 import { cardClass } from '../../lib/board/kinds.ts';
-import { reduce, resetsHistory, type BoardAction, type QuestionParent } from '../../lib/board/reducer.ts';
-import { cardsWithDetail, emptyBoard, type BoardState, type Id } from '../../lib/board/state.ts';
+import { resetsHistory, type BoardAction, type QuestionParent } from '../../lib/board/gestures.ts';
+import { cardsWithDetail, type BoardState, type Id } from '../../lib/board/state.ts';
 import { featureFilename, toGherkin, unwritableQuestions } from '../../lib/examplemap/gherkin.ts';
 import { cardLabel, deliveryKindLabel, type CardKind } from '../../lib/examplemap/model.ts';
 import { parse } from '../../lib/examplemap/parser.ts';
+import type { ExampleMapDocument } from '../../lib/examplemap/model.ts';
 import { ExampleMapParseError, type Problem } from '../../lib/examplemap/problems.ts';
-import { SAMPLE_SOURCE } from '../../lib/examplemap/sample.ts';
-import { serialize } from '../../lib/examplemap/serialize.ts';
+import { EMPTY_SOURCE, freshSource, SAMPLE_SOURCE } from '../../lib/examplemap/sample.ts';
 import type { Product } from '../../lib/products.ts';
 import { BASE_FONT, BoardGrid } from './BoardGrid.tsx';
-import { OpenDialog } from './OpenDialog.tsx';
-import { PreviewDialog, type GherkinPreview } from './PreviewDialog.tsx';
+import { StoreState } from './StoreState.tsx';
+import { Divider } from './Divider.tsx';
+import { Editor } from './Editor.tsx';
+import { GherkinDialog } from './GherkinDialog.tsx';
+import { SourceProblems } from './SourceProblems.tsx';
 import { Legend } from './Legend.tsx';
-import { ProblemList } from './ProblemList.tsx';
 import { Readings } from './Readings.tsx';
 import { Toolbar } from './Toolbar.tsx';
 
@@ -61,7 +71,26 @@ const AUTOSAVE_DELAY_MS = 1_000;
 const ZOOM_STOPS = [1, 1.15, 1.3, 1.45, 1.6] as const;
 const DEFAULT_ZOOM_INDEX = 0;
 
-const step = undoable<BoardState, BoardAction>(reduce, { limit: HISTORY_LIMIT, resets: resetsHistory });
+/**
+ * One entry in the undo stack: what the visitor did, and the file it produced.
+ *
+ * The gesture travels alongside the text because history still needs to know
+ * *which* gesture it was — an import clears the stack, an edit does not. The
+ * fold is a replace: the splice has already happened by the time a commit gets
+ * here.
+ */
+interface Commit {
+	readonly action: BoardAction;
+	readonly text: string;
+}
+
+const step = undoable<string, Commit>((_, commit) => commit.text, {
+	limit: HISTORY_LIMIT,
+	resets: (commit) => resetsHistory(commit.action),
+});
+
+/** What an unwritten map is, so the projection always has something to build. */
+const EMPTY_DOCUMENT = parse(EMPTY_SOURCE);
 
 export default function ExampleMapBoard({
 	products,
@@ -75,22 +104,110 @@ export default function ExampleMapBoard({
 	/** The registry's admin UI, for the "register one" links. Browser-facing. */
 	registryUrl: string;
 }) {
+	/*
+	 * The document is the text. Everything else on this screen is derived.
+	 *
+	 * History holds *source strings* rather than board states: a step back is the
+	 * file as it was, so undo takes back a drag and a typed line in exactly the
+	 * same way. `History<T>` was already generic.
+	 */
 	const [history, send] = useReducer(
-		step as (state: History<BoardState>, action: BoardAction | HistoryAction) => History<BoardState>,
+		step as (state: History<string>, action: Commit | HistoryAction) => History<string>,
 		undefined,
-		/*
-		 * A board opens with a story card that says "To be defined".
-		 *
-		 * Not an empty page: the session is defined as taking one story, so the
-		 * card that names it exists before anything else does, waiting to be
-		 * written. Starting blank would make the first move "add a story", which
-		 * is not a move anyone in the room makes.
-		 */
-		() => initialHistory(emptyBoard()),
+		() => initialHistory(EMPTY_SOURCE),
 	);
-	const board = history.present;
+	const source = history.present;
 
-	const [problems, setProblems] = useState<readonly Problem[]>([]);
+	/**
+	 * The last parse that succeeded, and whether the text has moved on since.
+	 *
+	 * The board keeps drawing the last good document while the text is broken,
+	 * which is what lets somebody type a half-finished line without the map
+	 * disappearing underneath them — and the problems panel says the board is
+	 * behind, so the state is never a silent lie.
+	 */
+	const parsed = useMemo(() => {
+		try {
+			return { document: parse(source), problems: [] as readonly Problem[] };
+		} catch (error) {
+			if (!(error instanceof ExampleMapParseError)) throw error;
+			return { document: null, problems: error.problems };
+		}
+	}, [source]);
+
+	const lastGood = useRef<ExampleMapDocument | null>(null);
+	if (parsed.document !== null) lastGood.current = parsed.document;
+
+	const document_ = parsed.document ?? lastGood.current;
+	const problems = parsed.problems;
+	const stale = parsed.document === null && lastGood.current !== null;
+
+	/**
+	 * The board, projected from the parsed document.
+	 *
+	 * Rebuilt on every parse, which is affordable because ids are positional —
+	 * see `convert.ts`. A card nobody moved keeps its id across the rebuild, so
+	 * React keeps its element and dnd-kit keeps its drag while somebody types in
+	 * the pane beside it.
+	 */
+	const board = useMemo(() => toBoard(document_ ?? EMPTY_DOCUMENT), [document_]);
+
+	/**
+	 * The feature file, regenerated from the text.
+	 *
+	 * Null while the map does not parse — there is nothing to write one from, and
+	 * the tab says so rather than showing a stale render.
+	 */
+	const gherkin = useMemo(
+		() => (parsed.document === null ? null : toGherkin(parsed.document)),
+		[parsed.document],
+	);
+
+	/** Which panels are showing, and how the width is divided between them. */
+	const [panes, setPanes] = useState<storage.Panes>('both');
+	const [split, setSplit] = useState(42);
+	const [revealLine, setRevealLine] = useState<number | null>(null);
+	/**
+	 * The card whose text the source pane is emphasising.
+	 *
+	 * A kind and an id rather than a span: the span is a fact about the *current*
+	 * parse and this outlives several of them, and positional ids mean the id
+	 * still names the same card as long as nothing above it moved.
+	 */
+	const [selected, setSelected] = useState<{ kind: CardKind | 'delivery'; id: Id } | null>(null);
+
+	/**
+	 * Where the selected card is written, for the source pane to emphasise.
+	 *
+	 * The whole declaration — title, annotations, steps, notes — because what is
+	 * selected is the card and the card is all of it. Null when nothing is
+	 * selected, when the text no longer parses, or when the id names a card that
+	 * is no longer there.
+	 */
+	const highlight = useMemo(() => {
+		const d = parsed.document;
+		if (selected === null || d === null) return null;
+		if (selected.kind === 'delivery') {
+			const at = deliveryPositionOf(selected.id);
+			return at === null ? null : (d.deliveries[at]?.spans.span ?? null);
+		}
+		if (selected.kind === 'story') return d.story?.spans.span ?? null;
+		if (selected.kind === 'rule') {
+			const at = rulePositionOf(selected.id);
+			return at === null ? null : (d.rules[at]?.spans.span ?? null);
+		}
+		if (selected.kind === 'example') {
+			const at = examplePositionOf(selected.id);
+			return at === null ? null : (d.rules[at.rule]?.examples[at.example]?.spans.span ?? null);
+		}
+		const at = questionPositionOf(selected.id);
+		if (at === null) return null;
+		const node =
+			at.rule === 'story' ? d.story?.questions[at.question] : d.rules[at.rule]?.questions[at.question];
+		return node?.spans.span ?? null;
+	}, [selected, parsed.document]);
+	const [problemsCollapsed, setProblemsCollapsed] = useState(false);
+
 	const [dirty, setDirty] = useState(false);
 	/** What the browser's copy last said, or why it could not be written. */
 	const [stored, setStored] = useState<{ at: number } | { error: string } | null>(null);
@@ -102,8 +219,8 @@ export default function ExampleMapBoard({
 	 * nothing on the board changes it except this component — so it is refreshed
 	 * where it can change: opening the dialog, and deleting from it.
 	 */
-	const [savedKeys, setSavedKeys] = useState<readonly string[]>([]);
-	const [previewing, setPreviewing] = useState(false);
+	/* Read when the panel opens: another tab may have written since. */
+	const [store, setStore] = useState<storage.Inventory>({ boards: [], bytes: 0 });
 	const [documentKey, setDocumentKey] = useState(0);
 	const [zoomIndex, setZoomIndex] = useState(DEFAULT_ZOOM_INDEX);
 	const [fullscreen, setFullscreen] = useState(false);
@@ -117,6 +234,14 @@ export default function ExampleMapBoard({
 	 * the whole island with it.
 	 */
 	const [boardTheme, setBoardTheme] = useState<storage.BoardTheme | null>(null);
+	/**
+	 * The notation row. Shown until somebody says otherwise — see `loadLegend`.
+	 *
+	 * ba-ddd-mapper's toggle, in the same place on the bar and with the same
+	 * default: the person who needs a legend most is the one who has not seen
+	 * this board before, and they will not go looking for a switch.
+	 */
+	const [legend, setLegend] = useState(true);
 	/** What the page is showing right now, so the toggle can offer the opposite. */
 	const [pageIsDark, setPageIsDark] = useState(false);
 	const [expanded, setExpanded] = useState<ReadonlySet<Id>>(() => new Set());
@@ -130,74 +255,62 @@ export default function ExampleMapBoard({
 	const [dragging, setDragging] = useState<{ kind: CardKind | 'delivery'; title: string } | null>(null);
 	const stage = useRef<HTMLDivElement>(null);
 
-	const dispatch = useCallback((action: BoardAction) => {
-		send(action);
-		setDirty(true);
-	}, []);
+	/**
+	 * A gesture from the grid, carried out on the text.
+	 *
+	 * The action shapes are unchanged, which is why nothing below the toolbar had
+	 * to be rewritten — see `apply.ts`. A gesture against a document that does
+	 * not currently parse is dropped: the spans it would splice describe text
+	 * that has since been edited by hand.
+	 */
+	const dispatch = useCallback(
+		(action: BoardAction) => {
+			if (!isEdit(action) || parsed.document === null) return;
+			const next = applyAction(source, parsed.document, board, action);
+			if (next === source) return;
+			send({ action, text: next });
+			setDirty(true);
+		},
+		[source, parsed.document, board],
+	);
+
+	/** Text typed in the pane. Recorded exactly as a gesture is. */
+	const edit = useCallback(
+		(next: string) => {
+			if (next === source) return;
+			send({ action: { type: 'applyText', text: next }, text: next });
+			setDirty(true);
+		},
+		[source],
+	);
 
 	/* ---- opening and saving ------------------------------------------------ */
 
-	const load = useCallback((source: string) => {
-		try {
-			resetIds();
-			const next = toBoard(parse(source));
-			setProblems([]);
-			send({ type: 'import', board: next });
-			setDocumentKey((n) => n + 1);
-			setDirty(false);
-		} catch (error) {
-			if (!(error instanceof ExampleMapParseError)) throw error;
-			// The board is untouched. That is the whole contract of a failed import.
-			setProblems(error.problems);
-		}
+	/**
+	 * Open a file: the text becomes the document, whatever state it is in.
+	 *
+	 * It no longer refuses a file that does not parse. The old contract — "a
+	 * failed import never touches the board" — existed because the board *was*
+	 * the state. Now the file is the state: it opens in the pane with its
+	 * problems listed beneath it, which is the only way anybody was going to fix
+	 * it.
+	 */
+	const load = useCallback((text: string) => {
+		send({ action: { type: 'import', text }, text });
+		setDocumentKey((n) => n + 1);
+		setDirty(false);
 	}, []);
-
-	const applyPreview = useCallback((source: string): readonly Problem[] => {
-		try {
-			resetIds();
-			const next = toBoard(parse(source));
-			// `applyText`, not `import`: this is an edit of the map you already have,
-			// and undoing it must bring the old board back.
-			send({ type: 'applyText', board: next });
-			setDirty(true);
-			return [];
-		} catch (error) {
-			if (!(error instanceof ExampleMapParseError)) throw error;
-			return error.problems;
-		}
-	}, []);
-
-	const preview = useMemo(
-		() => (previewing ? serialize(toDocument(board)) : ''),
-		[previewing, board],
-	);
 
 	/**
-	 * The feature file for whatever is currently in the preview's map tab.
+	 * The file, exported exactly as it sits in the pane.
 	 *
-	 * Passed in as a function rather than as text so the Gherkin tab tracks the
-	 * draft: edit the map there and the feature file follows, without the dialog
-	 * needing to know how to parse anything.
+	 * No serialisation step: what you have been editing is what lands on disk,
+	 * comments and all.
 	 */
-	const gherkinPreview = useCallback((source: string): GherkinPreview => {
-		try {
-			const parsed = parse(source);
-			return {
-				ok: true,
-				filename: featureFilename(parsed),
-				text: toGherkin(parsed),
-				unwritable: unwritableQuestions(parsed),
-			};
-		} catch (error) {
-			if (!(error instanceof ExampleMapParseError)) throw error;
-			return { ok: false, problems: error.problems };
-		}
-	}, []);
-
 	const exportFile = useCallback(() => {
-		downloadText(filenameFor(board.product, board.title), serialize(toDocument(board)));
+		downloadText(filenameFor(board.product, board.title), source);
 		setDirty(false);
-	}, [board]);
+	}, [board.product, board.title, source]);
 
 	/**
 	 * Write the feature file.
@@ -207,19 +320,17 @@ export default function ExampleMapBoard({
 	 * still not saved its red cards, and telling them otherwise would lose the
 	 * half of the board the practice says matters most.
 	 */
-	const exportGherkin = useCallback(() => {
-		const document = toDocument(board);
-		const open = unwritableQuestions(document);
-		if (open > 0) {
-			const proceed = window.confirm(
-				`${open} open ${open === 1 ? 'question is' : 'questions are'} not written to a feature file — ` +
-					'an open question is not a specification, so Gherkin has no keyword for it.\n\n' +
-					'Export the feature file anyway? The .examplemap file keeps them.',
-			);
-			if (!proceed) return;
-		}
-		downloadText(featureFilename(document), toGherkin(document));
-	}, [board]);
+	/**
+	 * Show the feature file, rather than write it.
+	 *
+	 * It used to download on the first click, behind a `confirm()` when questions
+	 * were open. A file that lands in your downloads folder unseen is a poor way
+	 * to learn what it says — and the warning about open questions was a modal
+	 * asking you to accept something you had not read yet. The screen shows the
+	 * file, states the count, and offers Copy and Save.
+	 */
+	const [previewingGherkin, setPreviewingGherkin] = useState(false);
+
 
 	/* ---- the browser's copy ------------------------------------------------ */
 
@@ -233,13 +344,24 @@ export default function ExampleMapBoard({
 	 * something slightly different from the autosave" is a bug nobody would ever
 	 * think to look for.
 	 */
-	const persist = useCallback(
-		(state: BoardState) => {
-			const result = storage.save(storageKeyOf(state), serialize(toDocument(state)));
-			setStored(storage.failed(result) ? { error: result.error } : { at: Date.now() });
-		},
-		[],
-	);
+	/**
+	 * The text the store is known to hold.
+	 *
+	 * What autosave compares against, and the reason it does not key off `dirty`.
+	 * `dirty` means "changes you have not *exported*", which is a different
+	 * question from "does the browser's copy match the screen".
+	 */
+	const savedText = useRef<string | null>(null);
+
+	const persist = useCallback((state: BoardState, text: string) => {
+		const result = storage.save(storageKeyOf(state), text);
+		if (storage.failed(result)) {
+			setStored({ error: result.error });
+			return;
+		}
+		savedText.current = text;
+		setStored({ at: Date.now() });
+	}, []);
 
 	/**
 	 * Follow a rename, so one board keeps one entry.
@@ -276,10 +398,68 @@ export default function ExampleMapBoard({
 	 * browser afterwards — an empty board is not work, and autosave is for work.
 	 */
 	useEffect(() => {
-		if (!dirty) return;
-		const timer = setTimeout(() => persist(board), AUTOSAVE_DELAY_MS);
+		// An untouched empty board is not work to be preserved, and saving it would
+		// put an "Untitled example map" in everybody's store panel.
+		if (source === EMPTY_SOURCE || source === savedText.current) return;
+		const timer = setTimeout(() => persist(board, source), AUTOSAVE_DELAY_MS);
 		return () => clearTimeout(timer);
-	}, [board, dirty, persist]);
+	}, [board, source, persist]);
+
+	/**
+	 * Write now, rather than at the end of the debounce.
+	 *
+	 * Called whenever this component is about to stop being the only thing that
+	 * knows the current text — the tab closing, or the store panel opening
+	 * another map over this one.
+	 */
+	const flush = useCallback(() => {
+		if (source === EMPTY_SOURCE || source === savedText.current) return;
+		persist(board, source);
+	}, [board, source, persist]);
+
+	// Registered once and read through a ref, so the listener is not torn down on
+	// every keystroke.
+	const flushNow = useRef(flush);
+	flushNow.current = flush;
+	useEffect(() => {
+		const onHide = () => flushNow.current();
+		window.addEventListener('pagehide', onHide);
+		return () => window.removeEventListener('pagehide', onHide);
+	}, []);
+
+	/**
+	 * Reformat the source: indentation only, nothing moves.
+	 *
+	 * Through `edit` rather than around it, so it lands on the undo stack like
+	 * any other change to the text — a reformat you cannot take back is a poor
+	 * thing to offer on a file somebody has laid out by hand.
+	 *
+	 * Refused when the text does not lex. `format` returns null there, and the
+	 * reason is in its own header: an unterminated string would have every line
+	 * after it re-indented as that string's continuation.
+	 */
+	const reformat = useCallback(() => {
+		const tidied = formatSource(source);
+		if (tidied !== null && tidied !== source) edit(tidied);
+	}, [source]);
+
+	/**
+	 * A map that did not exist a second ago.
+	 *
+	 * **Nothing is lost by pressing it.** The current one is written to this
+	 * browser first — `flush`, rather than trusting the debounce — and the new
+	 * one takes a name nothing is using, so pressing it twice leaves two drafts
+	 * rather than one overwritten. Both are in the store panel.
+	 *
+	 * ba-ddd-mapper's button, and its rule.
+	 */
+	const startFresh = useCallback(() => {
+		flush();
+		const taken = new Set(storage.inventory().boards.map((entry) => entry.title));
+		let title = 'New map';
+		for (let n = 2; taken.has(title); n += 1) title = `New map ${n}`;
+		load(freshSource(title));
+	}, [flush, load]);
 
 	/**
 	 * Reopen whatever this browser had open last.
@@ -299,15 +479,11 @@ export default function ExampleMapBoard({
 		if (last === null) return;
 		const text = storage.load(last);
 		if (text === null) return;
-		try {
-			resetIds();
-			send({ type: 'import', board: toBoard(parse(text)) });
-			setDocumentKey((n) => n + 1);
-			previousKey.current = last;
-		} catch (error) {
-			if (!(error instanceof ExampleMapParseError)) throw error;
-			setProblems(error.problems);
-		}
+		send({ action: { type: 'import', text }, text });
+		setDocumentKey((n) => n + 1);
+		previousKey.current = last;
+		// It came *from* the store, so the store already holds it.
+		savedText.current = text;
 		// Mount only. `board` is deliberately not a dependency: this restores the
 		// last session, it does not keep re-reading storage.
 		// eslint-disable-next-line react-hooks/exhaustive-deps
@@ -371,6 +547,7 @@ export default function ExampleMapBoard({
 	}, []);
 
 	useEffect(() => setBoardTheme(storage.loadTheme()), []);
+	useEffect(() => setLegend(storage.loadLegend()), []);
 
 	/**
 	 * Follow the OS while the board is not pinned.
@@ -591,13 +768,18 @@ export default function ExampleMapBoard({
 					clearFileInput(input);
 					load(text);
 				}}
+				onFormat={reformat}
+				onNew={startFresh}
 				onExport={exportFile}
-				onExportGherkin={exportGherkin}
-				onPreview={() => setPreviewing(true)}
+				onExportGherkin={() => setPreviewingGherkin(true)}
+				panes={panes}
+				onPanes={(next) => {
+					setPanes(next);
+					storage.savePanes(next);
+				}}
 				onLoadSample={() => load(SAMPLE_SOURCE)}
-				onSave={() => persist(board)}
-				onOpenSaved={() => {
-					setSavedKeys(storage.saved());
+				onOpenStore={() => {
+					setStore(storage.inventory());
 					setOpening(true);
 				}}
 				saveState={stored}
@@ -621,40 +803,96 @@ export default function ExampleMapBoard({
 					setBoardTheme(null);
 					storage.saveTheme(null);
 				}}
+				legendShown={legend}
+				onToggleLegend={() => {
+					setLegend(!legend);
+					storage.saveLegend(!legend);
+				}}
 				detailShown={anyExpanded}
 				canToggleDetail={detailed.length > 0}
 				onToggleAllDetail={() => setExpanded(anyExpanded ? new Set() : new Set(detailed))}
 			/>
 
-			<Legend />
+			{legend && <Legend />}
 
-			<ProblemList problems={problems} subject="This map" onDismiss={() => setProblems([])} />
-			<Readings board={board} />
+			<GherkinDialog
+				open={previewingGherkin}
+				filename={parsed.document === null ? 'no feature file' : featureFilename(parsed.document)}
+				text={gherkin}
+				unwritable={parsed.document === null ? 0 : unwritableQuestions(parsed.document)}
+				onClose={() => setPreviewingGherkin(false)}
+			/>
 
-			<OpenDialog
+			<StoreState
 				open={opening}
-				keys={savedKeys}
+				state={store}
 				current={key}
 				onOpen={(pick) => {
+					// Before this map stops being the one on screen: there may be up to
+					// a second of typing still sitting in the debounce.
+					flush();
 					const text = storage.load(pick);
 					setOpening(false);
-					if (text !== null) load(text);
+					if (text !== null) {
+						load(text);
+						savedText.current = text;
+					}
 				}}
 				onDelete={(pick) => {
 					storage.remove(pick);
-					setSavedKeys(storage.saved());
+					setStore(storage.inventory());
 				}}
 				onClose={() => setOpening(false)}
 			/>
 
-			<PreviewDialog
-				open={previewing}
-				filename={filenameFor(board.product, board.title)}
-				text={preview}
-				onApply={applyPreview}
-				onGherkin={gherkinPreview}
-				onClose={() => setPreviewing(false)}
-			/>
+			<div className="flex min-h-0 flex-1 flex-col lg:flex-row">
+				{/* The source first in the DOM and first when stacked: on a narrow
+				    viewport this is a thing you read, and the text is the map. */}
+				{panes !== 'board' && (
+					<section
+						aria-label="Source"
+						className={`flex min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border border-slate-300 dark:border-slate-700 ${
+							panes === 'both' ? '' : 'flex-1'
+						}`}
+						style={panes === 'both' ? { flexBasis: `${split}%` } : undefined}
+					>
+						<div className="min-h-0 flex-1 overflow-auto">
+							<Editor
+								value={source}
+								onChange={edit}
+								problems={problems}
+								revealLine={revealLine}
+								highlight={highlight}
+							/>
+						</div>
+						<SourceProblems
+							problems={problems}
+							stale={stale}
+							collapsed={problemsCollapsed}
+							onToggle={() => setProblemsCollapsed((was) => !was)}
+							onReveal={(line) => setRevealLine(line)}
+						/>
+					</section>
+				)}
+
+				{panes === 'both' && (
+					<Divider
+						onMove={(percent) => {
+							setSplit(percent);
+							storage.saveSplit(percent);
+						}}
+					/>
+				)}
+
+				{panes !== 'source' && (
+					/*
+					 * `min-w-0`, and it is load-bearing: a flex item will not shrink
+					 * below its content's minimum width, and the grid is `min-w-max`.
+					 * Without it this section demands the whole grid's width and the
+					 * source pane beside it is squeezed to nothing.
+					 */
+					<section aria-label="The map" className="flex min-h-0 min-w-0 flex-1 flex-col gap-4">
+			<Readings board={board} />
 
 			<DndContext
 				sensors={sensors}
@@ -679,6 +917,8 @@ export default function ExampleMapBoard({
 						documentKey={documentKey}
 						expanded={expanded}
 						onToggleDetail={toggleDetail}
+						selected={selected}
+						onSelect={setSelected}
 					/>
 					)}
 
@@ -704,6 +944,9 @@ export default function ExampleMapBoard({
 					</DragOverlay>
 				</div>
 			</DndContext>
+					</section>
+				)}
+			</div>
 		</div>
 	);
 }

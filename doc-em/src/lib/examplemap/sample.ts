@@ -81,7 +81,7 @@ examplemap "Redeem a voucher" {
 
   rule "A voucher cannot take a basket below zero" {
     note "The finance team asked for this in writing. Do not\\
-         change it without them."
+          change it without them."
     example "A 50 CHF voucher on a 30 CHF basket leaves a total of 0.00 CHF" @"Sprint 24" {
       given "a basket of 30 CHF"
       when "a 50 CHF voucher is applied"
@@ -95,3 +95,28 @@ examplemap "Redeem a voucher" {
   }
 }
 `;
+
+/**
+ * An empty map, as text.
+ *
+ * The board opens on this. It has to be a real, parseable file rather than an
+ * empty string, because the text is the document now: a gesture needs somewhere
+ * to splice, and "add the first rule" needs a `{` to put it inside.
+ *
+ * No story and no rules, deliberately. The island shows the choice — load the
+ * example, or start a map — rather than a grid nobody asked for.
+ */
+export const EMPTY_SOURCE = `examplemap "Untitled example map" {
+}
+`;
+
+/**
+ * A fresh document under a name of its own.
+ *
+ * What the New button opens. `EMPTY_SOURCE` is the same thing under the default
+ * name; this is that with a title, so pressing New twice leaves two drafts in
+ * the store rather than one overwritten.
+ */
+export function freshSource(title: string): string {
+	return `examplemap ${JSON.stringify(title)} {\n}\n`;
+}

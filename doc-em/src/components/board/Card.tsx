@@ -62,6 +62,16 @@ export interface CardProps {
 	 * filing.
 	 */
 	readonly children?: ReactNode;
+	/** Whether this is the card whose text the source pane is emphasising. */
+	readonly selected?: boolean;
+	/**
+	 * Called when the card is clicked anywhere.
+	 *
+	 * On the root rather than on the title, because the title already owns click
+	 * — it opens the rename — and owns the drag listeners with it. Selection
+	 * rides the bubble, so no gesture had to be taken away from anything.
+	 */
+	readonly onSelect?: () => void;
 }
 
 export function Card({
@@ -82,6 +92,8 @@ export function Card({
 	data,
 	fixed = false,
 	children,
+	selected = false,
+	onSelect,
 }: CardProps) {
 	const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
 		id,
@@ -104,7 +116,12 @@ export function Card({
 				transition,
 				opacity: isDragging ? 0.35 : undefined,
 			}}
-			className={`group relative rounded-[0.4em] border px-[0.55em] py-[0.4em] text-[1em] shadow-sm motion-reduce:transition-none ${cardClass[kind]} ${className}`}
+			onClick={onSelect}
+			// The ring is `inset` so selecting does not grow the card and shift the
+			// grid around it.
+			className={`group relative rounded-[0.4em] border px-[0.55em] py-[0.4em] text-[1em] shadow-sm transition-shadow motion-reduce:transition-none ${
+				selected ? 'ring-2 ring-brand ring-inset dark:ring-sky-400' : ''
+			} ${cardClass[kind]} ${className}`}
 		>
 			{editing ? (
 				<TitleEditor

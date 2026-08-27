@@ -14,8 +14,22 @@
 import { useRef, useState } from 'react';
 import { EXAMPLEMAP_ACCEPT } from '../../lib/files.ts';
 import type { Product } from '../../lib/products.ts';
+import type { Panes } from '../../lib/storage.ts';
 import { IconButton } from './IconButton.tsx';
+import type { IconName } from '../../lib/board/icons.ts';
 import { ProductPicker } from './ProductPicker.tsx';
+
+/**
+ * The three layouts, in the order the picker offers them.
+ *
+ * Left to right as the panes sit on screen: source alone, source beside the
+ * map, map alone. doc-es's and doc-sm's picker, button for button.
+ */
+const PANE_CHOICES: readonly { panes: Panes; icon: IconName; label: string }[] = [
+	{ panes: 'source', icon: 'panesSource', label: 'Show the source only' },
+	{ panes: 'both', icon: 'panesBoth', label: 'Show the source and the map' },
+	{ panes: 'board', icon: 'panesBoard', label: 'Show the map only' },
+];
 
 export function Toolbar({
 	title,
@@ -32,12 +46,14 @@ export function Toolbar({
 	canRedo,
 	onTitle,
 	onPickFile,
+	panes,
+	onPanes,
+	onFormat,
+	onNew,
 	onExport,
 	onExportGherkin,
-	onPreview,
 	onLoadSample,
-	onSave,
-	onOpenSaved,
+	onOpenStore,
 	saveState,
 	onAddRule,
 	onAddSprint,
@@ -56,6 +72,8 @@ export function Toolbar({
 	themePinned,
 	onFlipTheme,
 	onFollowPage,
+	legendShown,
+	onToggleLegend,
 	detailShown,
 	canToggleDetail,
 	onToggleAllDetail,
@@ -75,12 +93,16 @@ export function Toolbar({
 	canRedo: boolean;
 	onTitle: (title: string) => void;
 	onPickFile: (file: File, input: HTMLInputElement) => void;
+	/** Which panels are showing. The picker leads the view group. */
+	panes: Panes;
+	onPanes: (panes: Panes) => void;
+	/** Reformat the source: indentation only. */
+	onFormat: () => void;
+	onNew: () => void;
 	onExport: () => void;
 	onExportGherkin: () => void;
-	onPreview: () => void;
 	onLoadSample: () => void;
-	onSave: () => void;
-	onOpenSaved: () => void;
+	onOpenStore: () => void;
 	/** What the browser's copy last did, for the line beside the title. */
 	saveState: { at: number } | { error: string } | null;
 	onAddRule: () => void;
@@ -103,6 +125,9 @@ export function Toolbar({
 	onFlipTheme: () => void;
 	onFollowPage: () => void;
 
+	/** Whether the notation is on screen. The button is a toggle, not an action. */
+	legendShown: boolean;
+	onToggleLegend: () => void;
 	detailShown: boolean;
 	canToggleDetail: boolean;
 	onToggleAllDetail: () => void;
@@ -169,43 +194,52 @@ export function Toolbar({
 				</span>
 
 				<div className="flex flex-wrap items-center gap-1">
-					<IconButton icon="undo" label="Undo" onClick={onUndo} disabled={!canUndo} />
-					<IconButton icon="redo" label="Redo" onClick={onRedo} disabled={!canRedo} />
-
-					<span className="mx-1 h-6 w-px bg-slate-200 dark:bg-slate-700" aria-hidden="true" />
-
+					{/* What the board is made of: the rules, and the bands of the timeline. */}
 					<IconButton icon="addActivity" label="Add a rule" onClick={onAddRule} />
 				{/* Two buttons and not one with a menu: there are two kinds, the
 				    choice is the whole decision, and a sprint is added far more
 				    often than a release. */}
 				<IconButton icon="addRelease" label="Add a sprint" onClick={onAddSprint} />
 				<IconButton icon="flag" label="Add a release" onClick={onAddRelease} />
-					<IconButton icon="example" label="Load the example" onClick={onLoadSample} />
 
 					<span className="mx-1 h-6 w-px bg-slate-200 dark:bg-slate-700" aria-hidden="true" />
 
-					<IconButton icon="save" label="Save to this browser now" onClick={onSave} />
-					<IconButton icon="folder" label="Open a board saved in this browser" onClick={onOpenSaved} />
+					{/* What was just done to it. */}
+					<IconButton icon="undo" label="Undo" onClick={onUndo} disabled={!canUndo} />
+					<IconButton icon="redo" label="Redo" onClick={onRedo} disabled={!canRedo} />
 
 					<span className="mx-1 h-6 w-px bg-slate-200 dark:bg-slate-700" aria-hidden="true" />
 
-					<IconButton icon="importFile" label="Import an .examplemap file" onClick={() => fileInput.current?.click()} />
-					<input
-						ref={fileInput}
-						type="file"
-						accept={EXAMPLEMAP_ACCEPT}
-						className="sr-only"
-						onChange={(event) => {
-							const file = event.target.files?.[0];
-							if (file) onPickFile(file, event.target);
-						}}
+					{/*
+					 * The layout picker leads the view group, because it decides what
+					 * the rest are even acting on.
+					 *
+					 * It replaced the preview dialog, whose two tabs are now the left
+					 * pane's — see SourcePane. Previewing was worth a modal only while
+					 * the file was something the board *rendered* on demand; now it is
+					 * the document, on screen beside the map.
+					 */}
+					<span role="group" aria-label="Panels" className="flex items-center gap-1">
+						{PANE_CHOICES.map((choice) => (
+							<IconButton
+								key={choice.panes}
+								icon={choice.icon}
+								label={choice.label}
+								pressed={panes === choice.panes}
+								onClick={() => onPanes(choice.panes)}
+							/>
+						))}
+					</span>
+					{/* Beside the controls that decide what else is showing, because it
+					    is the same question: which of the board's own furniture is on
+					    screen. ba-ddd-mapper puts its legend toggle in the same place,
+					    for the same reason. */}
+					<IconButton
+						icon="legend"
+						label={legendShown ? 'Hide the legend' : 'Show the legend'}
+						onClick={onToggleLegend}
+						pressed={legendShown}
 					/>
-					<IconButton icon="preview" label="Preview the .examplemap and .feature files" onClick={onPreview} />
-					<IconButton icon="publish" label="Write the Gherkin feature file" onClick={onExportGherkin} />
-					<IconButton icon="exportFile" label="Export the .examplemap file" onClick={onExport} tone="primary" />
-
-					<span className="mx-1 h-6 w-px bg-slate-200 dark:bg-slate-700" aria-hidden="true" />
-
 					<IconButton
 						icon={detailShown ? 'collapseAll' : 'expandAll'}
 						label={
@@ -218,6 +252,49 @@ export function Toolbar({
 						onClick={onToggleAllDetail}
 						disabled={!canToggleDetail}
 					/>
+
+					<span className="mx-1 h-6 w-px bg-slate-200 dark:bg-slate-700" aria-hidden="true" />
+
+					{/* The file, and the browser's copy of it. */}
+					{/* First of the document buttons, because it acts on what you are
+					    typing rather than on where the file goes. */}
+					<IconButton
+						icon="format"
+						label="Format the source: indentation only, nothing moves"
+						onClick={onFormat}
+					/>
+					{/* Before Import, because it is the other way in and the one
+					    somebody with nothing yet needs. */}
+					<IconButton icon="newDoc" label="Start a new map. Nothing is lost — this one stays in the store." onClick={onNew} />
+					<IconButton icon="importFile" label="Import an .examplemap file" onClick={() => fileInput.current?.click()} />
+					<input
+						ref={fileInput}
+						type="file"
+						accept={EXAMPLEMAP_ACCEPT}
+						className="sr-only"
+						onChange={(event) => {
+							const file = event.target.files?.[0];
+							if (file) onPickFile(file, event.target);
+						}}
+					/>
+					<IconButton icon="exportFile" label="Export the .examplemap file" onClick={onExport} />
+					{/* No Save button. The board writes itself to this browser a second
+					    after it stops changing, as ba-ddd-mapper's editors do. What is
+					    left here is the way to *see* what was written. */}
+					<IconButton icon="store" label="What this browser is holding" onClick={onOpenStore} />
+					<IconButton icon="example" label="Load the example" onClick={onLoadSample} />
+
+					<span className="mx-1 h-6 w-px bg-slate-200 dark:bg-slate-700" aria-hidden="true" />
+
+					{/* The second artefact. doc-sm gives this slot to ticketing — the
+					    one control that hands work to another system. Here it is the
+					    feature file, which is the same kind of thing: what the session
+					    produced, for somebody else to run. */}
+					<IconButton icon="preview" label="Show the Gherkin feature file" onClick={onExportGherkin} />
+
+					<span className="mx-1 h-6 w-px bg-slate-200 dark:bg-slate-700" aria-hidden="true" />
+
+					{/* How the board is being looked at. None of these change the file. */}
 					<IconButton icon="zoomOut" label="Zoom out" onClick={onZoomOut} disabled={!canZoomOut} />
 					<button
 						type="button"
@@ -228,6 +305,14 @@ export function Toolbar({
 						{Math.round(zoom * 100)}%
 					</button>
 					<IconButton icon="zoomIn" label="Zoom in" onClick={onZoomIn} disabled={!canZoomIn} />
+					<IconButton
+						icon={fullscreen ? 'fullscreenExit' : 'fullscreen'}
+						label={fullscreen ? 'Leave fullscreen' : 'Fullscreen the board'}
+						onClick={onToggleFullscreen}
+					/>
+
+					<span className="mx-1 h-6 w-px bg-slate-200 dark:bg-slate-700" aria-hidden="true" />
+
 					{/*
 					 * The board's own night/day switch.
 					 *
@@ -248,12 +333,7 @@ export function Toolbar({
 						}
 						onClick={(event) => (event.shiftKey ? onFollowPage() : onFlipTheme())}
 					/>
-					<IconButton
-						icon={fullscreen ? 'fullscreenExit' : 'fullscreen'}
-						label={fullscreen ? 'Leave fullscreen' : 'Fullscreen the board'}
-						onClick={onToggleFullscreen}
-					/>
-			</div>
+				</div>
 			</div>
 		</div>
 	);

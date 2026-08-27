@@ -51,8 +51,9 @@ import {
 	storyStatusLabel,
 	type StepClause,
 	type StoryStatus,
+	type CardKind,
 } from '../../lib/examplemap/model.ts';
-import type { BoardAction, QuestionParent } from '../../lib/board/reducer.ts';
+import type { BoardAction, QuestionParent } from '../../lib/board/gestures.ts';
 import {
 	bands,
 	cellKey,
@@ -109,12 +110,17 @@ export function BoardGrid({
 	documentKey,
 	expanded,
 	onToggleDetail,
+	selected,
+	onSelect,
 }: {
 	board: BoardState;
 	dispatch: (action: BoardAction) => void;
 	zoom: number;
 	fullscreen: boolean;
 	documentKey: number;
+	/** The card whose text the source pane is emphasising, if any. */
+	selected: { kind: CardKind | 'delivery'; id: Id } | null;
+	onSelect: (pick: { kind: CardKind | 'delivery'; id: Id }) => void;
 	expanded: ReadonlySet<Id>;
 	onToggleDetail: (id: Id) => void;
 }) {
@@ -231,6 +237,8 @@ export function BoardGrid({
 							<Card
 								id={STORY_DETAIL_KEY}
 								kind="story"
+								selected={selected?.kind === 'story' && selected.id === STORY_DETAIL_KEY}
+								onSelect={() => onSelect({ kind: 'story', id: STORY_DETAIL_KEY })}
 								title={story.title}
 								notes={story.notes}
 								fixed
@@ -277,6 +285,8 @@ export function BoardGrid({
 								ids={story.questions}
 								expanded={expanded}
 								onToggleDetail={onToggleDetail}
+								selected={selected}
+								onSelect={onSelect}
 							/>
 						</div>
 						</>
@@ -292,6 +302,8 @@ export function BoardGrid({
 									key={ruleId}
 									id={ruleId}
 									kind="rule"
+									selected={selected?.kind === 'rule' && selected.id === ruleId}
+									onSelect={() => onSelect({ kind: 'rule', id: ruleId })}
 									title={rule.title}
 									notes={rule.notes}
 									position={`rule ${index + 1} of ${board.ruleOrder.length}`}
@@ -342,6 +354,8 @@ export function BoardGrid({
 									ids={rule.questionIds}
 									expanded={expanded}
 									onToggleDetail={onToggleDetail}
+									selected={selected}
+									onSelect={onSelect}
 									stacked
 								/>
 								<div className="flex gap-1 opacity-0 transition group-hover/q:opacity-100 focus-within:opacity-100 motion-reduce:transition-none">
@@ -363,6 +377,8 @@ export function BoardGrid({
 								key={`cell-${ruleId}-${band}`}
 								board={board}
 								dispatch={dispatch}
+								selected={selected}
+								onSelect={onSelect}
 								ruleId={ruleId}
 								band={band}
 								column={columnOfRule(index)}
@@ -401,6 +417,8 @@ function ExampleCell({
 	row,
 	expanded,
 	onToggleDetail,
+	selected,
+	onSelect,
 }: {
 	board: BoardState;
 	dispatch: (action: BoardAction) => void;
@@ -410,6 +428,9 @@ function ExampleCell({
 	row: number;
 	expanded: ReadonlySet<Id>;
 	onToggleDetail: (id: Id) => void;
+	/** Passed through to the cards: a cell is not itself selectable. */
+	selected: { kind: CardKind | 'delivery'; id: Id } | null;
+	onSelect: (pick: { kind: CardKind | 'delivery'; id: Id }) => void;
 }) {
 	const rule = board.rules[ruleId];
 	const key = cellKey(ruleId, band);
@@ -437,6 +458,8 @@ function ExampleCell({
 								<Card
 									id={id}
 									kind="example"
+									selected={selected?.kind === 'example' && selected.id === id}
+									onSelect={() => onSelect({ kind: 'example', id })}
 									title={card.title}
 									notes={card.notes}
 									position={`${index + 1} of ${ids.length} under "${rule.title}", ${where}`}
@@ -482,6 +505,8 @@ function QuestionStrip({
 	ids,
 	expanded,
 	onToggleDetail,
+	selected,
+	onSelect,
 	stacked = false,
 }: {
 	board: BoardState;
@@ -490,6 +515,9 @@ function QuestionStrip({
 	ids: readonly Id[];
 	expanded: ReadonlySet<Id>;
 	onToggleDetail: (id: Id) => void;
+	/** Passed through to the cards: a strip is not itself selectable. */
+	selected: { kind: CardKind | 'delivery'; id: Id } | null;
+	onSelect: (pick: { kind: CardKind | 'delivery'; id: Id }) => void;
 	stacked?: boolean;
 }) {
 	const key = 'story' in parent ? 'questions:story' : `questions:${parent.ruleId}`;
@@ -514,6 +542,8 @@ function QuestionStrip({
 							<Card
 								id={id}
 								kind="question"
+								selected={selected?.kind === 'question' && selected.id === id}
+								onSelect={() => onSelect({ kind: 'question', id })}
 								title={card.title}
 								notes={card.notes}
 								position={`${index + 1} of ${ids.length}`}
