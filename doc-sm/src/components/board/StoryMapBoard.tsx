@@ -42,6 +42,7 @@ import { sortableKeyboardCoordinates } from '@dnd-kit/sortable';
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { clearFileInput, downloadText, filenameFor, readTextFile } from '../../lib/files.ts';
 import * as storage from '../../lib/storage.ts';
+import { format as formatSource } from '../../lib/format.ts';
 import {
 	activityPositionOf,
 	deliveryPositionOf,
@@ -76,7 +77,7 @@ import { deliveryKindLabel, effectiveSpace, ticketKindOf, type StoryStatus } fro
 import { parse } from '../../lib/storymap/parser.ts';
 import type { StoryMapDocument } from '../../lib/storymap/model.ts';
 import { StoryMapParseError, type Problem } from '../../lib/storymap/problems.ts';
-import { EMPTY_SOURCE, SAMPLE_SOURCE } from '../../lib/storymap/sample.ts';
+import { EMPTY_SOURCE, freshSource, SAMPLE_SOURCE } from '../../lib/storymap/sample.ts';
 
 import { BoardGrid } from './BoardGrid.tsx';
 import { BASE_FONT } from './BoardGrid.tsx';
@@ -695,6 +696,40 @@ export default function StoryMapBoard({
 	}, []);
 
 	/**
+	 * Reformat the source: indentation only, nothing moves.
+	 *
+	 * Through `edit` rather than around it, so it lands on the undo stack like
+	 * any other change to the text — a reformat you cannot take back is a poor
+	 * thing to offer on a file somebody has laid out by hand.
+	 *
+	 * Refused when the text does not lex. `format` returns null there, and the
+	 * reason is in its own header: an unterminated string would have every line
+	 * after it re-indented as that string's continuation.
+	 */
+	const reformat = useCallback(() => {
+		const tidied = formatSource(source);
+		if (tidied !== null && tidied !== source) edit(tidied);
+	}, [source]);
+
+	/**
+	 * A map that did not exist a second ago.
+	 *
+	 * **Nothing is lost by pressing it.** The current one is written to this
+	 * browser first — `flush`, rather than trusting the debounce — and the new
+	 * one takes a name nothing is using, so pressing it twice leaves two drafts
+	 * rather than one overwritten. Both are in the store panel.
+	 *
+	 * ba-ddd-mapper's button, and its rule.
+	 */
+	const startFresh = useCallback(() => {
+		flush();
+		const taken = new Set(storage.inventory().boards.map((entry) => entry.title));
+		let title = 'New map';
+		for (let n = 2; taken.has(title); n += 1) title = `New map ${n}`;
+		load(freshSource(title));
+	}, [flush, load]);
+
+	/**
 	 * Reopen whatever this browser had open last.
 	 *
 	 * Once, on mount, and only when there is something to reopen. This is the
@@ -938,6 +973,8 @@ export default function StoryMapBoard({
 					clearFileInput(input);
 					load(text);
 				}}
+				onFormat={reformat}
+				onNew={startFresh}
 				onExport={exportFile}
 				panes={panes}
 				onPanes={(next) => {

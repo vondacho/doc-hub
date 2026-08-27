@@ -49,6 +49,8 @@ export function Toolbar({
 	onPickFile,
 	panes,
 	onPanes,
+	onFormat,
+	onNew,
 	onExport,
 	onPublish,
 	publishCount,
@@ -96,6 +98,9 @@ export function Toolbar({
 	/** Which panels are showing. The picker leads the view group. */
 	panes: Panes;
 	onPanes: (panes: Panes) => void;
+	/** Reformat the source: indentation only. */
+	onFormat: () => void;
+	onNew: () => void;
 	onExport: () => void;
 	onPublish: () => void;
 	/** How many stories publishing would raise a ticket for. */
@@ -273,6 +278,16 @@ export function Toolbar({
 					<span className="mx-1 h-6 w-px bg-slate-200 dark:bg-slate-700" aria-hidden="true" />
 
 					{/* The file, and the browser's copy of it. */}
+					{/* First of the document buttons, because it acts on what you are
+					    typing rather than on where the file goes. */}
+					<IconButton
+						icon="format"
+						label="Format the source: indentation only, nothing moves"
+						onClick={onFormat}
+					/>
+					{/* Before Import, because it is the other way in and the one
+					    somebody with nothing yet needs. */}
+					<IconButton icon="newDoc" label="Start a new map. Nothing is lost — this one stays in the store." onClick={onNew} />
 					<IconButton
 						icon="importFile"
 						label="Import a .storymap file"

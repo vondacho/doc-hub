@@ -94,7 +94,7 @@ storymap "Doc-Hub Onboarding" {
         want "to narrow the catalogue to one domain"
         so "I review only the products my portfolio covers"
         note "Domain comes from the registry entry, not a\\
-             free-text field that anyone can mistype."
+              free-text field that anyone can mistype."
       }
       story "Saved searches" {
         as "Support engineer"
@@ -179,3 +179,14 @@ storymap "Doc-Hub Onboarding" {
 export const EMPTY_SOURCE = `storymap "Untitled story map" {
 }
 `;
+
+/**
+ * A fresh document under a name of its own.
+ *
+ * What the New button opens. `EMPTY_SOURCE` is the same thing under the default
+ * name; this is that with a title, so pressing New twice leaves two drafts in
+ * the store rather than one overwritten.
+ */
+export function freshSource(title: string): string {
+	return `storymap ${JSON.stringify(title)} {\n}\n`;
+}

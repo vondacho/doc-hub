@@ -99,6 +99,14 @@ export const icons = {
 	 * An arc rather than an ellipse element, because every icon here is one path.
 	 */
 	store: 'M4 6c0-1.1 3.6-2 8-2s8 .9 8 2-3.6 2-8 2-8-.9-8-2M4 6v12c0 1.1 3.6 2 8 2s8-.9 8-2V6M4 12c0 1.1 3.6 2 8 2s8-.9 8-2',
+	/*
+	 * Lines stepped in from a margin: the shape of an indented block, which is
+	 * the whole of what Format does to the text. ba-ddd-mapper's glyph, redrawn
+	 * on this grid.
+	 */
+	format: 'M4 5h16M8 9.5h12M8 14.5h12M4 19h16M5.5 9.5v5',
+	/** A blank sheet with a plus: a document that does not exist yet. */
+	newDoc: 'M6 3h8l4 4v14H6zM14 3v4h4M12 11v6M9 14h6',
 	panesBoth: 'M3 5h18v14H3zM12 5v14',
 	panesSource: 'M3 5h18v14H3zM6 9h12M6 12h9M6 15h12',
 	panesBoard: 'M3 5h18v14H3zM6 9h5v5H6zM14 9h4v4h-4z',
