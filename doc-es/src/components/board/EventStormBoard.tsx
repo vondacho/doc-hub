@@ -28,6 +28,7 @@ import { sortableKeyboardCoordinates } from '@dnd-kit/sortable';
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { clearFileInput, downloadText, filenameFor, readTextFile } from '../../lib/files.ts';
 import * as storage from '../../lib/storage.ts';
+import { format as formatSource } from '../../lib/format.ts';
 import { lanePositionOf, positionOf, toBoard } from '../../lib/board/convert.ts';
 import { applyAction, isEdit } from '../../lib/board/apply.ts';
 import {
@@ -45,7 +46,7 @@ import { cardLabel, type CardKind, type EventStormDocument } from '../../lib/eve
 import { Legend } from './Legend.tsx';
 import { parse } from '../../lib/eventstorm/parser.ts';
 import { EventStormParseError, type Problem } from '../../lib/eventstorm/problems.ts';
-import { SAMPLE_SOURCE } from '../../lib/eventstorm/sample.ts';
+import { SAMPLE_SOURCE, freshSource } from '../../lib/eventstorm/sample.ts';
 import { EMPTY_SOURCE } from '../../lib/eventstorm/sample.ts';
 import { BASE_FONT, BoardGrid } from './BoardGrid.tsx';
 import { StoreState } from './StoreState.tsx';
@@ -373,6 +374,40 @@ export default function EventStormBoard({
 		return () => window.removeEventListener('pagehide', onHide);
 	}, []);
 
+	/**
+	 * Reformat the source: indentation only, nothing moves.
+	 *
+	 * Through `edit` rather than around it, so it lands on the undo stack like
+	 * any other change to the text — a reformat you cannot take back is a poor
+	 * thing to offer on a file somebody has laid out by hand.
+	 *
+	 * Refused when the text does not lex. `format` returns null there, and the
+	 * reason is in its own header: an unterminated string would have every line
+	 * after it re-indented as that string's continuation.
+	 */
+	const reformat = useCallback(() => {
+		const tidied = formatSource(source);
+		if (tidied !== null && tidied !== source) edit(tidied);
+	}, [source]);
+
+	/**
+	 * A wall that did not exist a second ago.
+	 *
+	 * **Nothing is lost by pressing it.** The current one is written to this
+	 * browser first — `flush`, rather than trusting the debounce — and the new
+	 * one takes a name nothing is using, so pressing it twice leaves two drafts
+	 * rather than one overwritten. Both are in the store panel.
+	 *
+	 * ba-ddd-mapper's button, and its rule.
+	 */
+	const startFresh = useCallback(() => {
+		flush();
+		const taken = new Set(storage.inventory().boards.map((entry) => entry.title));
+		let title = 'New wall';
+		for (let n = 2; taken.has(title); n += 1) title = `New wall ${n}`;
+		load(freshSource(title));
+	}, [flush, load]);
+
 	useEffect(() => {
 		const last = storage.lastOpened();
 		if (last === null) return;
@@ -657,6 +692,8 @@ export default function EventStormBoard({
 					clearFileInput(input);
 					load(text);
 				}}
+				onFormat={reformat}
+				onNew={startFresh}
 				onExport={exportFile}
 				onOpenStore={() => {
 					setStore(storage.inventory());

@@ -53,7 +53,7 @@ eventstorm "Ordering a pizza" {
     event "Pizza added to the basket" @2
     event "Basket emptied and started again" @2 {
       note "Happens more than anybody expected. Worth\\
-           understanding before it is designed away."
+            understanding before it is designed away."
     }
     event "Order placed" @3
     event "Pizza delivered" @8
@@ -94,3 +94,14 @@ eventstorm "Ordering a pizza" {
 export const EMPTY_SOURCE = `eventstorm "Untitled event storm" {
 }
 `;
+
+/**
+ * A fresh document under a name of its own.
+ *
+ * What the New button opens. `EMPTY_SOURCE` is the same thing under the default
+ * name; this is that with a title, so pressing New twice leaves two drafts in
+ * the store rather than one overwritten.
+ */
+export function freshSource(title: string): string {
+	return `eventstorm ${JSON.stringify(title)} {\n}\n`;
+}
