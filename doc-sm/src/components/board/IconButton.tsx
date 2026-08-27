@@ -12,6 +12,18 @@
  * pointer resting on the button. So the tooltip is a real element, revealed by
  * `group-hover` *and* `group-focus-visible`, and marked `aria-hidden` because
  * the accessible name already says the same words.
+ *
+ * ## The hub's one icon-button metric
+ *
+ * The same four numbers hold here, in the other two boards and in
+ * ba-ddd-mapper's `src/components/ui/IconButton.tsx`, so that moving between
+ * the five tools does not move the controls under the pointer: a 36px box for a
+ * toolbar, a 28px box for a control that sits *on* a canvas or a rail, a 21px
+ * glyph in the first and a 16px glyph in the second.
+ *
+ * The glyph was 18px until the estate settled on one number. It is the only one
+ * of the four that moved, and it moved here rather than in the mapper because
+ * the mapper's is the size somebody asked for.
  */
 
 import type { MouseEvent } from 'react';
@@ -31,11 +43,23 @@ const TONES: Record<IconButtonTone, string> = {
 	danger: 'border border-transparent hover:text-critical',
 };
 
+/*
+ * What a toggle looks like when it is on.
+ *
+ * It replaces the tone rather than adding to it: the only pressed buttons are
+ * plain ones, and a filled `primary` that could also be pressed would be saying
+ * two things with one fill. The treatment is ba-ddd-mapper's, in this palette —
+ * the same control should read the same in both lineages.
+ */
+const PRESSED =
+	'border border-brand bg-white text-brand dark:border-sky-400 dark:bg-night-raised dark:text-sky-400';
+
 export function IconButton({
 	icon,
 	label,
 	onClick,
 	disabled = false,
+	pressed,
 	tone = 'plain',
 	size = 'md',
 	tooltip = size === 'sm' ? 'native' : 'element',
@@ -53,6 +77,15 @@ export function IconButton({
 	 */
 	onClick: (event: MouseEvent<HTMLButtonElement>) => void;
 	disabled?: boolean;
+	/**
+	 * Omitted by the buttons that *do* something.
+	 *
+	 * Present only on the ones that put the bar into a state — the legend toggle
+	 * is the first — where a reader has to be able to see which state that is.
+	 * `aria-pressed` says the same thing the fill says, and a toggle that only
+	 * said it in colour would be saying it to nobody using a screen reader.
+	 */
+	pressed?: boolean;
 	tone?: IconButtonTone;
 	size?: 'sm' | 'md';
 	/**
@@ -81,10 +114,13 @@ export function IconButton({
 				onClick={onClick}
 				disabled={disabled}
 				aria-label={label}
+				aria-pressed={pressed}
 				title={tooltip === 'native' ? label : undefined}
-				className={`inline-flex ${box} items-center justify-center rounded-full transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:cursor-not-allowed disabled:opacity-40 motion-reduce:transition-none ${TONES[tone]}`}
+				className={`inline-flex ${box} items-center justify-center rounded-full transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:cursor-not-allowed disabled:opacity-40 motion-reduce:transition-none ${
+					pressed ? PRESSED : TONES[tone]
+				}`}
 			>
-				<Icon name={icon} className={size === 'sm' ? 'h-4 w-4' : 'h-[1.125rem] w-[1.125rem]'} />
+				<Icon name={icon} className={size === 'sm' ? 'h-4 w-4' : 'h-[1.3125rem] w-[1.3125rem]'} />
 			</button>
 
 			{/* No `role="tooltip"`: the accessible name already carries these words,

@@ -114,6 +114,36 @@ export function isDeliveryKind(value: unknown): value is DeliveryKind {
  * fact, and the copy is what drifts. No dates either: the tracker holds the
  * calendar, this holds the sequence.
  */
+/**
+ * A half-open byte range in the source, and where it starts in human terms.
+ *
+ * The reason this exists is the reason every gesture on this board is a splice:
+ * the `.storymap` file is the artefact, it lands in a pull request, and
+ * everything outside the edited range has to come back byte-identical —
+ * comments, blank lines and somebody's own alignment included. A board that
+ * re-serialised itself after every drag would rewrite the whole file each time,
+ * and the diff would be unreadable.
+ *
+ * `start` and `end` are 0-based indices into the source. `line` and `column` are
+ * 1-based and are what the problems panel shows.
+ */
+export interface Span {
+	readonly start: number;
+	readonly end: number;
+	readonly line: number;
+	readonly column: number;
+}
+
+/** Where the three annotations sit, so each can be rewritten on its own. */
+export interface AnnotationSpans {
+	/** `@MVP` — the release a story is in. Null when it names none. */
+	readonly release: Span | null;
+	/** `#CLONB-42` — the ticket it is linked to. */
+	readonly ticket: Span | null;
+	/** `~open` and friends. Null on a card left at the default. */
+	readonly status: Span | null;
+}
+
 export interface DeliveryNode {
 	readonly title: string;
 	readonly kind: DeliveryKind;
@@ -132,6 +162,15 @@ export interface DeliveryNode {
 	 */
 	readonly ticket: string | null;
 	readonly notes: readonly string[];
+	/** The whole declaration, keyword to closing brace. */
+	readonly span: Span;
+	/** The `release` or `sprint` keyword alone, for a change of kind. */
+	readonly kindSpan: Span;
+	readonly titleSpan: Span;
+	readonly annotations: AnnotationSpans;
+	/** The `{` that opens it, or -1 when it was written without a body. */
+	readonly openBrace: number;
+	readonly notesSpan: Span | null;
 }
 
 /**
@@ -167,6 +206,13 @@ export interface ActivityNode {
 	 */
 	readonly personas: readonly string[];
 	readonly steps: readonly StepNode[];
+	readonly span: Span;
+	readonly titleSpan: Span;
+	readonly annotations: AnnotationSpans;
+	/** The `persona` line, or null when the activity names none. */
+	readonly personasSpan: Span | null;
+	readonly openBrace: number;
+	readonly notesSpan: Span | null;
 }
 
 /**
@@ -186,6 +232,11 @@ export interface StepNode {
 	readonly ticket: string | null;
 	readonly status: StoryStatus;
 	readonly stories: readonly StoryNode[];
+	readonly span: Span;
+	readonly titleSpan: Span;
+	readonly annotations: AnnotationSpans;
+	readonly openBrace: number;
+	readonly notesSpan: Span | null;
 }
 
 /**
@@ -249,6 +300,16 @@ export interface StoryNode {
 	 * last heard from it.
 	 */
 	readonly status: StoryStatus;
+	readonly span: Span;
+	readonly titleSpan: Span;
+	readonly annotations: AnnotationSpans;
+	/** The `persona` line inside the story, or null when it names none. */
+	readonly personaSpan: Span | null;
+	/** The `want …` line, and the `so that …` line. */
+	readonly wantSpan: Span | null;
+	readonly soThatSpan: Span | null;
+	readonly openBrace: number;
+	readonly notesSpan: Span | null;
 }
 
 /**
@@ -291,6 +352,17 @@ export interface StoryMapDocument {
 	/** The time axis, in order, earliest first. */
 	readonly deliveries: readonly DeliveryNode[];
 	readonly activities: readonly ActivityNode[];
+
+	readonly titleSpan: Span;
+	/** The whole `product "…"` line, or null when the file has none. */
+	readonly productSpan: Span | null;
+	/** The whole `space "…"` line, or null. */
+	readonly spaceSpan: Span | null;
+	/** The `{` that opens the map, so a first activity knows where to land. */
+	readonly openBrace: number;
+	readonly notesSpan: Span | null;
+	/** The text this was parsed from, verbatim. Every edit splices into it. */
+	readonly source: string;
 }
 
 /**
@@ -451,7 +523,29 @@ export function effectiveSpace(map: { space: string | null; product: string | nu
 	return map.space ?? map.product;
 }
 
+/**
+ * A span pointing at nothing.
+ *
+ * For a document that was never in a file. An edit spliced at an empty span
+ * would write to the top of whatever text was on screen, so `edit.ts` checks for
+ * a document with no `source` before it splices at all.
+ */
+export const NOWHERE: Span = { start: 0, end: 0, line: 1, column: 1 };
+
 /** The empty document a fresh board starts from. */
 export function emptyDocument(title = 'Untitled story map'): StoryMapDocument {
-	return { title, product: null, space: null, notes: [], deliveries: [], activities: [] };
+	return {
+		title,
+		titleSpan: NOWHERE,
+		product: null,
+		productSpan: null,
+		space: null,
+		spaceSpan: null,
+		notes: [],
+		notesSpan: null,
+		deliveries: [],
+		activities: [],
+		openBrace: -1,
+		source: '',
+	};
 }

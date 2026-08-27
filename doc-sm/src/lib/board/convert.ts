@@ -12,7 +12,6 @@
  * nothing: the ids never leave the tab.
  */
 
-import { parse } from '../storymap/parser.ts';
 import type {
 	ActivityNode,
 	StepNode,
@@ -32,17 +31,72 @@ import {
 	type Story,
 } from './state.ts';
 
-let counter = 0;
-
 /** `a1`, `p3`, `y7`, `r2` — the prefix makes a stray id readable in a log. */
-export function nextId(prefix: 'a' | 'p' | 'y' | 'r'): Id {
-	counter += 1;
-	return `${prefix}${counter}`;
+/**
+ * ## Ids are positions, and that is the whole design
+ *
+ * The text is the source of truth, and text has no id column. A card's identity
+ * is therefore *where it is written*: `a2` is the third activity, `a2p0` its
+ * first step, `a2p0y1` the second story inside that step, `d0` the first band.
+ *
+ * **A reparse yields the same id for a card nobody moved**, which is what lets
+ * the board keep React keys, an open card menu and a drag in flight across the
+ * keystroke-by-keystroke reparsing the editor pane causes. A counter would mint
+ * fresh ids on every parse and the board would remount itself as you typed.
+ *
+ * **An id decodes back to a position**, which is how a gesture finds the node
+ * whose span it is about to splice — see `edit.ts`. No lookup table, and no
+ * second source of identity to drift.
+ *
+ * The cost, accepted deliberately: ids shift when text above them changes. Move
+ * the second activity and everything below it is renumbered. Nothing may hold an
+ * id across an edit and expect it to still mean the same card.
+ */
+
+/** `d0` — the first band of the timeline. */
+export function deliveryId(index: number): Id {
+	return `d${index}`;
 }
 
-/** Only for tests and for a deterministic empty board. Never call it mid-session. */
-export function resetIds(): void {
-	counter = 0;
+/** `a2` — the third activity, counting from the top of the file. */
+export function activityId(index: number): Id {
+	return `a${index}`;
+}
+
+/** `a2p0` — the first step written inside the third activity. */
+export function stepId(activity: number, step: number): Id {
+	return `a${activity}p${step}`;
+}
+
+/** `a2p0y1` — the second story written inside that step. */
+export function storyId(activity: number, step: number, story: number): Id {
+	return `a${activity}p${step}y${story}`;
+}
+
+/** Where a story is written, or null if the id names no story. */
+export function storyPositionOf(id: Id): { activity: number; step: number; story: number } | null {
+	const found = /^a(\d+)p(\d+)y(\d+)$/.exec(id);
+	return found === null
+		? null
+		: { activity: Number(found[1]), step: Number(found[2]), story: Number(found[3]) };
+}
+
+/** Where a step is written, or null. */
+export function stepPositionOf(id: Id): { activity: number; step: number } | null {
+	const found = /^a(\d+)p(\d+)$/.exec(id);
+	return found === null ? null : { activity: Number(found[1]), step: Number(found[2]) };
+}
+
+/** Which activity an id names, or null. */
+export function activityPositionOf(id: Id): number | null {
+	const found = /^a(\d+)$/.exec(id);
+	return found === null ? null : Number(found[1]);
+}
+
+/** Which delivery an id names, or null. */
+export function deliveryPositionOf(id: Id): number | null {
+	const found = /^d(\d+)$/.exec(id);
+	return found === null ? null : Number(found[1]);
 }
 
 export function toBoard(document: StoryMapDocument): BoardState {
@@ -51,8 +105,8 @@ export function toBoard(document: StoryMapDocument): BoardState {
 	/** Delivery title → id. Sound because duplicate titles are a parse error. */
 	const idOfDelivery = new Map<string, Id>();
 
-	for (const delivery of document.deliveries) {
-		const id = nextId('r');
+	document.deliveries.forEach((delivery, deliveryIndex) => {
+		const id = deliveryId(deliveryIndex);
 		deliveries[id] = {
 			id,
 			title: delivery.title,
@@ -62,7 +116,7 @@ export function toBoard(document: StoryMapDocument): BoardState {
 		};
 		deliveryOrder.push(id);
 		idOfDelivery.set(delivery.title, id);
-	}
+	});
 
 	const activities: Record<Id, Activity> = {};
 	const activityOrder: Id[] = [];
@@ -70,25 +124,25 @@ export function toBoard(document: StoryMapDocument): BoardState {
 	const stories: Record<Id, Story> = {};
 	const cells: Record<CellKey, Id[]> = {};
 
-	for (const activity of document.activities as readonly ActivityNode[]) {
-		const activityId = nextId('a');
+	(document.activities as readonly ActivityNode[]).forEach((activity, activityIndex) => {
+		const aid = activityId(activityIndex);
 		const stepOrder: Id[] = [];
 
-		for (const step of activity.steps as readonly StepNode[]) {
-			const stepId = nextId('p');
-			steps[stepId] = {
-				id: stepId,
+		(activity.steps as readonly StepNode[]).forEach((step, stepIndex) => {
+			const pid = stepId(activityIndex, stepIndex);
+			steps[pid] = {
+				id: pid,
 				title: step.title,
 				notes: [...step.notes],
 				ticket: step.ticket,
 				status: step.status,
 			};
-			stepOrder.push(stepId);
+			stepOrder.push(pid);
 
-			for (const story of step.stories as readonly StoryNode[]) {
-				const storyId = nextId('y');
-				stories[storyId] = {
-					id: storyId,
+			(step.stories as readonly StoryNode[]).forEach((story, storyIndex) => {
+				const yid = storyId(activityIndex, stepIndex, storyIndex);
+				stories[yid] = {
+					id: yid,
 					title: story.title,
 					notes: [...story.notes],
 					ticket: story.ticket,
@@ -103,13 +157,13 @@ export function toBoard(document: StoryMapDocument): BoardState {
 				// would be a bug in the parser, not bad input. Falling back to
 				// below-the-line keeps the board consistent either way.
 				const band = story.release === null ? UNASSIGNED : idOfDelivery.get(story.release) ?? UNASSIGNED;
-				const key = cellKey(stepId, band);
-				(cells[key] ??= []).push(storyId);
-			}
-		}
+				const key = cellKey(pid, band);
+				(cells[key] ??= []).push(yid);
+			});
+		});
 
-		activities[activityId] = {
-			id: activityId,
+		activities[aid] = {
+			id: aid,
 			title: activity.title,
 			notes: [...activity.notes],
 			ticket: activity.ticket,
@@ -117,8 +171,8 @@ export function toBoard(document: StoryMapDocument): BoardState {
 			personas: [...activity.personas],
 			stepOrder,
 		};
-		activityOrder.push(activityId);
-	}
+		activityOrder.push(aid);
+	});
 
 	return {
 		...emptyBoard(document.title),
@@ -132,95 +186,5 @@ export function toBoard(document: StoryMapDocument): BoardState {
 		steps,
 		stories,
 		cells,
-	};
-}
-
-/**
- * Rebuild a board from text the visitor edited, keeping the current product.
- *
- * The whole board is replaced except for one field, and the exception is the
- * point. The product is owned by the picker, which chose it from the registry;
- * text typed into a box is validated against nothing, so letting it win would
- * put an unregistered or misspelled shortname into a file with nothing to catch
- * it. The `product` line still round-trips through the text like everything
- * else — it is read, and then ignored.
- *
- * A `.storymap` file *on disk* is a different case and is treated differently:
- * there the product comes from the file, because naming its product is how the
- * shortname travels between people at all. See the import path in
- * StoryMapBoard.tsx.
- *
- * @throws {StoryMapParseError} when the text does not parse; the caller shows
- *         the problems and leaves the board alone.
- */
-export function applyText(source: string, current: BoardState): BoardState {
-	const parsed = parse(source);
-	// Ids are per-document and never leave the tab, so restarting the counter
-	// keeps them short and keeps this a deterministic function of its inputs.
-	resetIds();
-	return { ...toBoard(parsed), product: current.product };
-}
-
-export function toDocument(board: BoardState): StoryMapDocument {
-	return {
-		title: board.title,
-		product: board.product,
-		space: board.space,
-		notes: [...board.notes],
-		deliveries: board.deliveryOrder.flatMap((id) => {
-			const delivery = board.deliveries[id];
-			return delivery
-				? [
-						{
-							title: delivery.title,
-							kind: delivery.kind,
-							ticket: delivery.ticket,
-							notes: [...delivery.notes],
-						},
-					]
-				: [];
-		}),
-		activities: board.activityOrder.flatMap((activityId) => {
-			const activity = board.activities[activityId];
-			if (!activity) return [];
-			return [{
-				title: activity.title,
-				notes: [...activity.notes],
-				ticket: activity.ticket,
-				status: activity.status,
-				personas: [...activity.personas],
-				steps: activity.stepOrder.flatMap((stepId) => {
-					const step = board.steps[stepId];
-					if (!step) return [];
-					return [{
-						title: step.title,
-						notes: [...step.notes],
-						ticket: step.ticket,
-						status: step.status,
-						// Walk the bands in order so priority within a step reads
-						// top band first — the same order the board shows.
-						stories: [...board.deliveryOrder, UNASSIGNED].flatMap((band) =>
-							(board.cells[cellKey(stepId, band)] ?? []).flatMap((storyId) => {
-								const story = board.stories[storyId];
-								if (!story) return [];
-								const release = band === UNASSIGNED ? null : board.deliveries[band]?.title ?? null;
-								return [
-									{
-										title: story.title,
-										notes: [...story.notes],
-										release,
-										ticket: story.ticket,
-										status: story.status,
-										persona: story.persona,
-										want: story.want,
-										soThat: story.soThat,
-									},
-								];
-							}),
-						),
-					}];
-				}),
-			}];
-		}),
 	};
 }

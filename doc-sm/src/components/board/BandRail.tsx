@@ -27,7 +27,7 @@
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useEffect, useId, useRef, useState } from 'react';
-import type { BoardAction } from '../../lib/board/reducer.ts';
+import type { BoardAction } from '../../lib/board/gestures.ts';
 import { deliveryKindLabel, type DeliveryKind } from '../../lib/storymap/model.ts';
 import type { BoardState, Id } from '../../lib/board/state.ts';
 import { IconButton } from './IconButton.tsx';
@@ -36,10 +36,15 @@ export function BandRail({
 	board,
 	dispatch,
 	firstRow,
+	selected,
+	onSelect,
 }: {
 	board: BoardState;
 	dispatch: (action: BoardAction) => void;
 	firstRow: number;
+	/** The band whose declaration the source pane is emphasising, if any. */
+	selected: Id | null;
+	onSelect: (id: Id) => void;
 }) {
 	return (
 		<>
@@ -50,6 +55,8 @@ export function BandRail({
 						board={board}
 						dispatch={dispatch}
 						deliveryId={deliveryId}
+						selected={selected === deliveryId}
+						onSelect={() => onSelect(deliveryId)}
 						index={index}
 						row={firstRow + index}
 					/>
@@ -73,12 +80,17 @@ function BandLabel({
 	board,
 	dispatch,
 	deliveryId,
+	selected,
+	onSelect,
 	index,
 	row,
 }: {
 	board: BoardState;
 	dispatch: (action: BoardAction) => void;
 	deliveryId: Id;
+	/** Whether the source pane is emphasising this band's declaration. */
+	selected: boolean;
+	onSelect: () => void;
 	index: number;
 	row: number;
 }) {
@@ -114,7 +126,10 @@ function BandLabel({
 				transition,
 				opacity: isDragging ? 0.35 : undefined,
 			}}
-			className="group sticky left-0 z-[4] rounded-[0.4em] bg-white px-[0.5em] py-[0.4em] dark:bg-night-raised"
+			onClick={onSelect}
+			className={`group sticky left-0 z-[4] rounded-[0.4em] bg-white px-[0.5em] py-[0.4em] dark:bg-night-raised ${
+				selected ? 'ring-2 ring-brand ring-inset dark:ring-sky-400' : ''
+			}`}
 		>
 			{editing ? (
 				<input

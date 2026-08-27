@@ -16,8 +16,24 @@
 import { useRef, useState } from 'react';
 import { STORYMAP_ACCEPT } from '../../lib/files.ts';
 import type { Product } from '../../lib/products.ts';
+import type { Panes } from '../../lib/storage.ts';
 import { IconButton } from './IconButton.tsx';
+import type { IconName } from '../../lib/board/icons.ts';
 import { ProductPicker } from './ProductPicker.tsx';
+
+/**
+ * The three layouts, in the order the picker offers them.
+ *
+ * Left to right as the panes sit on screen: source alone, source beside the map,
+ * map alone. The middle button is the default, which puts the one most people
+ * stay on in the middle of the three rather than at the head of them — the
+ * picker reads as a slider between two extremes, which is what it is.
+ */
+const PANE_CHOICES: readonly { panes: Panes; icon: IconName; label: string }[] = [
+	{ panes: 'source', icon: 'panesSource', label: 'Show the source only' },
+	{ panes: 'both', icon: 'panesBoth', label: 'Show the source and the map' },
+	{ panes: 'board', icon: 'panesBoard', label: 'Show the map only' },
+];
 
 export function Toolbar({
 	title,
@@ -31,8 +47,9 @@ export function Toolbar({
 	canRedo,
 	onTitle,
 	onPickFile,
+	panes,
+	onPanes,
 	onExport,
-	onPreview,
 	onPublish,
 	publishCount,
 	publishReason,
@@ -40,8 +57,7 @@ export function Toolbar({
 	spacePlaceholder,
 	onSpace,
 	onLoadSample,
-	onSave,
-	onOpenSaved,
+	onOpenStore,
 	saveState,
 	onAddActivity,
 	onAddSprint,
@@ -60,6 +76,8 @@ export function Toolbar({
 	themePinned,
 	onFlipTheme,
 	onFollowPage,
+	legendShown,
+	onToggleLegend,
 	detailShown,
 	canToggleDetail,
 	onToggleAllDetail,
@@ -75,8 +93,10 @@ export function Toolbar({
 	canRedo: boolean;
 	onTitle: (title: string) => void;
 	onPickFile: (file: File, input: HTMLInputElement) => void;
+	/** Which panels are showing. The picker leads the view group. */
+	panes: Panes;
+	onPanes: (panes: Panes) => void;
 	onExport: () => void;
-	onPreview: () => void;
 	onPublish: () => void;
 	/** How many stories publishing would raise a ticket for. */
 	publishCount: number;
@@ -87,8 +107,7 @@ export function Toolbar({
 	spacePlaceholder: string;
 	onSpace: (space: string | null) => void;
 	onLoadSample: () => void;
-	onSave: () => void;
-	onOpenSaved: () => void;
+	onOpenStore: () => void;
 	/** What the browser's copy last did, for the line beside the title. */
 	saveState: { at: number } | { error: string } | null;
 	onAddActivity: () => void;
@@ -113,6 +132,9 @@ export function Toolbar({
 	onFollowPage: () => void;
 
 	/** True when at least one card's detail is open. */
+	/** Whether the notation is on screen. The button is a toggle, not an action. */
+	legendShown: boolean;
+	onToggleLegend: () => void;
 	detailShown: boolean;
 	/** False when nothing on the board has any detail to show. */
 	canToggleDetail: boolean;
@@ -187,26 +209,70 @@ export function Toolbar({
 				    then things that add to the board, then the file. One unbroken run of
 				    eight identical circles would be a worse toolbar than eight pills. */}
 				<div className="flex flex-wrap items-center gap-1">
-					<IconButton icon="undo" label="Undo" onClick={onUndo} disabled={!canUndo} />
-					<IconButton icon="redo" label="Redo" onClick={onRedo} disabled={!canRedo} />
-
-					<span className="mx-1 h-6 w-px bg-slate-200 dark:bg-slate-700" aria-hidden="true" />
-
+					{/* What the board is made of: the backbone, and the bands of the timeline. */}
 					<IconButton icon="addActivity" label="Add activity" onClick={onAddActivity} />
 					{/* Two buttons and not one with a menu: there are two kinds, the
 					    choice is the whole decision, and a sprint is added far more
 					    often than a release. */}
 					<IconButton icon="addRelease" label="Add a sprint" onClick={onAddSprint} />
 					<IconButton icon="flag" label="Add a release" onClick={onAddRelease} />
-					<IconButton icon="example" label="Load the example" onClick={onLoadSample} />
 
 					<span className="mx-1 h-6 w-px bg-slate-200 dark:bg-slate-700" aria-hidden="true" />
 
-					<IconButton icon="save" label="Save to this browser now" onClick={onSave} />
-					<IconButton icon="folder" label="Open a board saved in this browser" onClick={onOpenSaved} />
+					{/* What was just done to it. */}
+					<IconButton icon="undo" label="Undo" onClick={onUndo} disabled={!canUndo} />
+					<IconButton icon="redo" label="Redo" onClick={onRedo} disabled={!canRedo} />
 
 					<span className="mx-1 h-6 w-px bg-slate-200 dark:bg-slate-700" aria-hidden="true" />
 
+					{/*
+					 * The layout picker leads the view group, because it decides what
+					 * the rest of these are even acting on. ba-ddd-mapper's, button for
+					 * button and in its order.
+					 *
+					 * It replaced the preview dialog. Previewing the file was worth a
+					 * modal only while the file was something the board *rendered* on
+					 * demand; now it is the document, on screen beside the map, and a
+					 * dialog showing you what you are already looking at would be a
+					 * second copy to keep in step.
+					 */}
+					<span role="group" aria-label="Panels" className="flex items-center gap-1">
+						{PANE_CHOICES.map((choice) => (
+							<IconButton
+								key={choice.panes}
+								icon={choice.icon}
+								label={choice.label}
+								pressed={panes === choice.panes}
+								onClick={() => onPanes(choice.panes)}
+							/>
+						))}
+					</span>
+					{/* Beside the controls that decide what else is showing, because it
+					    is the same question: which of the board's own furniture is on
+					    screen. ba-ddd-mapper puts its legend toggle in the same place,
+					    for the same reason. */}
+					<IconButton
+						icon="legend"
+						label={legendShown ? 'Hide the legend' : 'Show the legend'}
+						onClick={onToggleLegend}
+						pressed={legendShown}
+					/>
+					<IconButton
+						icon={detailShown ? 'collapseAll' : 'expandAll'}
+						label={
+							!canToggleDetail
+								? 'Nothing on this board has a cast, a need or a note yet'
+								: detailShown
+									? 'Hide every cast, need and note'
+									: 'Show every cast, need and note'
+						}
+						onClick={onToggleAllDetail}
+						disabled={!canToggleDetail}
+					/>
+
+					<span className="mx-1 h-6 w-px bg-slate-200 dark:bg-slate-700" aria-hidden="true" />
+
+					{/* The file, and the browser's copy of it. */}
 					<IconButton
 						icon="importFile"
 						label="Import a .storymap file"
@@ -224,7 +290,22 @@ export function Toolbar({
 							if (file) onPickFile(file, event.target);
 						}}
 					/>
-					<IconButton icon="preview" label="Preview the .storymap file" onClick={onPreview} />
+					<IconButton
+						icon="exportFile"
+						label="Export the .storymap file"
+						onClick={onExport}
+					/>
+
+					{/* No Save button. The board writes itself to this browser a second
+					    after it stops changing, as ba-ddd-mapper's editors do — see the
+					    background save in StoryMapBoard. What is left here is the way to
+					    *see* what was written. */}
+					<IconButton icon="store" label="What this browser is holding" onClick={onOpenStore} />
+					<IconButton icon="example" label="Load the example" onClick={onLoadSample} />
+
+					<span className="mx-1 h-6 w-px bg-slate-200 dark:bg-slate-700" aria-hidden="true" />
+
+					{/* Ticketing: the one control that reaches another system. */}
 					<IconButton
 						icon="publish"
 						label={
@@ -234,29 +315,10 @@ export function Toolbar({
 						onClick={onPublish}
 						disabled={publishReason !== undefined}
 					/>
-					<IconButton
-						icon="exportFile"
-						label="Export the .storymap file"
-						onClick={onExport}
-						tone="primary"
-					/>
 
 					<span className="mx-1 h-6 w-px bg-slate-200 dark:bg-slate-700" aria-hidden="true" />
 
-					{/* View controls last: they change nothing, which is exactly why
-					    they sit furthest from the ones that do. */}
-					<IconButton
-						icon={detailShown ? 'collapseAll' : 'expandAll'}
-						label={
-							!canToggleDetail
-								? 'Nothing on this board has a cast, a need or a note yet'
-								: detailShown
-									? 'Hide every cast, need and note'
-									: 'Show every cast, need and note'
-						}
-						onClick={onToggleAllDetail}
-						disabled={!canToggleDetail}
-					/>
+					{/* How the board is being looked at. None of these change the file. */}
 					<IconButton
 						icon="zoomOut"
 						label="Zoom out"
@@ -272,6 +334,14 @@ export function Toolbar({
 						{Math.round(zoom * 100)}%
 					</button>
 					<IconButton icon="zoomIn" label="Zoom in" onClick={onZoomIn} disabled={!canZoomIn} />
+					<IconButton
+						icon={fullscreen ? 'fullscreenExit' : 'fullscreen'}
+						label={fullscreen ? 'Leave fullscreen' : 'Fullscreen the board'}
+						onClick={onToggleFullscreen}
+					/>
+
+					<span className="mx-1 h-6 w-px bg-slate-200 dark:bg-slate-700" aria-hidden="true" />
+
 					{/*
 					 * The board's own night/day switch.
 					 *
@@ -291,11 +361,6 @@ export function Toolbar({
 								: `Show the board in ${boardIsDark ? 'daylight' : 'the dark'}`
 						}
 						onClick={(event) => (event.shiftKey ? onFollowPage() : onFlipTheme())}
-					/>
-					<IconButton
-						icon={fullscreen ? 'fullscreenExit' : 'fullscreen'}
-						label={fullscreen ? 'Leave fullscreen' : 'Fullscreen the board'}
-						onClick={onToggleFullscreen}
 					/>
 				</div>
 			</div>

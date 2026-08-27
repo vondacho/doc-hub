@@ -60,6 +60,22 @@ export interface CardProps {
 	readonly className?: string;
 	/** Sortable data, so the drag handlers know what was picked up. */
 	readonly data: Record<string, unknown>;
+	/** Whether this is the card whose text the source pane is emphasising. */
+	readonly selected?: boolean;
+	/**
+	 * Called when the card is clicked anywhere.
+	 *
+	 * On the root rather than on the title, because the title's button already
+	 * owns click — it opens the rename editor — and owns the drag listeners with
+	 * it. Selection rides the bubble instead, so no gesture had to be taken away
+	 * from anything: clicking the title still renames *and* selects, and clicking
+	 * the card's own padding only selects.
+	 *
+	 * A completed drag does not select. dnd-kit's 6px activation constraint means
+	 * a real drag never emits the click, which is the same mechanism that keeps
+	 * dragging from opening the rename editor.
+	 */
+	readonly onSelect?: () => void;
 }
 
 export function Card({
@@ -80,6 +96,8 @@ export function Card({
 	style,
 	className = '',
 	data,
+	selected = false,
+	onSelect,
 }: CardProps) {
 	const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id, data });
 	const [editing, setEditing] = useState(false);
@@ -106,7 +124,12 @@ export function Card({
 			// which is what makes zoom a real layout change rather than a
 			// transform, and transforms are what break sticky headers and dnd-kit's
 			// hit-testing.
-			className={`group relative rounded-[0.4em] border px-[0.55em] py-[0.4em] text-[1em] shadow-sm motion-reduce:transition-none ${cardClass[kind]} ${className}`}
+			onClick={onSelect}
+			// The ring is `inset` so it does not grow the card and shift the grid
+			// when a selection moves between cards of different sizes.
+			className={`group relative rounded-[0.4em] border px-[0.55em] py-[0.4em] text-[1em] shadow-sm transition-shadow motion-reduce:transition-none ${
+				selected ? 'ring-2 ring-brand ring-inset dark:ring-sky-400' : ''
+			} ${cardClass[kind]} ${className}`}
 		>
 			{editing ? (
 				<TitleEditor

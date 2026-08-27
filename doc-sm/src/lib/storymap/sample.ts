@@ -164,3 +164,18 @@ storymap "Doc-Hub Onboarding" {
   }
 }
 `;
+
+/**
+ * An empty map, as text.
+ *
+ * The board opens on this. It has to be a real, parseable file rather than an
+ * empty string, because the text is the document now: a gesture needs somewhere
+ * to splice, and "add the first activity" needs a `{` to put it inside.
+ *
+ * No activity, deliberately. A map with one is a map somebody has started, and
+ * the island shows the choice — load the example, or start a map — rather than a
+ * grid of empty squares nobody asked for.
+ */
+export const EMPTY_SOURCE = `storymap "Untitled story map" {
+}
+`;

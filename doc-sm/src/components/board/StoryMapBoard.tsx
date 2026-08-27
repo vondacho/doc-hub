@@ -42,7 +42,14 @@ import { sortableKeyboardCoordinates } from '@dnd-kit/sortable';
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { clearFileInput, downloadText, filenameFor, readTextFile } from '../../lib/files.ts';
 import * as storage from '../../lib/storage.ts';
-import { applyText, resetIds, toBoard, toDocument } from '../../lib/board/convert.ts';
+import {
+	activityPositionOf,
+	deliveryPositionOf,
+	stepPositionOf,
+	storyPositionOf,
+	toBoard,
+} from '../../lib/board/convert.ts';
+import { applyAction, isEdit } from '../../lib/board/apply.ts';
 import { cardsWithDetail } from '../../lib/board/detail.ts';
 import {
 	canRedo,
@@ -53,10 +60,9 @@ import {
 	type HistoryAction,
 } from '../../lib/board/history.ts';
 import { cardClass, kindLabel } from '../../lib/board/kinds.ts';
-import { reduce, resetsHistory, type BoardAction } from '../../lib/board/reducer.ts';
+import { resetsHistory, type BoardAction } from '../../lib/board/gestures.ts';
 import {
 	bandOrder,
-	emptyBoard,
 	unboundStories,
 	splitCellKey,
 	storiesIn,
@@ -68,16 +74,19 @@ import {
 import type { Product } from '../../lib/products.ts';
 import { deliveryKindLabel, effectiveSpace, ticketKindOf, type StoryStatus } from '../../lib/storymap/model.ts';
 import { parse } from '../../lib/storymap/parser.ts';
+import type { StoryMapDocument } from '../../lib/storymap/model.ts';
 import { StoryMapParseError, type Problem } from '../../lib/storymap/problems.ts';
-import { SAMPLE_SOURCE } from '../../lib/storymap/sample.ts';
-import { serialize } from '../../lib/storymap/serialize.ts';
+import { EMPTY_SOURCE, SAMPLE_SOURCE } from '../../lib/storymap/sample.ts';
+
 import { BoardGrid } from './BoardGrid.tsx';
 import { BASE_FONT } from './BoardGrid.tsx';
-import { OpenDialog } from './OpenDialog.tsx';
-import { PreviewDialog } from './PreviewDialog.tsx';
+import { Divider } from './Divider.tsx';
+import { Editor } from './Editor.tsx';
+import { SourceProblems } from './SourceProblems.tsx';
+import { StoreState } from './StoreState.tsx';
 import { PublishDialog, type PublishProgress } from './PublishDialog.tsx';
 import { Legend } from './Legend.tsx';
-import { ProblemList } from './ProblemList.tsx';
+
 import { Toolbar } from './Toolbar.tsx';
 
 /** How far back undo goes. Snapshots are cheap; see history.ts. */
@@ -101,10 +110,26 @@ const AUTOSAVE_DELAY_MS = 1_000;
 const ZOOM_STOPS = [1, 1.15, 1.3, 1.45, 1.6] as const;
 const DEFAULT_ZOOM_INDEX = 0;
 
-const step = undoable<BoardState, BoardAction>(reduce, {
+/**
+ * One entry in the undo stack: what the visitor did, and the file it produced.
+ *
+ * The gesture travels alongside the text because history still needs to know
+ * *which* gesture it was — an import clears the stack, an edit does not. The
+ * fold itself is a replace: the splice has already happened by the time a
+ * commit gets here.
+ */
+interface Commit {
+	readonly action: BoardAction;
+	readonly text: string;
+}
+
+const step = undoable<string, Commit>((_, commit) => commit.text, {
 	limit: HISTORY_LIMIT,
-	resets: resetsHistory,
+	resets: (commit) => resetsHistory(commit.action),
 });
+
+/** What an unwritten map is, so the projection always has something to build. */
+const EMPTY_DOCUMENT = parse(EMPTY_SOURCE);
 
 /**
  * The product list and the registry's address are passed in from the Astro page
@@ -137,17 +162,107 @@ export default function StoryMapBoard({
 	registryUrl,
 	ticketingConfigured,
 }: StoryMapBoardProps) {
+	/*
+	 * The document is the text. Everything else on this screen is derived.
+	 *
+	 * History holds *source strings* rather than board states, which is the whole
+	 * of what changed here: a step back is the file as it was, so undo takes back
+	 * a drag and a typed line in exactly the same way. `History<T>` was already
+	 * generic, so it needed nothing.
+	 */
 	const [history, send] = useReducer(
-		step as (state: History<BoardState>, action: BoardAction | HistoryAction) => History<BoardState>,
+		step as (state: History<string>, action: Commit | HistoryAction) => History<string>,
 		undefined,
-		() => initialHistory(emptyBoard()),
+		() => initialHistory(EMPTY_SOURCE),
 	);
-	const board = history.present;
+	const source = history.present;
+
+	/**
+	 * The last parse that succeeded, and whether the text has moved on since.
+	 *
+	 * The board keeps drawing the last good document while the text is broken.
+	 * That is what lets somebody type a half-finished line without the map
+	 * disappearing underneath them — and the problems panel says the board is
+	 * behind, so the state is never a silent lie.
+	 */
+	const parsed = useMemo(() => {
+		try {
+			return { document: parse(source), problems: [] as readonly Problem[] };
+		} catch (error) {
+			if (!(error instanceof StoryMapParseError)) throw error;
+			return { document: null, problems: error.problems };
+		}
+	}, [source]);
+
+	const lastGood = useRef<StoryMapDocument | null>(null);
+	if (parsed.document !== null) lastGood.current = parsed.document;
+
+	const document_ = parsed.document ?? lastGood.current;
+	const problems = parsed.problems;
+	const stale = parsed.document === null && lastGood.current !== null;
+
+	/**
+	 * The board, projected from the parsed document.
+	 *
+	 * Rebuilt on every parse, which is affordable because ids are positional —
+	 * see `convert.ts`. A card nobody moved keeps its id across the rebuild, so
+	 * React keeps its element, dnd-kit keeps its drag and an open card menu stays
+	 * open while somebody types in the pane beside it.
+	 */
+	const board = useMemo(() => toBoard(document_ ?? EMPTY_DOCUMENT), [document_]);
+
+	/**
+	 * The card whose text the source pane is emphasising.
+	 *
+	 * Held as a kind and an id rather than as a span, because the span is a fact
+	 * about the *current* parse and this outlives several of them: a card stays
+	 * selected while you type in the pane beside it, and positional ids mean the
+	 * id still names the same card as long as nothing above it moved.
+	 */
+	const [selected, setSelected] = useState<{ kind: CardKind | 'delivery'; id: Id } | null>(null);
+
+	/**
+	 * Where the selected card is written, for the source pane to emphasise.
+	 *
+	 * The whole declaration — keyword through closing brace — rather than just
+	 * the title, because what is selected is the card, and the card is all of it:
+	 * its annotations, its need, its notes. Null when nothing is selected, when
+	 * the text no longer parses, or when the id names a card that is no longer
+	 * there. All three mean the same thing to the pane: emphasise nothing.
+	 *
+	 * This is the payoff of the rewrite in one expression. Before the spans, an
+	 * answer to "which text is this card?" did not exist anywhere in the app.
+	 */
+	const highlight = useMemo(() => {
+		if (selected === null || document_ === null) return null;
+
+		if (selected.kind === 'delivery') {
+			const at = deliveryPositionOf(selected.id);
+			return at === null ? null : (document_.deliveries[at]?.span ?? null);
+		}
+		if (selected.kind === 'activity') {
+			const at = activityPositionOf(selected.id);
+			return at === null ? null : (document_.activities[at]?.span ?? null);
+		}
+		if (selected.kind === 'step') {
+			const at = stepPositionOf(selected.id);
+			return at === null ? null : (document_.activities[at.activity]?.steps[at.step]?.span ?? null);
+		}
+		const at = storyPositionOf(selected.id);
+		return at === null
+			? null
+			: (document_.activities[at.activity]?.steps[at.step]?.stories[at.story]?.span ?? null);
+	}, [selected, document_]);
+
+	/** Which panels are showing, and how the width is divided between them. */
+	const [panes, setPanes] = useState<storage.Panes>('both');
+	const [split, setSplit] = useState(42);
+	const [revealLine, setRevealLine] = useState<number | null>(null);
+	const [problemsCollapsed, setProblemsCollapsed] = useState(false);
 	// Where tickets are raised. Needed by both the per-card actions and the
 	// publisher, so it is computed once beside the board rather than in each.
 	const space = effectiveSpace(board);
 
-	const [problems, setProblems] = useState<readonly Problem[]>([]);
 	const [dragging, setDragging] = useState<{ id: Id; title: string; kind: 'activity' | 'step' | 'story' } | null>(null);
 	// "Changed since the last import or export." The only state doc-sm can lose.
 	const [dirty, setDirty] = useState(false);
@@ -161,8 +276,12 @@ export default function StoryMapBoard({
 	 * nothing on the board changes it except this component — so it is refreshed
 	 * where it can change: opening the dialog, and deleting from it.
 	 */
-	const [savedKeys, setSavedKeys] = useState<readonly string[]>([]);
-	const [previewing, setPreviewing] = useState(false);
+	/*
+	 * Read when the panel opens rather than kept in step as the board changes.
+	 * Another tab may have written since, and a stale account of the store is
+	 * worse than no account of it.
+	 */
+	const [store, setStore] = useState<storage.Inventory>({ boards: [], bytes: 0 });
 	const [ticketError, setTicketError] = useState<string | null>(null);
 	// Counts documents, not edits: see the note on BoardGrid's documentKey.
 	const [documentKey, setDocumentKey] = useState(0);
@@ -192,88 +311,81 @@ export default function StoryMapBoard({
 	 * the whole island with it.
 	 */
 	const [boardTheme, setBoardTheme] = useState<storage.BoardTheme | null>(null);
+	/**
+	 * The notation row. Shown until somebody says otherwise — see `loadLegend`.
+	 *
+	 * ba-ddd-mapper's toggle, in the same place on the bar and with the same
+	 * default: the person who needs a legend most is the one who has not seen
+	 * this board before, and they will not go looking for a switch.
+	 */
+	const [legend, setLegend] = useState(true);
 	/** What the page is showing right now, so the toggle can offer the opposite. */
 	const [pageIsDark, setPageIsDark] = useState(false);
 	const stage = useRef<HTMLDivElement>(null);
 	const [progress, setProgress] = useState<PublishProgress | null>(null);
 
-	const dispatch = useCallback((action: BoardAction) => {
-		send(action);
-		setDirty(true);
-	}, []);
+	/**
+	 * A gesture from the grid, carried out on the text.
+	 *
+	 * The action shapes are unchanged, which is why nothing below the toolbar had
+	 * to be rewritten — see `apply.ts`. What changed is what happens to one: it
+	 * is translated into a splice, and the new text is what history records.
+	 *
+	 * A gesture against a document that does not currently parse is dropped. The
+	 * spans it would splice describe text that has since been edited by hand, and
+	 * applying them would write to the wrong bytes. The problems panel already
+	 * says the board is behind; the grid is a read-only picture until it is not.
+	 */
+	const dispatch = useCallback(
+		(action: BoardAction) => {
+			if (!isEdit(action) || parsed.document === null) return;
+			const next = applyAction(source, parsed.document, board, action);
+			if (next === source) return;
+			send({ action, text: next });
+			setDirty(true);
+		},
+		[source, parsed.document, board],
+	);
+
+	/** Text typed in the pane. Recorded exactly as a gesture is. */
+	const edit = useCallback(
+		(next: string) => {
+			if (next === source) return;
+			send({ action: { type: 'applyText', text: next }, text: next });
+			setDirty(true);
+		},
+		[source],
+	);
 
 	/* ---- import and export ------------------------------------------------ */
 
-	const load = useCallback((source: string) => {
-		try {
-			// Ids are per-document and never leave the tab, so restarting the
-			// counter on each import keeps them short and keeps toBoard() a
-			// deterministic function of the file.
-			resetIds();
-			const next = toBoard(parse(source));
-			setProblems([]);
-			send({ type: 'import', board: next });
-			setDocumentKey((n) => n + 1);
-			setDirty(false);
-		} catch (error) {
-			if (!(error instanceof StoryMapParseError)) throw error;
-			// The board is untouched. That is the whole contract of a failed import.
-			setProblems(error.problems);
-		}
+	/**
+	 * Open a file: the text becomes the document, whatever state it is in.
+	 *
+	 * It no longer refuses a file that does not parse, and that is the change
+	 * this rewrite makes possible. The old contract — "a failed import never
+	 * touches the board" — existed because the board *was* the state and a
+	 * half-parsed file could not become one. Now the file is the state: it opens
+	 * in the pane with its problems listed beneath it, which is the only way
+	 * anybody was ever going to fix it.
+	 */
+	const load = useCallback((text: string) => {
+		send({ action: { type: 'import', text }, text });
+		setDocumentKey((n) => n + 1);
+		setDirty(false);
 	}, []);
 
 	/**
-	 * The text the dialog opens with.
+	 * The file, exported exactly as it sits in the pane.
 	 *
-	 * Gated on the dialog being open so a large board is not re-serialised on
-	 * every keystroke of every card edit. It is a snapshot and not a live view —
-	 * the dialog is modal, so the board behind it cannot change while it is up,
-	 * and the draft belongs to the visitor from the moment it opens.
+	 * No serialisation step. What you have been editing is what lands on disk —
+	 * comments, blank lines, your own alignment and all — which is the thing the
+	 * old export could not promise.
 	 */
-	const preview = useMemo(
-		() => (previewing ? serialize(toDocument(board)) : ''),
-		[previewing, board],
-	);
-
-	/**
-	 * Put edited preview text back onto the board.
-	 *
-	 * Two things separate this from importing a file, and both are deliberate.
-	 *
-	 * **The product is not taken from the text.** It is carried over from the
-	 * board, which got it from the picker, which got it from the registry. A
-	 * `.storymap` file on disk is entitled to name its own product — that is how
-	 * the shortname travels — but text somebody just typed into a box is not
-	 * validated against anything, and letting it win would put an unregistered or
-	 * misspelled shortname into a file with nothing to catch it. So the line
-	 * round-trips and is then ignored, which is what the dialog says it does.
-	 *
-	 * **It is undoable.** `applyText` rather than `import`, so the history
-	 * survives — see the comment on the action in reducer.ts. Rewriting a board
-	 * by hand is the largest single edit the tool offers, and it should be the
-	 * easiest to take back.
-	 */
-	const applyPreview = useCallback(
-		(source: string): readonly Problem[] => {
-			let next;
-			try {
-				next = applyText(source, board);
-			} catch (error) {
-				if (!(error instanceof StoryMapParseError)) throw error;
-				return error.problems;
-			}
-
-			send({ type: 'applyText', board: next });
-			setDirty(true);
-			return [];
-		},
-		[board],
-	);
-
 	const exportFile = useCallback(() => {
-		downloadText(filenameFor(board.product, board.title), serialize(toDocument(board)));
+		downloadText(filenameFor(board.product, board.title), source);
 		setDirty(false);
-	}, [board]);
+	}, [board.product, board.title, source]);
 
 	/* ---- tickets ----------------------------------------------------------- */
 
@@ -391,6 +503,7 @@ export default function StoryMapBoard({
 	}, []);
 
 	useEffect(() => setBoardTheme(storage.loadTheme()), []);
+	useEffect(() => setLegend(storage.loadLegend()), []);
 
 	/**
 	 * Follow the OS while the board is not pinned.
@@ -496,16 +609,24 @@ export default function StoryMapBoard({
 	const key = storageKeyOf(board);
 
 	/**
-	 * Write the board to this browser, now.
+	 * The text the store is known to hold.
 	 *
-	 * Also what the Save button calls. Autosave below is this on a timer; there
-	 * is deliberately no second code path, because "the save button saved
-	 * something slightly different from the autosave" is a bug nobody would ever
-	 * think to look for.
+	 * What autosave compares against, and the reason it does not key off `dirty`.
+	 * `dirty` means "there are changes you have not *exported*" — it says so on
+	 * the toolbar — which is a different question from "does the browser's copy
+	 * match what is on screen". Keying the background save off it would mean an
+	 * imported file that nobody then edited was never written at all.
 	 */
-	const persist = useCallback((state: BoardState) => {
-		const result = storage.save(storageKeyOf(state), serialize(toDocument(state)));
-		setStored(storage.failed(result) ? { error: result.error } : { at: Date.now() });
+	const savedText = useRef<string | null>(null);
+
+	const persist = useCallback((state: BoardState, text: string) => {
+		const result = storage.save(storageKeyOf(state), text);
+		if (storage.failed(result)) {
+			setStored({ error: result.error });
+			return;
+		}
+		savedText.current = text;
+		setStored({ at: Date.now() });
 	}, []);
 
 	/**
@@ -543,10 +664,35 @@ export default function StoryMapBoard({
 	 * browser afterwards — an empty board is not work, and autosave is for work.
 	 */
 	useEffect(() => {
-		if (!dirty) return;
-		const timer = setTimeout(() => persist(board), AUTOSAVE_DELAY_MS);
+		// An untouched empty board is not work to be preserved, and saving it would
+		// put an "Untitled story map" in the store panel of everybody who ever
+		// opened the page. ba-ddd-mapper's `blank(source)` guard.
+		if (source === EMPTY_SOURCE || source === savedText.current) return;
+		const timer = setTimeout(() => persist(board, source), AUTOSAVE_DELAY_MS);
 		return () => clearTimeout(timer);
-	}, [board, dirty, persist]);
+	}, [board, source, persist]);
+
+	/**
+	 * Write now, rather than at the end of the debounce.
+	 *
+	 * Called whenever this component is about to stop being the only thing that
+	 * knows the current text — the tab closing, or the store panel opening
+	 * another board over this one.
+	 */
+	const flush = useCallback(() => {
+		if (source === EMPTY_SOURCE || source === savedText.current) return;
+		persist(board, source);
+	}, [board, source, persist]);
+
+	// Registered once and read through a ref, so the listener is not torn down
+	// and rebuilt on every keystroke.
+	const flushNow = useRef(flush);
+	flushNow.current = flush;
+	useEffect(() => {
+		const onHide = () => flushNow.current();
+		window.addEventListener('pagehide', onHide);
+		return () => window.removeEventListener('pagehide', onHide);
+	}, []);
 
 	/**
 	 * Reopen whatever this browser had open last.
@@ -566,15 +712,12 @@ export default function StoryMapBoard({
 		if (last === null) return;
 		const text = storage.load(last);
 		if (text === null) return;
-		try {
-			resetIds();
-			send({ type: 'import', board: toBoard(parse(text)) });
-			setDocumentKey((n) => n + 1);
-			previousKey.current = last;
-		} catch (error) {
-			if (!(error instanceof StoryMapParseError)) throw error;
-			setProblems(error.problems);
-		}
+		send({ action: { type: 'import', text }, text });
+		setDocumentKey((n) => n + 1);
+		previousKey.current = last;
+		// It came *from* the store, so the store already holds it. Without this
+		// the first autosave would write the same bytes back for no reason.
+		savedText.current = text;
 		// Mount only. `board` is deliberately not a dependency: this restores the
 		// last session, it does not keep re-reading storage.
 		// eslint-disable-next-line react-hooks/exhaustive-deps
@@ -796,7 +939,11 @@ export default function StoryMapBoard({
 					load(text);
 				}}
 				onExport={exportFile}
-				onPreview={() => setPreviewing(true)}
+				panes={panes}
+				onPanes={(next) => {
+					setPanes(next);
+					storage.savePanes(next);
+				}}
 				space={board.space}
 				spacePlaceholder={board.product ?? ''}
 				onSpace={(next) => dispatch({ type: 'setSpace', space: next })}
@@ -807,9 +954,8 @@ export default function StoryMapBoard({
 				publishCount={unbound.length}
 				publishReason={publishBlockedReason(ticketingConfigured, space, unbound.length)}
 				onLoadSample={() => load(SAMPLE_SOURCE)}
-				onSave={() => persist(board)}
-				onOpenSaved={() => {
-					setSavedKeys(storage.saved());
+				onOpenStore={() => {
+					setStore(storage.inventory());
 					setOpening(true);
 				}}
 				saveState={stored}
@@ -833,14 +979,17 @@ export default function StoryMapBoard({
 					setBoardTheme(null);
 					storage.saveTheme(null);
 				}}
+				legendShown={legend}
+				onToggleLegend={() => {
+					setLegend(!legend);
+					storage.saveLegend(!legend);
+				}}
 				detailShown={anyExpanded}
 				canToggleDetail={detailed.length > 0}
 				onToggleAllDetail={toggleAllDetail}
 			/>
 
-			<Legend />
-
-			<ProblemList problems={problems} onDismiss={() => setProblems([])} />
+			{legend && <Legend />}
 
 			{ticketError !== null && (
 				<p
@@ -867,30 +1016,78 @@ export default function StoryMapBoard({
 				onClose={() => setPublishing(false)}
 			/>
 
-			<OpenDialog
+			<StoreState
 				open={opening}
-				keys={savedKeys}
+				state={store}
 				current={key}
 				onOpen={(pick) => {
+					// Before this board stops being the one on screen: there may be up
+					// to a second of typing still sitting in the debounce.
+					flush();
 					const text = storage.load(pick);
 					setOpening(false);
-					if (text !== null) load(text);
+					if (text !== null) {
+						load(text);
+						savedText.current = text;
+					}
 				}}
 				onDelete={(pick) => {
 					storage.remove(pick);
-					setSavedKeys(storage.saved());
+					// Re-read rather than splice the row out: if the delete did not take
+					// — a store that throws is why every call here is wrapped — the row
+					// is still there, which is the truth.
+					setStore(storage.inventory());
 				}}
 				onClose={() => setOpening(false)}
 			/>
 
-			<PreviewDialog
-				open={previewing}
-				filename={filenameFor(board.product, board.title)}
-				text={preview}
-				onApply={applyPreview}
-				onClose={() => setPreviewing(false)}
-			/>
+			<div className="flex min-h-0 flex-1 flex-col lg:flex-row">
+				{/* The source first in the DOM and first when stacked: on a narrow
+				    viewport this is a thing you read, and the text is the map. */}
+				{panes !== 'board' && (
+					<section
+						aria-label="Source"
+						className={`flex min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border border-slate-300 dark:border-slate-700 ${
+							panes === 'both' ? '' : 'flex-1'
+						}`}
+						style={panes === 'both' ? { flexBasis: `${split}%` } : undefined}
+					>
+						<div className="min-h-0 flex-1 overflow-auto">
+							<Editor
+								value={source}
+								onChange={edit}
+								problems={problems}
+								revealLine={revealLine}
+								highlight={highlight}
+							/>
+						</div>
+						<SourceProblems
+							problems={problems}
+							stale={stale}
+							collapsed={problemsCollapsed}
+							onToggle={() => setProblemsCollapsed((was) => !was)}
+							onReveal={(line) => setRevealLine(line)}
+						/>
+					</section>
+				)}
 
+				{panes === 'both' && (
+					<Divider
+						onMove={(percent) => {
+							setSplit(percent);
+							storage.saveSplit(percent);
+						}}
+					/>
+				)}
+
+				{panes !== 'source' && (
+					/*
+					 * `min-w-0`, and it is load-bearing: a flex item will not shrink
+					 * below its content's minimum width, and the grid is `min-w-max`.
+					 * Without it this section demands the whole grid's width and the
+					 * source pane next to it is squeezed to nothing.
+					 */
+					<section aria-label="The map" className="flex min-h-0 min-w-0 flex-1 flex-col gap-4">
 			{empty ? (
 				<EmptyBoard onLoadSample={() => load(SAMPLE_SOURCE)} onAddActivity={() => dispatch({ type: 'addActivity', index: 0 })} />
 			) : (
@@ -918,6 +1115,8 @@ export default function StoryMapBoard({
 							documentKey={documentKey}
 							expanded={expanded}
 							onToggleDetail={toggleDetail}
+							selected={selected}
+							onSelect={setSelected}
 						/>
 
 						{/* Mandatory, not decorative: the board scrolls, and a card
@@ -939,6 +1138,9 @@ export default function StoryMapBoard({
 					</div>
 				</DndContext>
 			)}
+					</section>
+				)}
+			</div>
 		</div>
 	);
 }

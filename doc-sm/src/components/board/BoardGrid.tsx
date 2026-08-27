@@ -23,7 +23,7 @@
 
 import { SortableContext, horizontalListSortingStrategy } from '@dnd-kit/sortable';
 import { useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { canChangeKind, personasFor, type BoardAction } from '../../lib/board/reducer.ts';
+import { canChangeKind, personasFor, type BoardAction } from '../../lib/board/gestures.ts';
 import {
 	bandOrder,
 	cellKey,
@@ -94,6 +94,8 @@ export function BoardGrid({
 	documentKey,
 	expanded,
 	onToggleDetail,
+	selected,
+	onSelect,
 }: {
 	board: BoardState;
 	dispatch: (action: BoardAction) => void;
@@ -102,6 +104,9 @@ export function BoardGrid({
 	/** Ask the ticketing system for a new ticket — an epic for a step. */
 	onCreateTicket: (kind: CardKind, id: Id) => void;
 	ticketingConfigured: boolean;
+	/** The card whose text the source pane is emphasising, if any. */
+	selected: { kind: CardKind | 'delivery'; id: Id } | null;
+	onSelect: (pick: { kind: CardKind | 'delivery'; id: Id }) => void;
 	/** 1 is 100%. Scales the whole board; see the note on RAIL above. */
 	zoom: number;
 	fullscreen: boolean;
@@ -296,6 +301,8 @@ export function BoardGrid({
 									activity.personas.length > 0 ? `, for ${activity.personas.join(', ')}` : ''
 								}`}
 								data={{ type: 'activity' }}
+								selected={selected?.kind === 'activity' && selected.id === activityId}
+								onSelect={() => onSelect({ kind: 'activity', id: activityId })}
 								onRetitle={(title) => dispatch({ type: 'retitle', kind: 'activity', id: activityId, title })}
 								menu={cardMenu(board, dispatch, 'activity', activityId, index, undefined, {
 									onLinkTicket,
@@ -344,6 +351,8 @@ export function BoardGrid({
 									detailLabel="notes"
 										position={`step ${index + 1} of ${activity.stepOrder.length} in ${activity.title}`}
 										data={{ type: 'step', activityId }}
+										selected={selected?.kind === 'step' && selected.id === stepId}
+										onSelect={() => onSelect({ kind: 'step', id: stepId })}
 										onRetitle={(title) => dispatch({ type: 'retitle', kind: 'step', id: stepId, title })}
 										menu={cardMenu(board, dispatch, 'step', stepId, index, activityId, {
 										onLinkTicket,
@@ -359,9 +368,39 @@ export function BoardGrid({
 					);
 				})}
 
-				{/* An activity with no steps still owns a column — that is what the
-				    max(1, …) in columnGeometry() is for — and this is what stands in
-				    it, so a newly added activity is not a dead end. */}
+				{/*
+				 * An activity with no steps still owns a column — that is what the
+				 * max(1, …) in columnGeometry() is for — and this stands in it, so a
+				 * newly added activity is not a dead end.
+				 *
+				 * Shaped like an empty story cell on purpose. It used to be a thin
+				 * strip, which was the same control doing the same job in a shape
+				 * nothing else on the board used, and it read as a divider rather than
+				 * as somewhere to put something. The dashed box of a story cell is the
+				 * board's word for "an empty slot, and you may fill it"; an empty step
+				 * slot is exactly that, so it says it the same way.
+				 *
+				 * The `+` stays visible rather than appearing on hover as `Cell`'s
+				 * does. A story cell is a dashed box whether or not it holds anything,
+				 * so hovering is how you learn it is live; this column is otherwise
+				 * blank, and a control nobody can see in an empty column is a control
+				 * nobody finds.
+				 *
+				 * ## It lives in the header band, and must outrank it
+				 *
+				 * The step row is part of the sticky header — a single opaque element
+				 * spanning `1 / span 2` across every column at `z-5`, so the backbone
+				 * does not show cards scrolling underneath it. Every step card carries
+				 * `sticky z-10` to sit *on* that band.
+				 *
+				 * This slot did not. It was in the DOM, correctly placed, and painted
+				 * over by the band on every render — present to a screen reader and
+				 * invisible to everybody else. That is why an empty activity looked
+				 * like it offered nothing at all.
+				 *
+				 * So it sticks and stacks exactly as a step card does, because that is
+				 * what it stands in for: the same row, the same `top`, the same layer.
+				 */}
 				{board.activityOrder.map((activityId) => {
 					const activity = board.activities[activityId];
 					const span = geometry.spans.get(activityId);
@@ -372,8 +411,8 @@ export function BoardGrid({
 							type="button"
 							onClick={() => dispatch({ type: 'addStep', activityId, index: 0 })}
 							aria-label={`Add the first step to ${activity.title}`}
-							style={{ gridColumn: span.start + 2, gridRow: STEP_ROW }}
-							className="flex items-center justify-center rounded-[0.4em] border border-dashed border-slate-300 px-2 py-[0.4em] text-ink-muted hover:border-brand hover:text-brand focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand dark:border-slate-600 dark:text-slate-400 dark:hover:border-sky-400 dark:hover:text-sky-400"
+							style={{ gridColumn: span.start + 2, gridRow: STEP_ROW, top: stepTop }}
+							className="group/slot sticky z-10 flex min-h-[4em] items-center justify-center rounded-[0.4em] border border-dashed border-slate-200 p-[0.3em] text-ink-muted transition-colors hover:border-brand hover:bg-brand/5 hover:text-brand focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand motion-reduce:transition-none dark:border-slate-700 dark:text-slate-400 dark:hover:border-sky-400 dark:hover:bg-sky-400/10 dark:hover:text-sky-400"
 						>
 							<Icon name="plus" className="h-[1em] w-[1em]" />
 						</button>
@@ -381,7 +420,13 @@ export function BoardGrid({
 				})}
 
 				{/* ---- the bands ---- */}
-				<BandRail board={board} dispatch={dispatch} firstRow={FIRST_BAND_ROW} />
+				<BandRail
+					board={board}
+					dispatch={dispatch}
+					firstRow={FIRST_BAND_ROW}
+					selected={selected?.kind === 'delivery' ? selected.id : null}
+					onSelect={(id) => onSelect({ kind: 'delivery', id })}
+				/>
 
 				{bands.map((band, bandIndex) =>
 					board.activityOrder.flatMap((activityId) => {
@@ -428,6 +473,8 @@ export function BoardGrid({
 											detailLabel="need"
 													position={`in ${label}, ${index + 1} of ${ids.length}`}
 													data={{ type: 'story', cell: key }}
+													selected={selected?.kind === 'story' && selected.id === storyId}
+													onSelect={() => onSelect({ kind: 'story', id: storyId })}
 													onRetitle={(title) => dispatch({ type: 'retitle', kind: 'story', id: storyId, title })}
 													meta={
 														<StoryMeta
@@ -595,9 +642,41 @@ function cardMenu(
 	// Both kinds raise a ticket: an activity a capability, a step an epic.
 	const card = kind === 'activity' ? board.activities[id] : board.steps[id];
 
+	/*
+	 * Adding a step, from either card that can say where it goes.
+	 *
+	 * On an activity it appends; on a step it inserts to the right of that step,
+	 * which is the one place you can say *where* without a drag afterwards.
+	 *
+	 * This is the only route to a second step, and for a long time there wasn't
+	 * one. The `+` in the step row is rendered only for an activity with no steps
+	 * at all — it says "Add the first step to …" and disappears once there is one
+	 * — so the sole way to a second was to make a story and promote it, which is
+	 * a workaround somebody found rather than a thing the board offered.
+	 *
+	 * It is a menu item and not another `+` because the grid's columns *are* its
+	 * steps: a button standing after the last one would need a spare column in
+	 * every activity, which widens the board and opens a gap between activities
+	 * for a control that is used once in a while.
+	 */
+	const addStep: CardMenuAction =
+		kind === 'activity'
+			? {
+					label: 'Add a step',
+					run: () => dispatch({ type: 'addStep', activityId: id, index: siblings.length }),
+				}
+			: {
+					label: 'Add a step after this one',
+					run: activityId
+						? () => dispatch({ type: 'addStep', activityId, index: index + 1 })
+						: undefined,
+					disabledReason: activityId ? undefined : 'This step is not on the board.',
+				};
+
 	return [
 		{ label: 'Move left', run: left, disabledReason: left ? undefined : 'It is already first.' },
 		{ label: 'Move right', run: right, disabledReason: right ? undefined : 'It is already last.' },
+		addStep,
 		addNoteAction(dispatch, kind, id, notes),
 		...(card ? statusActions(dispatch, kind, id, card.status, card.ticket !== null) : []),
 		...(card ? ticketActions(dispatch, kind, id, card.ticket, ticketing) : []),
