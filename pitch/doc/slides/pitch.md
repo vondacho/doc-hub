@@ -43,9 +43,9 @@ footer {
 </style>
 
 **Wiki** documentation is **intention**-based, and often outdated.
-**Living** documentation is **up-to-date**, **automated**, and closes the gap between intended and really deployed.
--
-We want to support the **Product vision** and document for different **audiences** and **perspectives**.
+**Living** documentation is **up-to-date**, **automated**. 
+
+To close the gap between intended and really deployed.
 
 ---
 
@@ -53,34 +53,30 @@ We want to support the **Product vision** and document for different **audiences
 
 A set of **connected web portals** for every perspective, organized by product.
 
-| Portal        | Perspective               | Audience                                |
-|---------------|---------------------------|-----------------------------------------|
-| **doc-hub**   | product documentation     | **PM**, **BA**, **Support**             |
-| **api-hub**   | product API               | **SA**, **TA**, **Dev**, **PM**, **BA** |
-| **arch-hub**  | product architecture      | **SA**, **TA**, **Dev**                 |
-| **dev-hub**   | product development       | **Dev**                                 |
-| **qa-hub**    | product quality assurance | **QA**                                  |
-| **ux-hub**    | product user experience   | **UX**                                  |
+| Portal      | Perspective             | Audience        |
+|-------------|-------------------------|-----------------|
+| [doc-hub](http://doc-portal.localhost)     | Product 360             | PM, BA, Support |
+| [ba-hub](http://ba-portal.localhost)      | Business analysis       | BA              |
+| [arch-hub](http://arch-portal.localhost)    | Software architecture   | SA, TA, Dev     |
+| [api-hub](http://api-portal.localhost)     | API-first               | SA, TA, Dev, BA |
+| [dev-hub](http://dev-portal.localhost)     | Software development    | Dev             |
+| [qa-hub](http://qa-portal.localhost)      | Quality assurance       | QA              |
+| ux-hub      | User experience         | UX, dev         |
 
 ---
 
 # Capabilities
 
-| doc-hub | api-hub           | arch-hub         | dev-hub      | qa-hub       | ux-hub        |
-|---------|-------------------|------------------|--------------|--------------|---------------|
-| create  | onboarding        | c4-landscape     | _guidelines_ | _guidelines_ | design-system |
-| search  | scoring           | events-landscape | patterns     | campaigns    | components    |
-| -       | **catalog**       | api-landscape    | practices    | academy      | mockups       |
-| -       | registry          | ddd-landscape    | stacks       | -            | -             |
-| -       | discovery         | components       | testing      | -            | -             |
-| -       | monitoring        | dependencies     | **mcp**      | -            | -             |
-| -       | **lifecycle**     | databases        | academy      | -            | -             |
-| -       | change management | processes        | -            | -            | -             |
-| -       | mocking           | **mcp**          | -            | -            | -             |
-| -       | REST, GraphQL     | academy          | -            | -            | -             |
-| -       | Grpc, Async       | _guidelines_     | -            | -            | -             |
-| -       | **mcp**           | -                | -            | -            | -             |
-| -       | _guidelines_      | -                | -            | -            | -             |
+| [doc-hub](http://doc-portal.localhost) | [ba-hub](http://ba-portal.localhost)           | [arch-hub](http://arch-portal.localhost)         | [api-hub](http://api-portal.localhost) | [dev-hub](http://dev-portal.localhost)      | [qa-hub](http://qa-portal.localhost)       | ux-hub        |
+|---------|----------------|---------------|--------------|--------------|---------------|---------------|
+| product documentation | business analysis practices | reference architecture | api design guidelines | process, practices, patterns | test strategy | ux guidelines  |
+| product catalog | [ddd modelling](http://ba-ddd-mapper.localhost) | [c4 modelling](http://arch-c4.localhost) | api onboarding |[story mapping](http://doc-sm.localhost)| campaign authoring | design system |
+| product monitoring | ddd monitoring | [event catalog](http://arch-c4.localhost) | api catalog | [example mapping](http://doc-em.localhost) | campaign reporting | component registry |
+| [story mapping](http://doc-sm.localhost) | [process modelling](http://doc-es.localhost) | [event storming](http://doc-es.localhost) | api monitoring | [collaborative software design](http://doc-es.localhost) | - | - |
+| synthetic reporting | ddd catalog | component catalog | api mocking | - | - | - |
+| - | context dependencies | component dependencies | api scoring | - | - | - |
+| - | mcp | mcp | mcp | mcp | mcp | mcp |
+| - | academy | academy | academy | academy | academy | academy |
 
 ---
 
@@ -92,31 +88,25 @@ The content is mainly provisioned by **automation**, ie, CI.CD pipelines on 'dev
 
 # Solution proposal
 
+- Content-driven web portal with [Astro](https://astro.build/)
 - Microservices architecture
-- Content-driven web frontend with [Astro](https://astro.build/)
-- Registry with [Strapi](https://strapi.io/) CMS
-- [Microcks](https://microcks.io/) for contract-first API mocking and conformance testing
-- DDD modeling with [Context Mapper](https://contextmapper.org/) DSL
-- Architecture modeling with [LikeC4](https://likec4.com/) and [EventCatalog](https://www.eventcatalog.dev/) DSL
-- UML modeling with [PlantUML](https://plantuml.com/) DSL
-- BPMN and DMN modeling with [bpmn.io](https://bpmn.io/)
-- Code behaviour visualization with [AppMap](https://appmap.io/)
-- [Allure](https://allure.qameta.io/) for tests reporting
-- [reshapr](https://reshapr.io/), your API as an MCP server
-- [solo.io](https://www.solo.io/products/agentregistry), an MCP server registry
-- SpringBoot, Node.js, Typescript
+- SpringBoot, Node.js, Typescript, Strapi/PostgresSQL/MongoDB
+- Kubernetes/Helm
+- OTEL
 
 ---
 
 # Plan
 
-- MVP with **DCP**: **API catalog**, **C4 workspace**, and **EventCatalog**
-- MVP: **doc-hub**, **api-hub**, **arch-hub**
-- To evangelize the Living Documentation Hub to the **Pictet Tech** community
-- To collaborate with **Ops**
+- MVP (**DCP**): **API catalog**, **C4 workspace**, and **EventCatalog**
+- MVP (DCP): **api-hub**, **arch-hub**
+- R1 (DCP): **dev-hub**, **ba-hub**
+- R2 (DCP): **qa-hub**, **doc-hub**
+- To work on the **observability** topic
+- To promote the Living Documentation Hub @ **Pictet Tech**
 - To onboard **Dev** teams with their **APIs** and **C4** workspaces
 - To onboard **QA** and **UX** teams: **qa-hub**, **ux-hub**
-- To build **MCP** use cases and promote an **mcp-hub**
+- To build Living documentation/**MCP** use cases
 
 ---
 
@@ -124,3 +114,11 @@ The content is mainly provisioned by **automation**, ie, CI.CD pipelines on 'dev
 
 >Stay **up-to-date**, stay informed, and stay ahead with our **Living Documentation Hub**.
 
+---
+
+## Links
+
+Enterprise architect: Patrick Doyle
+Innovation: Sebastien Gille
+API hub: Carine Leroux
+PWM-AI governance: Luis

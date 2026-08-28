@@ -19,6 +19,11 @@
  * as a positioned div, and three of which are usually hand-written wrong. The
  * better of the two shells won.
  *
+ * Where it sits is the mapper's, though. A dialog centres itself by default, and
+ * a panel that lists documents is read top-down and changes height as the list
+ * grows — so `mb-auto` puts it near the top instead, at the mapper's width, as a
+ * flex column whose list is the part that scrolls.
+ *
  * ## The rows are titles, not slugs
  *
  * A storage key is a slug made from the product and the title, which is the
@@ -30,13 +35,14 @@
  * ## Deleting asks first, and says what is lost
  *
  * Everything else on this board is undoable. This is not: the entry is gone from
- * the browser, and if it was never exported it is gone entirely. So the delete
- * control arms itself and the second click is the one that acts, with the label
- * naming the board.
+ * the browser, and if it was never exported it is gone entirely. So the remove
+ * control arms itself, and the armed row is the mapper's: it names the file it is
+ * about to take, says there is no undo and no copy anywhere else, and offers
+ * Cancel beside Remove.
  *
- * A second click rather than a `confirm()`: a native dialog inside a native
- * modal is a stacking problem in several browsers, and `confirm()` blocks the
- * event loop for a decision one word long.
+ * An armed row rather than a `confirm()`: a native dialog inside a native modal
+ * is a stacking problem in several browsers, and `confirm()` blocks the event
+ * loop for a decision one word long.
  *
  * There is no "clear all", and there will not be one. A store that can be
  * emptied from a toolbar is a store that will be emptied from a toolbar, and the
@@ -47,6 +53,9 @@ import { useEffect, useRef, useState } from 'react';
 import { Icon } from './Icon.tsx';
 import { IconButton } from './IconButton.tsx';
 import type { Inventory, StoredBoard } from '../../lib/storage.ts';
+
+/** What an export of one of these rows is called — the confirm names the file. */
+const EXTENSION = '.examplemap';
 
 export function StoreState({
 	open,
@@ -88,9 +97,9 @@ export function StoreState({
 			onClose={onClose}
 			onCancel={onClose}
 			aria-labelledby="store-title"
-			className="w-[min(38rem,92vw)] rounded-2xl border border-slate-200 bg-white p-0 text-ink backdrop:bg-black/40 dark:border-slate-700 dark:bg-night-raised dark:text-slate-100"
+			className="mx-auto mt-6 mb-auto flex max-h-[calc(100dvh-3rem)] w-[min(42rem,92vw)] flex-col overflow-hidden rounded-xl border border-slate-200 bg-white p-0 text-ink shadow-xl backdrop:bg-slate-900/30 backdrop:backdrop-blur-[1px] dark:border-slate-700 dark:bg-night-raised dark:text-slate-100"
 		>
-			<div className="flex items-start justify-between gap-3 border-b border-slate-200 px-5 py-3 dark:border-slate-700">
+			<div className="flex items-start justify-between gap-3 border-b border-slate-200 px-4 py-3 dark:border-slate-700">
 				<div>
 					<p className="font-mono text-[10px] tracking-[0.14em] text-ink-muted uppercase dark:text-slate-400">
 						this browser
@@ -102,7 +111,7 @@ export function StoreState({
 				<IconButton icon="close" label="Close" onClick={onClose} />
 			</div>
 
-			<div className="max-h-[60vh] overflow-y-auto px-5 py-4">
+			<div className="min-h-0 flex-1 overflow-y-auto px-4 py-3 text-sm">
 				{state.boards.length === 0 ? (
 					<p className="text-sm text-ink-muted dark:text-slate-400">
 						Nothing is saved yet. The board saves itself a second after you change it, under a name
@@ -118,6 +127,7 @@ export function StoreState({
 								armed={arming === board.key}
 								onOpen={() => onOpen(board.key)}
 								onArm={() => setArming(board.key)}
+								onCancel={() => setArming(null)}
 								onDelete={() => {
 									onDelete(board.key);
 									setArming(null);
@@ -128,7 +138,7 @@ export function StoreState({
 				)}
 			</div>
 
-			<div className="flex items-start gap-2 border-t border-slate-200 px-5 py-3 text-xs text-ink-muted dark:border-slate-700 dark:text-slate-400">
+			<div className="flex shrink-0 items-start gap-2 border-t border-slate-200 px-4 py-3 text-xs text-ink-muted dark:border-slate-700 dark:text-slate-400">
 				<Icon name="exportFile" className="mt-0.5 h-4 w-4 shrink-0" />
 				<p>
 					Nothing here is a backup. These live in this browser only — not on a server, and not on
@@ -143,11 +153,23 @@ export function StoreState({
 /**
  * One board, as a row.
  *
- * The row that is already open still opens — it is the one entry you cannot
- * lose by opening it, and a control that does nothing would be stranger than one
- * that does the harmless thing. It is marked rather than hidden, because "is
- * what I am looking at the thing that is saved?" is the first question this
- * panel is opened to answer.
+ * A control when there is somewhere to go, a plain item otherwise —
+ * ba-ddd-mapper's rule, and its reason: a control that is present and does
+ * nothing looks like something that ought to work, and a disabled one looks
+ * broken. The row already open is the second case. It used to open anyway, on
+ * the argument that reopening the board you are looking at is the one harmless
+ * thing this panel can do; true, and beside the point, because the gesture still
+ * has no outcome and the way to look at that board is to close this panel.
+ *
+ * It is marked rather than hidden, because "is what I am looking at the thing
+ * that is saved?" is the first question this panel is opened to answer.
+ *
+ * The remove control is ba-ddd-mapper's too, and for its reason: quiet until the
+ * row is under the pointer, and always reachable by keyboard. A delete control
+ * at full contrast on every row invites the accident it takes two steps to
+ * prevent. Unlike the mapper, the open row keeps it — the mapper can withhold it
+ * because its other editor lists the same entry, and this board has no second
+ * page to delete from.
  */
 function Row({
 	board,
@@ -155,6 +177,7 @@ function Row({
 	armed,
 	onOpen,
 	onArm,
+	onCancel,
 	onDelete,
 }: {
 	board: StoredBoard;
@@ -162,8 +185,32 @@ function Row({
 	armed: boolean;
 	onOpen: () => void;
 	onArm: () => void;
+	onCancel: () => void;
 	onDelete: () => void;
 }) {
+	if (armed) return <Confirm board={board} onCancel={onCancel} onDelete={onDelete} />;
+
+	const shell = 'min-w-0 flex-1 text-left';
+	const name = (
+		<>
+			<span className="flex flex-wrap items-baseline gap-x-2">
+				<span className="truncate font-semibold">
+					{/* A stored entry with no readable title is the one row somebody
+					    opens this panel to find. Named as such rather than left blank,
+					    which would read as a rendering fault. */}
+					{board.title ?? <span className="text-warning">unreadable — no title line</span>}
+				</span>
+				{open && (
+					<span className="text-xs font-semibold text-brand dark:text-sky-400">open now</span>
+				)}
+			</span>
+			<span className="mt-0.5 flex flex-wrap items-baseline gap-x-2 font-mono text-xs text-ink-muted dark:text-slate-400">
+				<span className="truncate">{board.key}</span>
+				<span>{size(board.bytes)}</span>
+			</span>
+		</>
+	);
+
 	return (
 		<li
 			className={`group/row flex items-center gap-2 rounded-lg border px-2 py-1.5 ${
@@ -172,45 +219,74 @@ function Row({
 					: 'border-transparent hover:border-slate-200 dark:hover:border-slate-700'
 			}`}
 		>
+			{open ? (
+				<span className={shell}>{name}</span>
+			) : (
+				<button
+					type="button"
+					onClick={onOpen}
+					className={`${shell} focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand`}
+				>
+					{name}
+				</button>
+			)}
+
 			<button
 				type="button"
-				onClick={onOpen}
-				className="min-w-0 flex-1 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+				onClick={onArm}
+				aria-label={`Remove ${board.key}${EXTENSION} from this browser`}
+				className="shrink-0 rounded px-1.5 py-0.5 text-xs text-ink-muted opacity-0 group-hover/row:opacity-100 hover:bg-rose-50 hover:text-rose-700 focus:opacity-100 dark:text-slate-400 dark:hover:bg-rose-950 dark:hover:text-rose-300"
 			>
-				<span className="flex flex-wrap items-baseline gap-x-2">
-					<span className="truncate font-semibold">
-						{/* A stored entry with no readable title is the one row somebody
-						    opens this panel to find. Named as such rather than left blank,
-						    which would read as a rendering fault. */}
-						{board.title ?? <span className="text-warning">unreadable — no title line</span>}
-					</span>
-					{open && (
-						<span className="text-xs font-semibold text-brand dark:text-sky-400">open now</span>
-					)}
-				</span>
-				<span className="mt-0.5 flex flex-wrap items-baseline gap-x-2 font-mono text-xs text-ink-muted dark:text-slate-400">
-					<span className="truncate">{board.key}</span>
-					<span>{size(board.bytes)}</span>
-				</span>
+				Remove
 			</button>
+		</li>
+	);
+}
 
-			{armed ? (
+/**
+ * The armed row: what is about to go, in full, before it goes.
+ *
+ * The file named rather than "this board", because after this there is no undo.
+ * The store is not a filesystem: nothing goes to a trash. Cancel is a real
+ * control rather than a click elsewhere — an armed delete that can only be
+ * stood down by guessing where to click is one that gets pressed.
+ */
+function Confirm({
+	board,
+	onCancel,
+	onDelete,
+}: {
+	board: StoredBoard;
+	onCancel: () => void;
+	onDelete: () => void;
+}) {
+	return (
+		<li className="rounded-md border border-rose-300 bg-rose-50 px-2 py-1.5 dark:border-rose-800 dark:bg-rose-950">
+			<p className="text-xs">
+				Remove{' '}
+				<strong>
+					{board.key}
+					{EXTENSION}
+				</strong>{' '}
+				from this browser? There is no undo, and no copy anywhere else unless you have exported
+				it.
+			</p>
+			<div className="mt-1.5 flex gap-2">
 				<button
 					type="button"
 					onClick={onDelete}
-					className="shrink-0 rounded-full border border-slate-300 px-2 py-0.5 text-xs font-semibold text-critical hover:border-critical focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand dark:border-slate-600"
+					className="rounded-md bg-rose-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-rose-700"
 				>
-					Delete {board.key} from this browser?
+					Remove
 				</button>
-			) : (
-				<IconButton
-					icon="trash"
-					label={`Delete ${board.key} from this browser`}
-					size="sm"
-					tone="danger"
-					onClick={onArm}
-				/>
-			)}
+				<button
+					type="button"
+					onClick={onCancel}
+					className="rounded-md border border-slate-300 px-2.5 py-1 text-xs font-semibold hover:bg-white dark:border-slate-600 dark:hover:bg-slate-800"
+				>
+					Cancel
+				</button>
+			</div>
 		</li>
 	);
 }

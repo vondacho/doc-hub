@@ -183,10 +183,18 @@ export const EMPTY_SOURCE = `storymap "Untitled story map" {
 /**
  * A fresh document under a name of its own.
  *
- * What the New button opens. `EMPTY_SOURCE` is the same thing under the default
- * name; this is that with a title, so pressing New twice leaves two drafts in
- * the store rather than one overwritten.
+ * What the New button opens, and it opens a map with its first activity on it rather than the choice of
+ * how to start one. `EMPTY_SOURCE` is the empty state — no title of its own and
+ * nothing on it — which is right for arriving at a page nobody has used yet and
+ * wrong for a gesture that has already said what it wants. Somebody who presses
+ * New has chosen; asking again is a step that answers a question they just
+ * answered.
+ *
+ * So it comes with one activity, named badly on purpose and waiting to be
+ * renamed: ba-ddd-mapper's `freshMap`, which writes one domain for the same
+ * reason. Pressing New twice still leaves two drafts in the store rather than
+ * one overwritten, because each takes a title nothing is using.
  */
 export function freshSource(title: string): string {
-	return `storymap ${JSON.stringify(title)} {\n}\n`;
+	return `storymap ${JSON.stringify(title)} {\n  activity "New activity" {\n  }\n}\n`;
 }

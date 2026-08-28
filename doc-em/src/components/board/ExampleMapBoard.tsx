@@ -213,6 +213,25 @@ export default function ExampleMapBoard({
 	const [stored, setStored] = useState<{ at: number } | { error: string } | null>(null);
 	const [opening, setOpening] = useState(false);
 	/**
+	 * One message at a time, said out loud and then dismissed.
+	 *
+	 * ba-ddd-mapper's `note`, and its presentation: a strip across the top of the
+	 * board, amber when something worked in a way you should know about and rose
+	 * when it did not happen at all, with a ✕ that is the only way it goes away.
+	 *
+	 * Not a toast: a message that removes itself on a timer is a message the
+	 * person who looked away has not read, and every one of these is about work
+	 * they have not exported. Not a `confirm()` either — nothing here is a
+	 * question, and blocking the event loop to say something is a way of being
+	 * ignored.
+	 *
+	 * Distinct from the save line in the toolbar, which the mapper also keeps
+	 * separate. That one is a standing condition — the browser's copy is or is
+	 * not being written — and it belongs beside the title it is about, not in a
+	 * strip that gets dismissed.
+	 */
+	const [note, setNote] = useState<{ kind: 'warn' | 'error'; text: string } | null>(null);
+	/**
 	 * The saved list, read when the dialog opens rather than on every render.
 	 *
 	 * `saved()` walks every key at this origin, which is cheap but not free, and
@@ -222,6 +241,27 @@ export default function ExampleMapBoard({
 	/* Read when the panel opens: another tab may have written since. */
 	const [store, setStore] = useState<storage.Inventory>({ boards: [], bytes: 0 });
 	const [documentKey, setDocumentKey] = useState(0);
+
+	/**
+	 * Set by `load` alone, and read once by the key effect below.
+	 *
+	 * A rename and an Open both change the key this board is stored under, and
+	 * they mean opposite things about the entry under the old key. A rename
+	 * should move it: one board, one entry, under the name it now has. An Open
+	 * must leave it exactly where it is — the board it belongs to still exists
+	 * and the visitor has simply gone to another one. Nothing in the resulting
+	 * title tells the two apart, so the gesture says which it was.
+	 *
+	 * Without this, opening the example or starting a new board renamed the
+	 * previous one onto the new key and then overwrote it, so a board nobody had
+	 * exported was gone from the store panel with no gesture that meant delete.
+	 *
+	 * ba-ddd-mapper's `renamed` ref, inverted. There the flag marks the rename,
+	 * because only the title field can start one. Here a title typed into the
+	 * source pane is a rename too, and there is no handler to hang a flag on —
+	 * so the openings are what get flagged, and they all go through `load`.
+	 */
+	const justOpened = useRef(false);
 	const [zoomIndex, setZoomIndex] = useState(DEFAULT_ZOOM_INDEX);
 	const [fullscreen, setFullscreen] = useState(false);
 	/**
@@ -296,6 +336,8 @@ export default function ExampleMapBoard({
 	 * it.
 	 */
 	const load = useCallback((text: string) => {
+		// Whatever was here keeps its entry under its own name — see `justOpened`.
+		justOpened.current = true;
 		send({ action: { type: 'import', text }, text });
 		setDocumentKey((n) => n + 1);
 		setDirty(false);
@@ -379,8 +421,13 @@ export default function ExampleMapBoard({
 	useEffect(() => {
 		const was = previousKey.current;
 		previousKey.current = key;
-		if (was !== null && was !== key) storage.rename(was, key);
-	}, [key]);
+		const opened = justOpened.current;
+		justOpened.current = false;
+		if (was !== null && was !== key && !opened) storage.rename(was, key);
+		// `documentKey` is a dependency so that an Open landing on the *same* key
+		// still clears the flag. Without it the flag would survive that open and
+		// swallow the next real rename.
+	}, [key, documentKey]);
 
 	/**
 	 * Autosave, a second after the last change.
@@ -458,8 +505,19 @@ export default function ExampleMapBoard({
 		const taken = new Set(storage.inventory().boards.map((entry) => entry.title));
 		let title = 'New map';
 		for (let n = 2; taken.has(title); n += 1) title = `New map ${n}`;
+		// Say where the map that was here went. It is still in the store under its
+		// own name — the comment above has always claimed as much, and this is the
+		// mapper's note that actually says it.
+		const had = (board.story !== null || board.ruleOrder.length > 0) && board.title !== '';
+		const left = board.title;
 		load(freshSource(title));
-	}, [flush, load]);
+		if (had) {
+			setNote({
+				kind: 'warn',
+				text: `Started “${title}”. “${left}” is still in this browser — the store panel opens it again.`,
+			});
+		}
+	}, [board.story, board.ruleOrder.length, board.title, flush, load]);
 
 	/**
 	 * Reopen whatever this browser had open last.
@@ -815,6 +873,27 @@ export default function ExampleMapBoard({
 
 			{legend && <Legend />}
 
+			{note && (
+				<p
+					role="alert"
+					className={
+						note.kind === 'error'
+							? 'flex items-start gap-2 border-b border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-900 dark:border-rose-900 dark:bg-rose-950 dark:text-rose-200'
+							: 'flex items-start gap-2 border-b border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200'
+					}
+				>
+					<span className="grow">{note.text}</span>
+					<button
+						type="button"
+						onClick={() => setNote(null)}
+						aria-label="Dismiss"
+						className="shrink-0 font-semibold"
+					>
+						✕
+					</button>
+				</p>
+			)}
+
 			<GherkinDialog
 				open={previewingGherkin}
 				filename={parsed.document === null ? 'no feature file' : featureFilename(parsed.document)}
@@ -987,14 +1066,15 @@ function EmptyBoard({ onLoadSample, onAddStory }: { onLoadSample: () => void; on
 				<button
 					type="button"
 					onClick={onLoadSample}
-					className="rounded-full bg-brand px-5 py-2.5 font-semibold text-white transition hover:bg-brand-strong focus-visible:outline-2 focus-visible:outline-offset-3 focus-visible:outline-brand motion-reduce:transition-none"
+					className="rounded-full border border-slate-300 px-5 py-2.5 font-semibold transition hover:border-brand hover:text-brand focus-visible:outline-2 focus-visible:outline-offset-3 focus-visible:outline-brand motion-reduce:transition-none dark:border-slate-600 dark:hover:border-sky-400 dark:hover:text-sky-400"
 				>
 					Load the example
 				</button>
 				<button
 					type="button"
 					onClick={onAddStory}
-					className="rounded-full border border-slate-300 px-5 py-2.5 font-semibold transition hover:border-brand hover:text-brand focus-visible:outline-2 focus-visible:outline-offset-3 focus-visible:outline-brand motion-reduce:transition-none dark:border-slate-600 dark:hover:border-sky-400 dark:hover:text-sky-400"
+					autoFocus
+					className="rounded-full bg-brand px-5 py-2.5 font-semibold text-white transition hover:bg-brand-strong focus-visible:outline-2 focus-visible:outline-offset-3 focus-visible:outline-brand motion-reduce:transition-none"
 				>
 					Add a story
 				</button>
