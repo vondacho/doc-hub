@@ -103,9 +103,6 @@ jobs:
             doc-portal:
               - *workflow
               - 'doc-portal/**'
-            doc-registry:
-              - *workflow
-              - 'doc-registry/**'
             doc-sm:
               - *workflow
               - 'doc-sm/**'
@@ -115,6 +112,9 @@ jobs:
             doc-es:
               - *workflow
               - 'doc-es/**'
+            doc-registry:
+              - *workflow
+              - 'doc-registry/**'
             doc-registry-db:
               - *workflow
               - 'doc-registry-db/**'
@@ -128,7 +128,7 @@ jobs:
           # that every image carries it, whether or not each one changed.
           # Same for an explicit "build everything" dispatch.
           if [ "${{ github.ref_type }}" = 'tag' ] || [ "${{ inputs.all }}" = 'true' ]; then
-            components='["doc-portal","doc-registry","doc-sm","doc-em","doc-es","doc-registry-db"]'
+            components='["doc-portal","doc-sm","doc-em","doc-es","doc-registry","doc-registry-db"]'
           else
             # paths-filter emits every matched filter name, including the
             # "workflow" helper the anchors are attached to — drop it, it is

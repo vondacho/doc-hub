@@ -38,6 +38,8 @@ services:
     depends_on:
       doc-portal:
         condition: service_healthy
+      doc-registry:
+        condition: service_healthy
       doc-sm:
         condition: service_healthy
       doc-em:
@@ -148,6 +150,86 @@ services:
       retries: 5
       start_period: 20s
 
+  # The CMS holding the product registry. Migrates its own schema on boot, so it
+  # waits for the database to be genuinely ready rather than merely started.
+  doc-registry:
+    image: ghcr.io/vondacho/doc-hub/doc-registry:latest
+    restart: unless-stopped
+    expose:
+      - "1337"
+    # APP_KEYS, API_TOKEN_SALT, ADMIN_JWT_SECRET, TRANSFER_TOKEN_SALT,
+    # JWT_SECRET, ENCRYPTION_KEY and DATABASE_PASSWORD. Strapi refuses to boot
+    # without them, which is the failure to expect on a host that has never had
+    # a deploy with the repository secrets set.
+    env_file:
+      - ./secrets.env
+    environment:
+      HOST: 0.0.0.0
+      PORT: 1337
+      NODE_ENV: production
+      # Strapi builds the admin panel's absolute URLs from this. Left unset, the
+      # panel calls back to host:port, which does not resolve from a browser.
+      URL: https://doc-registry.obya.ch
+      STRAPI_TELEMETRY_DISABLED: "true"
+      STRAPI_DISABLE_UPDATE_NOTIFICATION: "true"
+      # Both are idempotent: the seed only fills an empty collection, and the
+      # grant only adds find/findOne for the public role — which is what lets
+      # doc-portal read the catalogue with no API token.
+      SEED_PRODUCTS: "true"
+      PUBLIC_READ: "true"
+      DATABASE_CLIENT: postgres
+      DATABASE_HOST: doc-registry-db
+      DATABASE_PORT: "5432"
+      DATABASE_NAME: strapi
+      DATABASE_USERNAME: strapi
+      DATABASE_SSL: "false"
+      DATABASE_POOL_MIN: "2"
+      DATABASE_POOL_MAX: "10"
+      DATABASE_CONNECTION_TIMEOUT: "60000"
+    volumes:
+      # Not in the chart, and deliberate. There, uploads are an emptyDir because
+      # a pod is cattle; here the Media Library would otherwise be emptied by
+      # every deploy, for the price of a named volume on a disk that is already
+      # paid for. Everything that matters is still in the database.
+      - registry_uploads:/app/public/uploads
+    depends_on:
+      doc-registry-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:1337/_health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      # The first boot migrates the full schema against an empty database and
+      # seeds it before the server listens. The chart budgets 60 x 5s for the
+      # same window.
+      start_period: 180s
+
+  # The one piece of state in doc-hub. Stock PostgreSQL plus this repo's initdb
+  # scripts — see doc-registry-db/Dockerfile, which also pins PGDATA to a
+  # subdirectory of the mount.
+  doc-registry-db:
+    image: ghcr.io/vondacho/doc-hub/doc-registry-db:latest
+    restart: unless-stopped
+    # POSTGRES_PASSWORD. The image carries no credential by design.
+    env_file:
+      - ./secrets.env
+    expose:
+      - "5432"
+    volumes:
+      - registry_db:/var/lib/postgresql/data
+    healthcheck:
+      # pg_isready rather than a TCP probe: the latter passes while the cluster
+      # is still recovering, and Strapi would connect too early and fail its
+      # migration.
+      test: ["CMD-SHELL", "pg_isready -U strapi -d strapi"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
 volumes:
   caddy_data:
   caddy_config:
+  registry_db:
+  registry_uploads:
