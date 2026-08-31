@@ -85,7 +85,16 @@ variable "github_deploy_environment" {
 }
 
 variable "create_github_oidc_provider" {
-  description = "Create the GitHub OIDC provider. Set false if the account already has one — AWS allows only a single provider per issuer URL. An account already running ba-hub or dev-hub has one."
+  description = <<-DESC
+    Create the GitHub OIDC provider, rather than referencing one the account
+    already has. AWS allows exactly one per issuer URL account-wide, so exactly
+    one stack may own it — and in this account ba-hub already does, which is why
+    this defaults to false.
+
+    Set it to true only in an account that has none. Either way the value is
+    checked against the account at plan time (oidc.tf), so a wrong answer fails
+    the plan with an explanation instead of failing the apply half-built.
+  DESC
   type        = bool
-  default     = true
+  default     = false
 }

@@ -4,11 +4,13 @@
 # issued from this account.
 acme_email = "you@example.com"
 
-# Set false if the account already has a provider for
+# Leave false in an account that already has a provider for
 # token.actions.githubusercontent.com — AWS allows only one per issuer URL, and
-# an account already running ba-hub or dev-hub has one.
-# Check with: aws iam list-open-id-connect-providers
-create_github_oidc_provider = true
+# ba-hub already created this account's. Set it to true only in an account that
+# has none; terraform plan checks either answer against the account before
+# anything is created.
+# Check by hand with: aws iam list-open-id-connect-providers
+create_github_oidc_provider = false
 
 # Optional — these are the defaults.
 # Named profile from ~/.aws/config; omit to use the ambient credential chain.

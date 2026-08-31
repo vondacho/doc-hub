@@ -198,15 +198,25 @@ Verify before applying: `aws sts get-caller-identity --profile doc-hub`.
    (`ns[1-3].digitalocean.com`), not Route 53, so Terraform does not touch it.
    You add five A records by hand after the apply — the `dns_records` output
    prints them.
-3. **Check for an existing GitHub OIDC provider.** An AWS account may hold only
-   one per issuer URL:
+3. **Nothing to decide about the GitHub OIDC provider.** An AWS account may
+   hold only one per issuer URL, and this account's belongs to ba-hub, so
+   `create_github_oidc_provider` defaults to `false` and this stack references
+   it. `terraform plan` verifies that against the account before anything is
+   created — `iac/oidc-provider-exists.sh` asks AWS which providers exist and
+   who owns them (the `Project` tag), and a precondition turns a disagreement
+   into a failed plan with the fix in the message. The two failures it replaces
+   both used to happen mid-apply:
 
    ```sh
-   aws iam list-open-id-connect-providers
+   aws iam list-open-id-connect-providers   # the same question, by hand
    ```
 
-   If one already exists — which it will if ba-hub or dev-hub was applied into
-   the same account — set `create_github_oidc_provider = false`.
+   | Setting | Account | What happens now |
+   |---|---|---|
+   | `false` | provider exists | referenced — the normal case here |
+   | `true` | another stack's provider exists | plan fails, naming the owner; set it to `false` |
+   | `true` | none, or this stack's own | created, or kept — no false alarm on re-plan |
+   | `false` | none | plan fails; set it to `true` in a fresh account |
 
 ## Apply
 
@@ -218,9 +228,9 @@ terraform plan
 terraform apply
 ```
 
-Expect: 1 security group + 3 rules, 1 instance, 1 EIP + association, 2 IAM roles
-+ policies, 1 instance profile, and the OIDC provider unless you set
-`create_github_oidc_provider = false`.
+Expect 12 resources: 1 security group + 3 rules, 1 instance, 1 EIP +
+association, 2 IAM roles + policies, 1 instance profile. No OIDC provider — it
+is ba-hub's, and this stack references it.
 
 Then create the DNS records at DigitalOcean — `terraform output dns_records`
 prints them ready to copy:
