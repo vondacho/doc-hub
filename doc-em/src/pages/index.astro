@@ -3,7 +3,7 @@ import Layout from '../layouts/Layout.astro';
 import ExampleMapBoard from '../components/board/ExampleMapBoard.tsx';
 import { swatchClass } from '../lib/board/kinds';
 import { CARD_KINDS, cardLabel, cardMeaning } from '../lib/examplemap/model';
-import { docPortalUrl, practiceUrl, registryApiUrl, registryUrl, storyMapperUrl } from '../lib/links';
+import { promptsUrl, docPortalUrl, practiceUrl, registryApiUrl, registryUrl, storyMapperUrl } from '../lib/links';
 import { fetchProducts } from '../lib/products';
 
 // Server-rendered, like every other page in doc-hub.
@@ -25,6 +25,10 @@ const { products, unavailable } = await fetchProducts(registryApiUrl());
 const portal = docPortalUrl();
 const practice = practiceUrl();
 const registry = registryUrl();
+// Browser-facing, and resolved here rather than in the island: `links.ts` reads
+// `process.env`, which does not exist in a client bundle. Every other address
+// the board renders is passed in the same way.
+const prompts = promptsUrl();
 const storyMapper = storyMapperUrl();
 ---
 
@@ -84,6 +88,7 @@ const storyMapper = storyMapperUrl();
       products={products}
       productsUnavailable={unavailable}
       registryUrl={registry}
+      promptsUrl={prompts}
     />
 
     <noscript>

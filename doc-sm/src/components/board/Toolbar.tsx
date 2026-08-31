@@ -80,6 +80,8 @@ export function Toolbar({
 	onFollowPage,
 	legendShown,
 	onToggleLegend,
+	agentShown,
+	onToggleAgent,
 	detailShown,
 	canToggleDetail,
 	onToggleAllDetail,
@@ -140,6 +142,9 @@ export function Toolbar({
 	/** Whether the notation is on screen. The button is a toggle, not an action. */
 	legendShown: boolean;
 	onToggleLegend: () => void;
+	/** Whether the assistant panel is on screen. A toggle, not an action. */
+	agentShown: boolean;
+	onToggleAgent: () => void;
 	detailShown: boolean;
 	/** False when nothing on the board has any detail to show. */
 	canToggleDetail: boolean;
@@ -261,6 +266,16 @@ export function Toolbar({
 						label={legendShown ? 'Hide the legend' : 'Show the legend'}
 						onClick={onToggleLegend}
 						pressed={legendShown}
+					/>
+
+					{/* Beside the legend, because both put a panel on screen rather
+					    than changing the document. ba-ddd-mapper keeps its assistant
+					    toggle in the same group. */}
+					<IconButton
+						icon="agent"
+						label={agentShown ? 'Hide the assistant' : 'Ask about this document'}
+						onClick={onToggleAgent}
+						pressed={agentShown}
 					/>
 					<IconButton
 						icon={detailShown ? 'collapseAll' : 'expandAll'}

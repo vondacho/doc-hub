@@ -315,6 +315,7 @@ export is still the wall.
 | `REGISTRY_URL` | `http://doc-registry.localhost` | the "register one" links beside the product picker |
 | `REGISTRY_API_URL` | `http://localhost:1337` | the product picker's list, read per request |
 | `STORY_MAPPER_URL` | `http://doc-sm.localhost` | the footer — where the seams become work |
+| `BA_PORTAL_URL` | `http://ba-portal.localhost` | the assistant's link to the full prompt set |
 | `HOST` / `PORT` | `0.0.0.0` / `4324` | the standalone `@astrojs/node` server |
 
 Read at call time through `src/lib/links.ts`. `REGISTRY_API_URL` is the one this

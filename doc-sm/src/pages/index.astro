@@ -2,7 +2,7 @@
 import Layout from '../layouts/Layout.astro';
 import StoryMapBoard from '../components/board/StoryMapBoard.tsx';
 import { swatchClass, kindLabel, kindDescription, KIND_ORDER } from '../lib/board/kinds';
-import { docPortalUrl, practiceUrl, registryApiUrl, registryUrl, ticketingApiUrl } from '../lib/links';
+import { promptsUrl, docPortalUrl, practiceUrl, registryApiUrl, registryUrl, ticketingApiUrl } from '../lib/links';
 import { fetchProducts } from '../lib/products';
 import { isConfigured } from '../lib/ticketing';
 
@@ -26,6 +26,10 @@ const { products, unavailable } = await fetchProducts(registryApiUrl());
 const portal = docPortalUrl();
 const practice = practiceUrl();
 const registry = registryUrl();
+// Browser-facing, and resolved here rather than in the island: `links.ts` reads
+// `process.env`, which does not exist in a client bundle. Every other address
+// the board renders is passed in the same way.
+const prompts = promptsUrl();
 
 // Whether a ticketing system is attached, and nothing more. The address itself
 // is in-cluster and stays on this side — the board only needs to know whether
@@ -116,6 +120,7 @@ const ticketingConfigured = isConfigured(ticketingApiUrl());
 			products={products}
 			productsUnavailable={unavailable}
 			registryUrl={registry}
+			promptsUrl={prompts}
 			ticketingConfigured={ticketingConfigured}
 		/>
 

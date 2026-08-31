@@ -585,6 +585,7 @@ be, or it leaves the cluster to come back in to a Service one DNS name away.
 | `REGISTRY_URL` | `http://doc-registry.localhost` | the footer, and the picker's "register one" link |
 | `REGISTRY_API_URL` | `http://localhost:1337` | **in-cluster**: the product picker's list |
 | `TICKETING_API_URL` | *(empty)* | **in-cluster**: raising tickets. Empty is a working state |
+| `BA_PORTAL_URL` | `http://ba-portal.localhost` | the assistant's link to the full prompt set |
 | `HOST` / `PORT` | `0.0.0.0` / `4322` | the standalone `@astrojs/node` server |
 | `NODE_ENV`, `NODE_OPTIONS` | `production`, unset | Dockerfile / chart |
 

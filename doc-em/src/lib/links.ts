@@ -31,6 +31,16 @@ export function docPortalUrl(): string {
   return fromEnv('DOC_PORTAL_URL', 'http://doc-portal.localhost');
 }
 
+/**
+ * ba-portal's prompt page — the canonical set, by role, across every board.
+ *
+ * The assistant panel carries this board's prompts inline; this is where the
+ * reasoning behind them lives, and the other four boards' sets with it.
+ */
+export function promptsUrl(): string {
+  return `${fromEnv('BA_PORTAL_URL', 'http://ba-portal.localhost')}/doc/tooling/prompts/`;
+}
+
 /** dev-hub's page on the practice — the source this component was built from. */
 export function practiceUrl(): string {
   return fromEnv('PRACTICE_URL', 'http://dev-portal.localhost/doc/practices/example-mapping/');

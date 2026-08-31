@@ -455,6 +455,7 @@ be an in-cluster address rather than an ingress host.
 | `REGISTRY_URL` | `http://doc-registry.localhost` | the "register one" links beside the product picker |
 | `REGISTRY_API_URL` | `http://localhost:1337` | the product picker's list, read per request |
 | `STORY_MAPPER_URL` | `http://doc-sm.localhost` | the footer — the board upstream of this one |
+| `BA_PORTAL_URL` | `http://ba-portal.localhost` | the assistant's link to the full prompt set |
 | `HOST` / `PORT` | `0.0.0.0` / `4323` | the standalone `@astrojs/node` server |
 | `NODE_ENV`, `NODE_OPTIONS` | `production`, unset | Dockerfile / chart |
 

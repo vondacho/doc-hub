@@ -1,14 +1,18 @@
 # Builds a container image for each doc-hub component and publishes it to the
-# GitHub Container Registry (ghcr.io) attached to this repository.
+# GitHub Container Registry (ghcr.io) attached to this repository, then rolls
+# the result onto the EC2 host provisioned by iac/.
 #
 # The components are the directories built and published from here:
-# doc-portal (Astro/node), doc-registry (Strapi CMS), doc-sm (Astro/node, the
-# story mapping board) and doc-em (Astro/node, the example mapping board).
+# doc-portal (Astro/node), doc-registry (Strapi CMS), doc-sm, doc-em and doc-es
+# (Astro/node — the story mapping, example mapping and event storming boards),
+# and doc-registry-db (PostgreSQL).
 #
-# doc-registry-db owns a Dockerfile too and is deliberately not built here — it
-# is stock PostgreSQL plus an initdb script. If that ever changes, add it to the
-# filters below and to the fallback list, and give helm/doc-registry-db a
-# values-ghcr.yaml that resolves.
+# doc-registry-db is stock PostgreSQL plus an initdb script, and used to be left
+# out of this workflow on the grounds that a local cluster can build it. The EC2
+# host cannot: it only runs what GHCR holds, and copying 10-strapi.sql into
+# iac/host/ would be a second, drift-prone description of the bootstrap. So it
+# is built here like everything else, and helm/doc-registry-db/values-ghcr.yaml
+# already resolves against the package this publishes.
 #
 # There is no separate "npm ci && npm run build" job on purpose. Each
 # Dockerfile is already multi-stage and runs the real build in its `build`
@@ -20,6 +24,8 @@
 #   ghcr.io/vondacho/doc-hub/doc-registry
 #   ghcr.io/vondacho/doc-hub/doc-sm
 #   ghcr.io/vondacho/doc-hub/doc-em
+#   ghcr.io/vondacho/doc-hub/doc-es
+#   ghcr.io/vondacho/doc-hub/doc-registry-db
 #
 # They are nested under the repository path so GHCR links each package back to
 # this repo automatically (via the org.opencontainers.image.source label set
@@ -34,6 +40,9 @@
 #     --set image.repository=ghcr.io/vondacho/doc-hub/doc-portal \
 #     --set image.tag=sha-<short-sha> \
 #     --set image.pullPolicy=IfNotPresent
+#
+# The charts are the local (Rancher Desktop) path. What runs in production is
+# iac/host/docker-compose.yml, rolled out by the `deploy` job below.
 name: build-images
 
 on:
@@ -63,13 +72,15 @@ env:
   # one, extend this list and enable docker/setup-qemu-action in the build job.
   PLATFORMS: linux/amd64
 
+permissions:
+  id-token: write
+  contents: read
+
 jobs:
   # Which components does this ref actually need rebuilt?
   changes:
     name: select components
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
     outputs:
       # JSON array of component names, consumed as the build job's matrix.
       components: ${{ steps.select.outputs.components }}
@@ -101,6 +112,12 @@ jobs:
             doc-em:
               - *workflow
               - 'doc-em/**'
+            doc-es:
+              - *workflow
+              - 'doc-es/**'
+            doc-registry-db:
+              - *workflow
+              - 'doc-registry-db/**'
 
       - id: select
         env:
@@ -111,7 +128,7 @@ jobs:
           # that every image carries it, whether or not each one changed.
           # Same for an explicit "build everything" dispatch.
           if [ "${{ github.ref_type }}" = 'tag' ] || [ "${{ inputs.all }}" = 'true' ]; then
-            components='["doc-portal","doc-registry","doc-sm","doc-em"]'
+            components='["doc-portal","doc-registry","doc-sm","doc-em","doc-es","doc-registry-db"]'
           else
             # paths-filter emits every matched filter name, including the
             # "workflow" helper the anchors are attached to — drop it, it is
@@ -193,4 +210,80 @@ jobs:
             echo '```'
             echo "${{ steps.meta.outputs.tags }}"
             echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # Rolls the freshly published images onto the EC2 Docker host provisioned by
+  # iac/. Only `main` deploys: tags publish images, they do not promote them,
+  # and a pull request has nothing to roll out.
+  #
+  # `always()` with an explicit build check so that a push touching only, say,
+  # iac/host/Caddyfile still redeploys — that run has an empty component matrix,
+  # which skips `build`, and a skipped dependency would otherwise skip this job
+  # too.
+  deploy:
+    name: deploy to host
+    needs: [changes, build]
+    if: >-
+      always() &&
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/main' &&
+      needs.changes.result == 'success' &&
+      needs.build.result != 'failure' &&
+      needs.build.result != 'cancelled'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # Lets the runner mint the OIDC token that AWS exchanges for temporary
+      # credentials. Without it the assume-role step fails with a missing
+      # ACTIONS_ID_TOKEN_REQUEST_URL.
+      id-token: write
+    # One rollout at a time, and never cancelled half-applied — this is the only
+    # deploy that migrates a database schema.
+    concurrency:
+      group: deploy-host
+      cancel-in-progress: false
+    environment:
+      name: production
+      url: https://doc-portal.obya.ch
+    steps:
+      - uses: actions/checkout@v5
+
+      # No stored AWS key: the runner presents a GitHub-signed OIDC token and
+      # STS returns credentials that expire with the job. The role's trust
+      # policy pins this repository and this ref (see iac/oidc.tf).
+      - name: Assume the deploy role
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION || 'eu-central-1' }}
+          role-session-name: doc-hub-deploy-${{ github.run_id }}
+
+      # Ships iac/host/ to /opt/doc-hub over SSM and restarts the stack. The
+      # same script runs unchanged from a laptop — without these secrets in the
+      # environment it leaves /opt/doc-hub/secrets.env alone.
+      #
+      # Strapi will not boot without all six of its secrets, and rotating one is
+      # not free: ENCRYPTION_KEY makes stored encrypted fields unreadable, and
+      # APP_KEYS or ADMIN_JWT_SECRET signs every administrator out. Set them
+      # once (iac/README.md prints the openssl commands) and leave them.
+      - name: Deploy
+        env:
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          APP_KEYS: ${{ secrets.APP_KEYS }}
+          API_TOKEN_SALT: ${{ secrets.API_TOKEN_SALT }}
+          ADMIN_JWT_SECRET: ${{ secrets.ADMIN_JWT_SECRET }}
+          TRANSFER_TOKEN_SALT: ${{ secrets.TRANSFER_TOKEN_SALT }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          ENCRYPTION_KEY: ${{ secrets.ENCRYPTION_KEY }}
+        run: ./iac/deploy.sh
+
+      - name: Summarise
+        run: |
+          {
+            echo '### Deployed'
+            echo '- https://doc-portal.obya.ch'
+            echo '- https://doc-registry.obya.ch'
+            echo '- https://doc-sm.obya.ch'
+            echo '- https://doc-em.obya.ch'
+            echo '- https://doc-es.obya.ch'
           } >> "$GITHUB_STEP_SUMMARY"

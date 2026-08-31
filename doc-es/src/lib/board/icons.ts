@@ -117,6 +117,13 @@ export const icons = {
 	panesBoth: 'M3 5h18v14H3zM12 5v14',
 	panesSource: 'M3 5h18v14H3zM6 9h12M6 12h9M6 15h12',
 	panesBoard: 'M3 5h18v14H3zM6 9h5v5H6zM14 9h4v4h-4z',
+	/*
+	 * A speech mark with a spark in it: something that answers, and is not a
+	 * person. ba-ddd-mapper's `agent` glyph, redrawn on this grid as one path —
+	 * the bubble and the spark are two subpaths of it, which is how every other
+	 * multi-part icon here is drawn.
+	 */
+	agent: 'M20 4H4v11h4v4l4-4h8V4Z M12 7l.8 2.2L15 10l-2.2.8L12 13l-.8-2.2L9 10l2.2-.8L12 7Z',
 } as const;
 
 export type IconName = keyof typeof icons;

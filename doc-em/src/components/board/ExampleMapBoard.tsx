@@ -27,6 +27,7 @@ import {
 import { sortableKeyboardCoordinates } from '@dnd-kit/sortable';
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { clearFileInput, downloadText, filenameFor, readTextFile } from '../../lib/files.ts';
+import { AgentPanel } from '../agent/AgentPanel.tsx';
 import * as storage from '../../lib/storage.ts';
 import { format as formatSource } from '../../lib/format.ts';
 import {
@@ -96,6 +97,7 @@ export default function ExampleMapBoard({
 	products,
 	productsUnavailable,
 	registryUrl,
+	promptsUrl,
 }: {
 	/** The registered products, read once on the server. See src/lib/products.ts. */
 	products: readonly Product[];
@@ -103,6 +105,8 @@ export default function ExampleMapBoard({
 	productsUnavailable: string | null;
 	/** The registry's admin UI, for the "register one" links. Browser-facing. */
 	registryUrl: string;
+	/** ba-portal's prompt page, for the assistant's link out. Browser-facing. */
+	promptsUrl: string;
 }) {
 	/*
 	 * The document is the text. Everything else on this screen is derived.
@@ -282,6 +286,20 @@ export default function ExampleMapBoard({
 	 * this board before, and they will not go looking for a switch.
 	 */
 	const [legend, setLegend] = useState(true);
+	/**
+	 * Whether the assistant is on screen.
+	 *
+	 * A view preference like the legend, restored from the store below. It
+	 * starts closed: the panel costs a third of the width and is useless without
+	 * a key, so a visitor who has never opened it should not meet it.
+	 */
+	const [agent, setAgent] = useState(false);
+	/**
+	 * How wide the assistant is, as a percentage of the window. Dragged by the
+	 * handle beside it, and remembered — the width somebody settled on is a
+	 * property of how they work, not of the board they were reading.
+	 */
+	const [agentWidth, setAgentWidth] = useState(storage.AGENT_DEFAULT_WIDTH);
 	/** What the page is showing right now, so the toggle can offer the opposite. */
 	const [pageIsDark, setPageIsDark] = useState(false);
 	const [expanded, setExpanded] = useState<ReadonlySet<Id>>(() => new Set());
@@ -606,6 +624,13 @@ export default function ExampleMapBoard({
 
 	useEffect(() => setBoardTheme(storage.loadTheme()), []);
 	useEffect(() => setLegend(storage.loadLegend()), []);
+	useEffect(() => {
+		const stored = storage.loadAgent();
+		if (stored !== null) setAgent(stored);
+	}, []);
+	useEffect(() => setAgentWidth(storage.loadAgentWidth()), []);
+	useEffect(() => setPanes(storage.loadPanes()), []);
+	useEffect(() => setSplit(storage.loadSplit()), []);
 
 	/**
 	 * Follow the OS while the board is not pinned.
@@ -866,6 +891,11 @@ export default function ExampleMapBoard({
 					setLegend(!legend);
 					storage.saveLegend(!legend);
 				}}
+				agentShown={agent}
+				onToggleAgent={() => {
+					setAgent(!agent);
+					storage.saveAgent(!agent);
+				}}
 				detailShown={anyExpanded}
 				canToggleDetail={detailed.length > 0}
 				onToggleAllDetail={() => setExpanded(anyExpanded ? new Set() : new Set(detailed))}
@@ -956,6 +986,7 @@ export default function ExampleMapBoard({
 
 				{panes === 'both' && (
 					<Divider
+						percent={split}
 						onMove={(percent) => {
 							setSplit(percent);
 							storage.saveSplit(percent);
@@ -1025,9 +1056,58 @@ export default function ExampleMapBoard({
 			</DndContext>
 					</section>
 				)}
+
+				{/* A third column, after the board rather than over it: an answer
+				    about a map is read *beside* the map, and a panel that covered
+				    the thing it is discussing would be the wrong shape.
+				    ba-ddd-mapper puts its assistant in the same place. */}
+				{agent && (
+					<>
+						<Divider
+							percent={agentWidth}
+							from="right"
+							min={storage.AGENT_MIN}
+							max={storage.AGENT_MAX}
+							label="Resize the assistant"
+							onMove={(percent) => {
+								setAgentWidth(percent);
+								storage.saveAgentWidth(percent);
+							}}
+						/>
+						<AgentPanel
+							source={source}
+							promptsUrl={promptsUrl}
+							check={problemsIn}
+							width={agentWidth}
+							onApply={edit}
+							onClose={() => {
+								setAgent(false);
+								storage.saveAgent(false);
+							}}
+						/>
+					</>
+				)}
 			</div>
 		</div>
 	);
+}
+
+/**
+ * The problems in a candidate document, without disturbing the board.
+ *
+ * The assistant's proposal has to be parsed before it is offered, and the
+ * board's own `parsed` memo is about the text on screen. Same parser, same
+ * errors, no state: a proposal that does not parse is shown with its errors and
+ * cannot be applied.
+ */
+function problemsIn(text: string): readonly Problem[] {
+	try {
+		parse(text);
+		return [];
+	} catch (error) {
+		if (!(error instanceof ExampleMapParseError)) throw error;
+		return error.problems;
+	}
 }
 
 /** Where this board belongs in storage. One derivation, three callers. */

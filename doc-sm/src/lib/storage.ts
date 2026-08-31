@@ -58,6 +58,23 @@ const PANES = 'doc-sm:panes';
 const SPLIT = 'doc-sm:split';
 
 /**
+ * The assistant: whether the panel is open, how it is configured, and the key.
+ *
+ * Three entries rather than one, because they have three different lifetimes.
+ * Whether the panel is open is a view preference like `PANES`. The
+ * configuration is a set of choices that survive clearing the key. The key is a
+ * secret the visitor typed, and lives in whichever store they chose — see
+ * `loadKey`.
+ *
+ * Colons, like every setting here, so none of them can collide with a board key
+ * or be listed as one.
+ */
+const AGENT = 'doc-sm:agent';
+const AGENT_WIDTH = 'doc-sm:agent-width';
+const AGENT_CONFIG = 'doc-sm:agent-config';
+const AGENT_KEY = 'doc-sm:agent-key';
+
+/**
  * Where a board is kept: `<product>_<title>`.
  *
  * The same stem the export filename uses, so the entry in `localStorage` and the
@@ -389,4 +406,132 @@ export function inventory(): Inventory {
 function titleIn(text: string): string | null {
 	const found = /^\s*storymap\s+"((?:[^"\\]|\\.)*)"/m.exec(text);
 	return found?.[1] === undefined ? null : found[1].replace(/\\(.)/g, '$1');
+}
+
+
+/* ---- the assistant ------------------------------------------------------ */
+
+/** Whether the assistant panel is open, or null when nobody has said. */
+export function loadAgent(): boolean | null {
+	try {
+		const value = store()?.getItem(AGENT);
+		return value === 'on' ? true : value === 'off' ? false : null;
+	} catch {
+		return null;
+	}
+}
+
+export function saveAgent(shown: boolean): void {
+	try {
+		store()?.setItem(AGENT, shown ? 'on' : 'off');
+	} catch {
+		// As with the theme: a preference that does not persist is survivable.
+	}
+}
+
+/**
+ * How wide the assistant sits, as a percentage of the window.
+ *
+ * Its own key rather than the split's, because they are two different
+ * proportions: the split divides source from board, and this one takes a slice
+ * off the end of whatever those two are showing. Sharing a number would move
+ * one every time the visitor dragged the other.
+ */
+export const AGENT_DEFAULT_WIDTH = 30;
+export const AGENT_MIN = 18;
+export const AGENT_MAX = 60;
+
+export function loadAgentWidth(): number {
+	const value = Number(load(AGENT_WIDTH));
+	return Number.isFinite(value) && value >= AGENT_MIN && value <= AGENT_MAX
+		? value
+		: AGENT_DEFAULT_WIDTH;
+}
+
+export function saveAgentWidth(percent: number): void {
+	try {
+		store()?.setItem(AGENT_WIDTH, String(Math.round(percent)));
+	} catch {
+		// As with the split: a proportion that does not persist is survivable.
+	}
+}
+
+/**
+ * How the assistant is configured — everything except the key.
+ *
+ * `remember` is about the key and lives here rather than with it, because it is
+ * a decision the visitor made and the key is a secret they typed. Keeping the
+ * two apart is what lets the key be dropped without forgetting the choice.
+ */
+export interface AgentConfig {
+	readonly model: string;
+	readonly effort: string;
+	/** Standing instructions, appended to the guide. */
+	readonly guidance: string;
+	readonly remember: boolean;
+}
+
+export const AGENT_DEFAULTS: AgentConfig = {
+	model: 'claude-opus-5',
+	effort: 'high',
+	guidance: '',
+	remember: false,
+};
+
+export function loadAgentConfig(): AgentConfig {
+	try {
+		const raw = store()?.getItem(AGENT_CONFIG);
+		if (!raw) return AGENT_DEFAULTS;
+		const parsed = JSON.parse(raw) as Partial<AgentConfig>;
+		return {
+			model: typeof parsed.model === 'string' && parsed.model !== '' ? parsed.model : AGENT_DEFAULTS.model,
+			effort: typeof parsed.effort === 'string' ? parsed.effort : AGENT_DEFAULTS.effort,
+			guidance: typeof parsed.guidance === 'string' ? parsed.guidance : '',
+			remember: parsed.remember === true,
+		};
+	} catch {
+		// A corrupt entry is not worth a broken panel.
+		return AGENT_DEFAULTS;
+	}
+}
+
+export function saveAgentConfig(config: AgentConfig): void {
+	try {
+		store()?.setItem(AGENT_CONFIG, JSON.stringify(config));
+	} catch {
+		// Same.
+	}
+}
+
+/**
+ * The API key, in whichever store the visitor chose.
+ *
+ * **Two stores, one key, and the difference is the point.** `sessionStorage` is
+ * this tab and goes when it closes; `localStorage` survives, and survives for
+ * anything else that can run script on this origin. Neither is a secret vault
+ * and the settings panel says so — a browser is where a local-first tool can
+ * keep a key, and being told that plainly is the least this can do about it.
+ *
+ * Read from both regardless of the current preference, because the preference
+ * can change after a key was stored and a key nobody can find is worse than
+ * either choice.
+ */
+export function loadKey(): string {
+	try {
+		return window.sessionStorage.getItem(AGENT_KEY) ?? store()?.getItem(AGENT_KEY) ?? '';
+	} catch {
+		return '';
+	}
+}
+
+export function saveKey(key: string, remember: boolean): void {
+	try {
+		window.sessionStorage.removeItem(AGENT_KEY);
+		store()?.removeItem(AGENT_KEY);
+		if (key === '') return;
+		(remember ? store() : window.sessionStorage)?.setItem(AGENT_KEY, key);
+	} catch {
+		// A key that does not persist still works for this page's lifetime; the
+		// panel holds it in memory too.
+	}
 }
