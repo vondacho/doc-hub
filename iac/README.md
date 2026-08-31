@@ -114,7 +114,6 @@ instance that is not tagged as part of this project.
 | Let's Encrypt account key | the `caddy_data` volume on the host | Generated there, never leaves. |
 | Strapi's six secrets + the PostgreSQL password | GitHub repository secrets → `/opt/doc-hub/secrets.env` on the host | See below. |
 | GHCR pull credential | none — the packages are public | See step 1 under *Before the first apply*. |
-| DigitalOcean API token | none — the records are created by hand | Terraform never talks to DigitalOcean. |
 
 Two things must stay out of git, and `.gitignore` already covers both:
 `terraform.tfvars` and `terraform.tfstate`. `.terraform.lock.hcl` is the

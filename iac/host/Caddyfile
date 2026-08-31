@@ -28,3 +28,14 @@ doc-es.obya.ch {
 	encode zstd gzip
 	reverse_proxy doc-es:4324
 }
+
+doc-registry.obya.ch {
+	encode zstd gzip
+	# Strapi's admin panel uploads media and imports/exports content, so the
+	# stock 10 MB body limit is too low to be useful. Matches nothing in the
+	# chart — an ingress has its own annotation for this.
+	request_body {
+		max_size 100MB
+	}
+	reverse_proxy doc-registry:1337
+}
