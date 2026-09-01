@@ -20,6 +20,22 @@
  * Built on the native `<dialog>`: `showModal()` brings the focus trap, the inert
  * background, the Escape key and the top-layer stacking with it.
  *
+ * It has to say `m-auto` to sit in the middle, which is the one thing the
+ * native element would have done for nothing. A modal dialog is centred by the
+ * UA's `margin: auto`, and Tailwind's preflight zeroes the margin on every
+ * element — so this opened hard against the top-left corner until it asked for
+ * the centring back. The other two dialogs in doc-em restore the same margins
+ * by hand (`mx-auto mt-6 mb-auto`) to hang from the top instead; this one is a
+ * thing you read rather than work in, so it takes the middle.
+ *
+ * ## It is set at the size the source is set at
+ *
+ * The two are the same text twice: the `.examplemap` in the pane behind this
+ * dialog, and what it produced. Somebody who has chosen a size in the source
+ * pane has said how big text has to be for them to read it, and that answer
+ * does not change when the text changes name — so this takes the setting rather
+ * than keeping a number of its own to be discovered as too small.
+ *
  * ## It says what it cannot write
  *
  * An open question is not a specification, so Gherkin has no keyword for one. A
@@ -38,12 +54,18 @@ export function GherkinDialog({
 	filename,
 	text,
 	unwritable,
+	textSize,
 	onClose,
 }: {
 	open: boolean;
 	filename: string;
 	/** The feature file, or null when the map does not currently parse. */
 	text: string | null;
+	/**
+	 * The size the source pane is set in, in px. The feature file is shown at it
+	 * — see the note in the header comment.
+	 */
+	textSize: number;
 	/** How many open questions this file cannot express. */
 	unwritable: number;
 	onClose: () => void;
@@ -79,7 +101,7 @@ export function GherkinDialog({
 			onClose={onClose}
 			onCancel={onClose}
 			aria-labelledby="gherkin-title"
-			className="w-[min(48rem,94vw)] rounded-2xl border border-slate-200 bg-white p-0 text-ink backdrop:bg-black/40 dark:border-slate-700 dark:bg-night-raised dark:text-slate-100"
+			className="m-auto w-[min(48rem,94vw)] rounded-2xl border border-slate-200 bg-white p-0 text-ink backdrop:bg-black/40 dark:border-slate-700 dark:bg-night-raised dark:text-slate-100"
 		>
 			<div className="flex items-start justify-between gap-3 border-b border-slate-200 px-5 py-3 dark:border-slate-700">
 				<div>
@@ -113,7 +135,9 @@ export function GherkinDialog({
 						No feature file: the map does not parse. The problems are listed under the source pane.
 					</p>
 				) : (
-					<pre className="font-mono text-[13px] leading-[1.55] whitespace-pre-wrap">{text}</pre>
+					<pre className="font-mono leading-[1.6] whitespace-pre-wrap" style={{ fontSize: `${textSize}px` }}>
+						{text}
+					</pre>
 				)}
 				{copied === 'failed' && (
 					<p role="alert" className="mt-3 text-xs text-critical">

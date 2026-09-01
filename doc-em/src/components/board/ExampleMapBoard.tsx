@@ -59,7 +59,7 @@ import type { Product } from '../../lib/products.ts';
 import { BASE_FONT, BoardGrid } from './BoardGrid.tsx';
 import { StoreState } from './StoreState.tsx';
 import { Divider } from './Divider.tsx';
-import { Editor } from './Editor.tsx';
+import { DEFAULT_TEXT_SIZE, Editor } from './Editor.tsx';
 import { GherkinDialog } from './GherkinDialog.tsx';
 import { SourceProblems } from './SourceProblems.tsx';
 import { Legend } from './Legend.tsx';
@@ -170,6 +170,14 @@ export default function ExampleMapBoard({
 	/** Which panels are showing, and how the width is divided between them. */
 	const [panes, setPanes] = useState<storage.Panes>('both');
 	const [split, setSplit] = useState(42);
+	/**
+	 * The size the source is set in, chosen in the pane's own footer.
+	 *
+	 * A view preference like the legend and the split, and restored from the
+	 * store the same way — the default is only what somebody who has never
+	 * touched it gets.
+	 */
+	const [textSize, setTextSize] = useState(DEFAULT_TEXT_SIZE);
 	const [revealLine, setRevealLine] = useState<number | null>(null);
 	/**
 	 * The card whose text the source pane is emphasising.
@@ -631,6 +639,7 @@ export default function ExampleMapBoard({
 	useEffect(() => setAgentWidth(storage.loadAgentWidth()), []);
 	useEffect(() => setPanes(storage.loadPanes()), []);
 	useEffect(() => setSplit(storage.loadSplit()), []);
+	useEffect(() => setTextSize(storage.loadEditorText()), []);
 
 	/**
 	 * Follow the OS while the board is not pinned.
@@ -929,6 +938,7 @@ export default function ExampleMapBoard({
 				filename={parsed.document === null ? 'no feature file' : featureFilename(parsed.document)}
 				text={gherkin}
 				unwritable={parsed.document === null ? 0 : unwritableQuestions(parsed.document)}
+				textSize={textSize}
 				onClose={() => setPreviewingGherkin(false)}
 			/>
 
@@ -972,6 +982,7 @@ export default function ExampleMapBoard({
 								problems={problems}
 								revealLine={revealLine}
 								highlight={highlight}
+								textSize={textSize}
 							/>
 						</div>
 						<SourceProblems
@@ -980,6 +991,11 @@ export default function ExampleMapBoard({
 							collapsed={problemsCollapsed}
 							onToggle={() => setProblemsCollapsed((was) => !was)}
 							onReveal={(line) => setRevealLine(line)}
+							textSize={textSize}
+							onTextSize={(px) => {
+								setTextSize(px);
+								storage.saveEditorText(px);
+							}}
 						/>
 					</section>
 				)}

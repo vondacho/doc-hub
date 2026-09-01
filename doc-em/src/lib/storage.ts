@@ -56,6 +56,7 @@ const BOARD_THEME = 'doc-em:board-theme';
 const LEGEND = 'doc-em:legend';
 const PANES = 'doc-em:panes';
 const SPLIT = 'doc-em:split';
+const EDITOR_TEXT = 'doc-em:editor-text';
 
 /**
  * The assistant: whether the panel is open, how it is configured, and the key.
@@ -351,6 +352,33 @@ export function saveSplit(percent: number): void {
 	}
 }
 
+/**
+ * How big the source pane's type is, in px.
+ *
+ * Remembered for the same reason the panes and the split are: it is a working
+ * posture rather than a property of a map. Somebody who needs 19px needs it in
+ * every map they open, and on the map they open tomorrow — and being handed
+ * 15px again on every reload is the kind of small refusal that makes a tool
+ * unusable for the person who most needed the setting.
+ *
+ * Validated as a range rather than against the stops the toolbar offers, so a
+ * scale that gains a step later does not orphan what a browser already holds.
+ */
+export function loadEditorText(): number {
+	const value = Number(load(EDITOR_TEXT));
+	return Number.isFinite(value) && value >= 12 && value <= 24 ? value : 15;
+}
+
+export function saveEditorText(px: number): void {
+	const storage = store();
+	if (storage === null) return;
+	try {
+		storage.setItem(EDITOR_TEXT, String(Math.round(px)));
+	} catch {
+		// As above.
+	}
+}
+
 // ---------------------------------------------------------------------------
 // What this browser is holding
 // ---------------------------------------------------------------------------
@@ -387,8 +415,8 @@ export interface Inventory {
  * accumulated under their own browser. This is the answer, and it is
  * deliberately a *reading*: nothing here writes and nothing here deletes.
  *
- * Boards only. The theme, the legend, the panes, the split and the pointer to
- * the last board opened all live in the store too, and none of them is a thing
+ * Boards only. The theme, the legend, the panes, the split, the source pane's
+ * type size and the pointer to the last board opened all live in the store too, and none of them is a thing
  * anybody opens a panel to look at — they are settings, and a list that mixed
  * them in with somebody's work would be a dump of the store rather than an
  * account of it. They are excluded structurally rather than by a filter:
