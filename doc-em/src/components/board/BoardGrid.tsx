@@ -19,6 +19,14 @@
  * strip directly under its rule's header, above every band, rather than being
  * given a row it has no business in.
  *
+ * That strip is part of the sticky header rather than part of the scrolling
+ * body. A question card says what nobody in the room could answer about *that*
+ * rule, and it is unreadable the moment the rule it belongs to is not next to
+ * it — which is what scrolling used to do: the rule pinned, its doubts slid
+ * away under it, and the header ended up asserting a rule the board had open
+ * questions about. So the question row pins under the rule row, the way the
+ * rule row pins under the story, and a rule and its doubts are never apart.
+ *
  * ## The left column belongs to the timeline, all the way up
  *
  * The story card starts at column 2, not column 1. It used to span the full
@@ -126,7 +134,11 @@ export function BoardGrid({
 }) {
 	const scroller = useRef<HTMLDivElement>(null);
 	const grid = useRef<HTMLDivElement>(null);
-	const [ruleTop, setRuleTop] = useState(0);
+	/**
+	 * Where the two pinned rows below the story rest, in px from the top of the
+	 * scrollport: the rules under the story, and the questions under the rules.
+	 */
+	const [headerTop, setHeaderTop] = useState({ rule: 0, question: 0 });
 
 	// A new map is read from its top-left corner.
 	useLayoutEffect(() => {
@@ -137,21 +149,27 @@ export function BoardGrid({
 	}, [documentKey]);
 
 	/*
-	 * The rule row pins below the story row, and how far below is a number nobody
-	 * can write down: the story card grows with the zoom, with its notes, and
-	 * with how many questions sit beside it. So it is measured, as doc-sm learned
-	 * to do after guessing it once.
+	 * The rule row pins below the story row, and the question row below that, and
+	 * how far below is a number nobody can write down: the story card grows with
+	 * the zoom, with its notes, and with how many questions sit beside it, and
+	 * the rule row grows with the longest rule. So both are measured, as doc-sm
+	 * learned to do after guessing the first one once.
 	 */
 	useLayoutEffect(() => {
 		const element = grid.current;
 		if (!element) return;
 		const measure = () => {
 			const style = getComputedStyle(element);
-			const first = Number.parseFloat(style.gridTemplateRows.split(' ')[0] ?? '');
+			const sizes = style.gridTemplateRows.split(' ');
+			const storyRow = Number.parseFloat(sizes[0] ?? '');
+			const ruleRow = Number.parseFloat(sizes[1] ?? '');
 			const gap = Number.parseFloat(style.rowGap) || 0;
-			if (!Number.isFinite(first)) return;
-			const next = first + gap;
-			setRuleTop((was) => (was === next ? was : next));
+			if (!Number.isFinite(storyRow)) return;
+			const rule = storyRow + gap;
+			// An empty board has no rule row to measure. Pinning the questions where
+			// the rules would be costs nothing: there are none to pin either.
+			const question = Number.isFinite(ruleRow) ? rule + ruleRow + gap : rule;
+			setHeaderTop((was) => (was.rule === rule && was.question === question ? was : { rule, question }));
 		};
 		measure();
 		const observer = new ResizeObserver(measure);
@@ -185,12 +203,14 @@ export function BoardGrid({
 					className="grid min-w-max gap-[0.4em]"
 					style={{ gridTemplateColumns: `${RAIL} repeat(${columns - 1}, minmax(${COLUMN}, 1fr))` }}
 				>
-					{/* Opaque behind the two header rows: the cards are opaque but the
+					{/* Opaque behind the three header rows: the cards are opaque but the
 					    grid's gaps are not. Starts at column 2 — column 1 is the rail's,
-					    and the corner below paints it. */}
+					    and the corner below paints it. Three rows, not two, since the
+					    questions pin with their rule: the gaps around a question card
+					    would otherwise show the examples sliding under it. */}
 					<div
 						aria-hidden="true"
-						style={{ gridColumn: '2 / -1', gridRow: `${STORY_ROW} / span 2` }}
+						style={{ gridColumn: '2 / -1', gridRow: `${STORY_ROW} / span 3` }}
 						className="sticky top-0 z-[5] -mb-[0.2em] bg-white pb-[0.2em] dark:bg-night-raised"
 					/>
 
@@ -213,9 +233,11 @@ export function BoardGrid({
 					/>
 
 					{/* Top-left corner. Sticks in both directions, so it must outrank
-					    both the rail and the header rows. */}
+					    both the rail and the header rows — and it is what hides them
+					    when the board is scrolled sideways, so it spans every row they
+					    do, questions included. */}
 					<div
-						style={{ gridColumn: 1, gridRow: `${STORY_ROW} / span 2` }}
+						style={{ gridColumn: 1, gridRow: `${STORY_ROW} / span 3` }}
 						className="sticky top-0 left-0 z-30 rounded-[0.4em] bg-white px-[0.5em] py-[0.25em] text-[0.7em] font-semibold tracking-[0.14em] text-ink-muted uppercase dark:bg-night-raised dark:text-slate-400"
 					>
 						Deliveries
@@ -314,7 +336,7 @@ export function BoardGrid({
 									onNotes={(text) => dispatch({ type: 'setNotes', kind: 'rule', id: ruleId, text })}
 									menu={ruleMenu(board, dispatch, ruleId, index)}
 									className="sticky z-10"
-									style={{ gridColumn: columnOfRule(index), gridRow: RULE_ROW, top: ruleTop }}
+									style={{ gridColumn: columnOfRule(index), gridRow: RULE_ROW, top: headerTop.rule }}
 								/>
 							);
 						})}
@@ -337,15 +359,15 @@ export function BoardGrid({
 					{/* ---- the timeline down the left ---- */}
 					<DeliveryRail board={board} dispatch={dispatch} firstRow={FIRST_BAND_ROW} />
 
-					{/* ---- the questions on each rule, above every band ---- */}
+					{/* ---- the questions on each rule: pinned under it, above every band ---- */}
 					{board.ruleOrder.map((ruleId, index) => {
 						const rule = board.rules[ruleId];
 						if (!rule) return null;
 						return (
 							<div
 								key={`q-${ruleId}`}
-								style={{ gridColumn: columnOfRule(index), gridRow: QUESTION_ROW }}
-								className="group/q flex flex-col gap-[0.3em]"
+								style={{ gridColumn: columnOfRule(index), gridRow: QUESTION_ROW, top: headerTop.question }}
+								className="group/q sticky z-10 flex flex-col gap-[0.3em]"
 							>
 								<QuestionStrip
 									board={board}
