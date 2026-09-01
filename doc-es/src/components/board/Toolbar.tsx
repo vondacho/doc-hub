@@ -193,7 +193,7 @@ export function Toolbar({
 
 				<div className="flex flex-wrap items-center gap-1">
 					{/* The one control that adds to the wall. */}
-					<IconButton icon="addActivity" label="Add a lane" onClick={onAddLane} />
+					<IconButton icon="addLane" label="Add a lane" onClick={onAddLane} />
 
 					<span className="mx-1 h-6 w-px bg-slate-200 dark:bg-slate-700" aria-hidden="true" />
 

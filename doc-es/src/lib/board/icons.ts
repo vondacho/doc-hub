@@ -32,9 +32,17 @@ export const icons = {
 	 * each one draws the shape it creates: a column for an activity, a band for a
 	 * release. Tooltip and label carry the meaning; the glyph only has to keep
 	 * them apart at a glance.
+	 *
+	 * Both are doc-sm's, and doc-sm's axes are not this board's: an activity is a
+	 * column *there*. Here the only thing anybody adds to the wall is a lane, and
+	 * a lane is a row — the rail is down the left, the lane runs across. So it
+	 * gets its own glyph, a horizontal band, drawn on `addRelease`'s geometry
+	 * because that is the shape a row is. The toolbar used `addActivity`, which
+	 * offered a lane and drew a column.
 	 */
 	addActivity: 'M4 4h5v16H4zM14 12h6M17 9v6',
 	addRelease: 'M4 4h16v5H4zM9 15h6M12 12v6',
+	addLane: 'M4 4h16v5H4zM9 15h6M12 12v6',
 
 	/** A page with a folded corner — the worked example. */
 	example: 'M6 3h8l4 4v14H6zM14 3v4h4M9 12h6M9 16h4',

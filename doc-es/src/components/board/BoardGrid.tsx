@@ -421,10 +421,31 @@ function Square({
 			// without this the strip would stay hidden until the pointer moved
 			// again.
 			onPointerLeave={() => setOnNotes(false)}
+			/*
+			 * The grid has to be *seen*, in both themes.
+			 *
+			 * It was `slate-200/70` on white and `slate-700/70` on the night ground,
+			 * which measure 1.15:1 and 1.36:1 against what they sit on — a line you
+			 * can find if you know it is there and cannot follow across a wall. And
+			 * the grid is not decoration here: a square is where a note goes, the
+			 * empty ones are the wall's own account of what has not been said yet,
+			 * and the column a note sits in is half of what it means.
+			 *
+			 * Now 2.56:1 in daylight and 3.46:1 at night — measured, not guessed,
+			 * against the composited backgrounds. Not the same step on both sides,
+			 * because they are not symmetric: a grey line loses more of itself
+			 * against a dark ground than the mirror-image grey does against white,
+			 * so the night side is one stop lighter to arrive at the same legibility.
+			 *
+			 * Still dashed, and still a stop below the controls around it. This is
+			 * the ruling on the paper, not the writing on it — and `isOver` has to
+			 * stay unmistakably louder than either, since that one says a note is
+			 * about to land here.
+			 */
 			className={`group/sq relative flex flex-col gap-[0.15em] rounded-[0.3em] border border-dashed p-[0.15em] transition-colors motion-reduce:transition-none ${
 				isOver
 					? 'border-brand bg-brand/5 dark:border-sky-400 dark:bg-sky-400/10'
-					: 'border-slate-200/70 dark:border-slate-700/70'
+					: 'border-slate-400 dark:border-slate-500'
 			}`}
 		>
 			<ul
