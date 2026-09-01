@@ -21,10 +21,23 @@
  * square near the right-hand edge would be sliced in half, and one on the bottom
  * row would be cut off entirely.
  *
- * So it is rendered into the body and positioned `fixed` against the button's
- * own rectangle, which also means it can never be painted under a sticky row.
- * The portal target is the fullscreen element when there is one, because content
- * outside that element is not painted at all.
+ * So it is rendered into the body and positioned `fixed`, which also means it
+ * can never be painted under a sticky row. The portal target is the fullscreen
+ * element when there is one, because content outside that element is not
+ * painted at all.
+ *
+ * ## It lands on the next square along, not on this one
+ *
+ * It used to sit directly above the swatch, which put it over the square the
+ * strip belongs to — so the preview of the note you were about to add covered
+ * the notes you were adding it next to, which is the one piece of context that
+ * decides whether you want it. A wall is read by its neighbourhood.
+ *
+ * So it is anchored to the square rather than to the swatch, and placed beside
+ * it: one gap to the right, over the next square along, flipped to the left
+ * when the wall's right-hand edge is closer than the preview is wide. Only when
+ * neither side has room does it fall back to the middle of the window. The
+ * square stays visible in every case, which is the whole point.
  *
  * ## It is decoration, and says so
  *
@@ -39,12 +52,26 @@ import { cardLabel, cardMeaning, newCardTitle, type CardKind } from '../../lib/e
 import { cardClass, swatchClass } from '../../lib/board/kinds.ts';
 import { Icon } from './Icon.tsx';
 
-/** Wide enough for the meaning to sit on two lines at a comfortable measure. */
-const PREVIEW_WIDTH = 210;
-/** Enough to guess the height before it exists, for the flip decision. */
-const PREVIEW_HEIGHT = 150;
-const GAP = 8;
-const EDGE = 8;
+/**
+ * The box, in `em` against the square's own type — which is the board's zoom.
+ *
+ * Not px. The preview's whole claim is that it shows the note you would get, at
+ * the size you would read it, and a box fixed in px would hold that note at
+ * 160% zoom in a frame built for 100%. Wide enough for the meaning to sit on
+ * two or three lines at a comfortable measure; the height is only a guess for
+ * the flip decision, and the measured correction in `Preview` fixes it.
+ */
+const PREVIEW_WIDTH_EM = 8.5;
+const PREVIEW_HEIGHT_EM = 6;
+/**
+ * How far a floating box sits from what it describes, and from the window's
+ * edge. Exported because `NoteTooltip` in BoardGrid.tsx is the same kind of box
+ * — portalled, `fixed`, anchored to something inside the scroller — and two
+ * floating layers that drifted apart by a pixel would look like a bug in one of
+ * them.
+ */
+export const GAP = 8;
+export const EDGE = 8;
 
 export function KindPalette({
 	kinds,
@@ -61,22 +88,53 @@ export function KindPalette({
 		kind: CardKind;
 		top: number;
 		left: number;
+		/** The square's own type size and the box built from it, both in px. */
+		fontSize: number;
+		width: number;
 		/** The board's theme, read off the trigger — which is inside the board. */
 		theme: string | null;
 	} | null>(null);
 
 	const open = (kind: CardKind, element: HTMLElement) => {
-		const box = element.getBoundingClientRect();
+		// The square, not the swatch: the preview belongs beside the square it
+		// would add to. `data-square` is set in BoardGrid; falling back to the
+		// swatch keeps this working if the strip is ever used somewhere else.
+		const square = element.closest('[data-square]') ?? element;
+		const box = square.getBoundingClientRect();
 
-		// Above by default, because the strip is at the *bottom* of a square and
-		// the room is usually up. Flipped below when it is not.
-		const above = box.top - GAP - PREVIEW_HEIGHT;
-		const top = above < EDGE ? box.bottom + GAP : above;
+		// The square's type size *is* the board's zoom — a note's words are
+		// `text-[0.6em]` of it — so the preview is built from it and the mock note
+		// inside carries that same literal. One number, read from the thing being
+		// added to, and nothing to keep in step when the zoom moves.
+		const fontSize = Number.parseFloat(getComputedStyle(square).fontSize) || 16;
+		const width = PREVIEW_WIDTH_EM * fontSize;
+		const height = PREVIEW_HEIGHT_EM * fontSize;
 
-		const centred = box.left + box.width / 2 - PREVIEW_WIDTH / 2;
-		const left = Math.max(EDGE, Math.min(centred, window.innerWidth - PREVIEW_WIDTH - EDGE));
+		// To the right, over the next square along. Left when the right-hand edge
+		// is nearer than the preview is wide, and centred in the window only when
+		// neither side can hold it — a laptop with the board zoomed in.
+		const right = box.right + GAP;
+		const left_ = box.left - GAP - width;
+		const left =
+			right + width <= window.innerWidth - EDGE
+				? right
+				: left_ >= EDGE
+					? left_
+					: Math.max(EDGE, (window.innerWidth - width) / 2);
 
-		setShowing({ kind, top, left, theme: element.closest('[data-theme]')?.getAttribute('data-theme') ?? null });
+		// Level with the square, so the two read as a pair, and pulled up only as
+		// far as the window demands. The measured correction below does the rest
+		// when the guessed height was short.
+		const top = Math.max(EDGE, Math.min(box.top, window.innerHeight - EDGE - height));
+
+		setShowing({
+			kind,
+			top,
+			left,
+			fontSize,
+			width,
+			theme: element.closest('[data-theme]')?.getAttribute('data-theme') ?? null,
+		});
 	};
 
 	return (
@@ -98,7 +156,14 @@ export function KindPalette({
 			))}
 
 			{showing !== null && (
-				<Preview kind={showing.kind} top={showing.top} left={showing.left} theme={showing.theme} />
+				<Preview
+					kind={showing.kind}
+					top={showing.top}
+					left={showing.left}
+					fontSize={showing.fontSize}
+					width={showing.width}
+					theme={showing.theme}
+				/>
 			)}
 		</div>
 	);
@@ -108,11 +173,16 @@ function Preview({
 	kind,
 	top,
 	left,
+	fontSize,
+	width,
 	theme,
 }: {
 	kind: CardKind;
 	top: number;
 	left: number;
+	/** The square's type size, in px: everything in here is `em` against it. */
+	fontSize: number;
+	width: number;
 	theme: string | null;
 }) {
 	const box = useRef<HTMLDivElement>(null);
@@ -131,7 +201,7 @@ function Preview({
 		const height = box.current?.getBoundingClientRect().height ?? 0;
 		const overflow = top + height - (window.innerHeight - EDGE);
 		setNudge(overflow > 0 ? -overflow : 0);
-	}, [top, kind]);
+	}, [top, kind, fontSize]);
 
 	return createPortal(
 		<div
@@ -141,23 +211,27 @@ function Preview({
 			// element is in the body, not in the board. Read off the trigger, which
 			// *is* in the board, for the reason CardMenu gives.
 			data-theme={theme ?? undefined}
-			style={{ position: 'fixed', top: top + nudge, left, width: PREVIEW_WIDTH }}
+			style={{ position: 'fixed', top: top + nudge, left, width, fontSize: `${fontSize}px` }}
 			// Every portalled root restates the colour pair, for the reason CardMenu
 			// gives: outside the board's subtree, an uncoloured string inherits from
 			// a `<body>` that follows the operating system rather than the board.
 			// This one's children all colour themselves, so it is a guard against
 			// the next edit rather than a fix.
-			className="pointer-events-none z-40 rounded-xl border border-slate-200 bg-white p-3 text-ink shadow-lg dark:border-slate-700 dark:bg-night-raised dark:text-slate-100"
+			className="pointer-events-none z-40 rounded-[0.4em] border border-slate-200 bg-white p-[0.4em] text-ink shadow-lg dark:border-slate-700 dark:bg-night-raised dark:text-slate-100"
 		>
 			{/* The note itself, at the size a note is actually read at — which is
-			    the whole point of this box existing. */}
+			    the whole point of this box existing. `text-[0.6em]` is the literal
+			    StickyNote uses, against the same square-sized `em`, so the picture
+			    and the thing it is a picture of are set in one size at every zoom. */}
 			<div
-				className={`rounded-[0.2em] border px-2 py-3 text-center text-xs leading-tight shadow-sm ${cardClass[kind]}`}
+				className={`rounded-[0.2em] border px-[0.4em] py-[0.55em] text-center text-[0.6em] leading-tight shadow-sm ${cardClass[kind]}`}
 			>
 				{newCardTitle[kind]}
 			</div>
-			<p className="mt-2 text-xs font-semibold text-ink dark:text-slate-100">{cardLabel[kind]}</p>
-			<p className="mt-0.5 text-[0.7rem] leading-snug text-ink-muted dark:text-slate-400">{cardMeaning[kind]}</p>
+			<p className="mt-[0.3em] text-[0.6em] font-semibold text-ink dark:text-slate-100">{cardLabel[kind]}</p>
+			<p className="mt-[0.1em] text-[0.6em] leading-snug text-ink-muted dark:text-slate-400">
+				{cardMeaning[kind]}
+			</p>
 		</div>,
 		document.fullscreenElement ?? document.body,
 	);

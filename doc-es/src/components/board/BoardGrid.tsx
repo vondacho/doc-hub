@@ -38,12 +38,13 @@ import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-
 import { CSS } from '@dnd-kit/utilities';
 import { useDroppable } from '@dnd-kit/core';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { cardLabel, kindsFor, type CardKind } from '../../lib/eventstorm/model.ts';
+import { createPortal } from 'react-dom';
+import { cardLabel, cardMeaning, kindsFor, type CardKind } from '../../lib/eventstorm/model.ts';
 import { cardClass } from '../../lib/board/kinds.ts';
 import type { BoardAction } from '../../lib/board/gestures.ts';
 import { cardsAt, cellKey, columnCount, type BoardState, type Id } from '../../lib/board/state.ts';
 import { CardMenu, type CardMenuAction } from './CardMenu.tsx';
-import { KindPalette } from './KindPalette.tsx';
+import { EDGE, GAP, KindPalette } from './KindPalette.tsx';
 import { Icon } from './Icon.tsx';
 
 /** One square, in `em`, so a single font-size scales the whole board. */
@@ -350,6 +351,20 @@ function LaneLabel({
  * permanent control on each would be a screen of plus signs; the strip that
  * opens is the legend as well as the control, so it teaches the notation at the
  * moment somebody is choosing a colour.
+ *
+ * ## Not while the pointer is on a note
+ *
+ * Hovering anywhere in the square used to open the strip, notes included, and a
+ * square is mostly notes once it holds any. So reading the wall — running the
+ * pointer along a row of events to see what is there — flickered a row of
+ * swatches under every note it passed, and the answer to "what is on this
+ * square" arrived with an offer to put something else on it.
+ *
+ * The strip belongs to the empty part of the square, which is the part that
+ * means "there is room here". So it hides while the pointer is over the notes
+ * and comes back the moment it leaves them. Keyboard focus still opens it —
+ * `focus-within` is unconditional — because there is no pointer to be over
+ * anything, and tabbing to the strip is the only way in without a mouse.
  */
 function Square({
 	board,
@@ -378,6 +393,15 @@ function Square({
 	const ids = cardsAt(board, laneId, column);
 	const lane = board.lanes[laneId];
 	const where = `${lane?.title ?? 'this lane'}, column ${column}`;
+	/**
+	 * Whether the pointer is on the notes rather than on the square around them.
+	 *
+	 * State rather than a `:has(…)` variant on the strip, because that would be
+	 * two hover rules on the same element decided by specificity — and this file
+	 * already documents one Tailwind failure that compiles, runs and produces
+	 * nothing. This one is readable and it can be tested.
+	 */
+	const [onNotes, setOnNotes] = useState(false);
 
 	return (
 		<div
@@ -387,13 +411,28 @@ function Square({
 			// would compile, run, and produce squares with no height — a failure
 			// with no error attached. Same trap kinds.ts documents for the colours.
 			style={{ gridColumn: column + 1, gridRow: row, minHeight: SQUARE }}
+			// Named for KindPalette, which anchors its preview to the square rather
+			// than to the swatch inside it — see the placement note there. An
+			// attribute rather than a class so the selector cannot be broken by a
+			// restyle.
+			data-square=""
+			// The square's own leave, as well as the list's: a note deleted or
+			// dragged out from under the pointer never sends `pointerleave`, and
+			// without this the strip would stay hidden until the pointer moved
+			// again.
+			onPointerLeave={() => setOnNotes(false)}
 			className={`group/sq relative flex flex-col gap-[0.15em] rounded-[0.3em] border border-dashed p-[0.15em] transition-colors motion-reduce:transition-none ${
 				isOver
 					? 'border-brand bg-brand/5 dark:border-sky-400 dark:bg-sky-400/10'
 					: 'border-slate-200/70 dark:border-slate-700/70'
 			}`}
 		>
-			<ul aria-label={`Notes at ${where}`} className="flex flex-col gap-[0.15em]">
+			<ul
+				aria-label={`Notes at ${where}`}
+				className="flex flex-col gap-[0.15em]"
+				onPointerEnter={() => setOnNotes(true)}
+				onPointerLeave={() => setOnNotes(false)}
+			>
 				<SortableContext items={[...ids]} strategy={verticalListSortingStrategy}>
 					{ids.map((id, index) => {
 						const card = board.cards[id];
@@ -421,7 +460,11 @@ function Square({
 			    the control, so offering a colour the notation does not currently
 			    have would be teaching the wrong notation. Hovering one shows the
 			    note it would make — see KindPalette. */}
-			<div className="opacity-0 transition group-hover/sq:opacity-100 focus-within:opacity-100 motion-reduce:transition-none">
+			<div
+				className={`opacity-0 transition focus-within:opacity-100 motion-reduce:transition-none ${
+					onNotes ? '' : 'group-hover/sq:opacity-100'
+				}`}
+			>
 				<KindPalette
 					kinds={kindsFor(board.level)}
 					where={where}
@@ -433,16 +476,127 @@ function Square({
 }
 
 /**
+ * What a note is anchored to: its rectangle, its type size, and its theme.
+ *
+ * Read off the note at the moment the pointer arrives rather than passed down,
+ * because all three are facts about how the note is being *drawn* — the zoom
+ * decides the size, the board's own light/dark override decides the theme, and
+ * neither is known to the note's props.
+ */
+type Anchor = { top: number; bottom: number; left: number; width: number; fontSize: string; theme: string | null };
+
+function anchorOf(element: HTMLElement): Anchor {
+	const box = element.getBoundingClientRect();
+	return {
+		top: box.top,
+		bottom: box.bottom,
+		left: box.left,
+		width: box.width,
+		// The note's own computed size, so the caption is set in the same type as
+		// the words it is about — at 100% and at 160%, without a second number to
+		// keep in step with the zoom.
+		fontSize: getComputedStyle(element).fontSize,
+		theme: element.closest('[data-theme]')?.getAttribute('data-theme') ?? null,
+	};
+}
+
+/**
+ * The caption under the pointer: what kind of note this is, and what that means.
+ *
+ * Portalled and `fixed`, for the reason KindPalette gives at length: the wall
+ * lives in an `overflow: auto` scroller that clips any child reaching past its
+ * edge, and a caption on a note in the last column or the bottom lane would be
+ * sliced in half or cut off entirely.
+ *
+ * Positioned after it is measured rather than from a guess. It is two short
+ * lines and its height depends on the zoom, the wrapping and the length of the
+ * meaning, so it is rendered invisible, measured once, and revealed in place —
+ * one frame, and never a caption seen in the wrong position first.
+ *
+ * `aria-hidden`, like the palette's preview: the note's accessible name already
+ * opens with the kind, and a second copy in a floating box is noise. This is
+ * for the eye.
+ */
+function NoteTooltip({ kind, anchor }: { kind: CardKind; anchor: Anchor }) {
+	const box = useRef<HTMLDivElement>(null);
+	const [at, setAt] = useState<{ top: number; left: number } | null>(null);
+
+	useLayoutEffect(() => {
+		const element = box.current;
+		if (!element) return;
+		const { width, height } = element.getBoundingClientRect();
+
+		// Above the note by default — the pointer is on the note, and a caption
+		// under it would be the thing the pointer moves onto next. Flipped below
+		// when the note is near the top of the window.
+		const above = anchor.top - GAP - height;
+		const top = above >= EDGE ? above : Math.min(anchor.bottom + GAP, window.innerHeight - EDGE - height);
+
+		const centred = anchor.left + anchor.width / 2 - width / 2;
+		const left = Math.max(EDGE, Math.min(centred, window.innerWidth - width - EDGE));
+		setAt({ top, left });
+	}, [anchor, kind]);
+
+	return createPortal(
+		<div
+			ref={box}
+			aria-hidden="true"
+			// The board's light/dark override, carried across the portal: this
+			// element is in the body, not in the board.
+			data-theme={anchor.theme ?? undefined}
+			style={{
+				position: 'fixed',
+				top: at?.top ?? anchor.top,
+				left: at?.left ?? anchor.left,
+				// The whole box is sized in `em` against this, so the padding, the
+				// corner and the measure all follow the note's size too.
+				fontSize: anchor.fontSize,
+				maxWidth: '22em',
+				// Invisible for the frame it is being measured in. `visibility`
+				// rather than `display`, which would leave nothing to measure.
+				visibility: at === null ? 'hidden' : undefined,
+			}}
+			className="pointer-events-none z-40 rounded-[0.4em] border border-slate-200 bg-white px-[0.6em] py-[0.45em] text-ink shadow-lg dark:border-slate-700 dark:bg-night-raised dark:text-slate-100"
+		>
+			<p className="font-semibold">{cardLabel[kind]}</p>
+			<p className="mt-[0.15em] leading-snug text-ink-muted dark:text-slate-400">{cardMeaning[kind]}</p>
+		</div>,
+		document.fullscreenElement ?? document.body,
+	);
+}
+
+/**
  * One note: a square of colour with a few words on it.
  *
  * The words are clamped rather than allowed to grow the note. A wall is a grid
  * of equal squares, and a note that stretched to fit its text would push its
  * neighbours out of line — the arrangement is the information here, so the
- * arrangement wins and the full text lives in the title attribute and the
- * accessible name.
+ * arrangement wins and the full text lives in the accessible name.
  *
  * That is also a nudge the practice itself makes: a domain event is three or
  * four words in the past tense. A note that does not fit is usually two notes.
+ *
+ * ## The tooltip says what the note *is*, not what it says
+ *
+ * It used to be `title={card.title}` — the words already on the note, printed a
+ * second time a beat later, under the pointer. That is a tooltip that answers a
+ * question nobody asked: the text is right there, and if it is clamped the note
+ * is too long for a wall anyway.
+ *
+ * What is genuinely invisible is the taxonomy. The kinds are carried by colour
+ * alone once the legend is closed, orange and yellow are one hue apart, and
+ * "which of the eleven is this" is the question a wall actually raises — the
+ * same question `KindPalette` answers while somebody is choosing a colour. So
+ * the tooltip gives the name and the meaning, in the practice's own words and
+ * from the same two maps the palette reads. The full text is still on the
+ * accessible name, which is where a screen reader was always getting it.
+ *
+ * It is a real element rather than a `title`, for one reason: a native tooltip
+ * is drawn by the browser in the browser's own type, at a size no page can set,
+ * and the board is a zoomable surface whose notes are read at whatever size the
+ * zoom put them. A caption a third the size of the note it explains is a
+ * caption nobody reads on a wall projected on a meeting-room screen. So it is
+ * `NoteTooltip`, and it takes its font size from the note it is describing.
  */
 function StickyNote({
 	id,
@@ -473,6 +627,8 @@ function StickyNote({
 	});
 	const [editing, setEditing] = useState(false);
 	const input = useRef<HTMLTextAreaElement>(null);
+	/** Where the taxonomy caption is anchored, or null when it is not shown. */
+	const [tip, setTip] = useState<Anchor | null>(null);
 
 	useEffect(() => {
 		if (editing) {
@@ -530,12 +686,18 @@ function StickyNote({
 						{...attributes}
 						{...listeners}
 						onClick={() => setEditing(true)}
-						title={card.title}
+						onPointerEnter={(event) => setTip(anchorOf(event.currentTarget))}
+						onPointerLeave={() => setTip(null)}
+						// A note being picked up is not a note being asked about, and a
+						// caption travelling with the pointer through a drag would sit on
+						// top of the wall the drop is being aimed at.
+						onPointerDown={() => setTip(null)}
 						aria-label={label}
 						className="line-clamp-4 min-w-0 flex-1 cursor-grab text-left break-words hyphens-auto focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand active:cursor-grabbing"
 					>
 						{card.title}
 					</button>
+					{tip !== null && <NoteTooltip kind={card.kind} anchor={tip} />}
 					{card.notes.length > 0 && (
 						<button
 							type="button"
