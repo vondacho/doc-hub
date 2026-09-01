@@ -130,13 +130,27 @@ export function Editor({
 	 *
 	 * The line height stays a ratio and the gutter is measured in `em`, so both
 	 * follow the size rather than having to be chosen again at each stop.
+	 *
+	 * The pane's own dark surfaces, and they are ba-cm's rather than this
+	 * project's `night`.
+	 *
+	 * Everything else on the page is `night` — a neutral carrying a little of
+	 * the brand hue, which is right for a surface that sits under cards and
+	 * rails. The source pane is the exception on purpose: it is a page of
+	 * monospace text and nothing else, read for minutes at a time, and the tint
+	 * that reads as warmth behind a board reads as a cast behind a wall of
+	 * glyphs. `slate-950` under `slate-900` is the near-black the mapper settled
+	 * on, and the five tools share an editor, so they share its blacks.
+	 *
+	 * Daylight is untouched: `bg-white` on `bg-slate-50` was already the
+	 * mapper's, to the class.
 	 */
 	return (
 		<div className="flex h-full min-h-0 font-mono leading-[1.6]" style={{ fontSize: `${textSize}px` }}>
 			<div
 				ref={gutter}
 				aria-hidden="true"
-				className="w-[3.6em] shrink-0 overflow-hidden border-r border-slate-200 bg-slate-50 py-3 text-right select-none dark:border-slate-700 dark:bg-night-raised"
+				className="w-[3.6em] shrink-0 overflow-hidden border-r border-slate-200 bg-slate-50 py-3 text-right select-none dark:border-slate-800 dark:bg-slate-900"
 			>
 				{lines.map((_, index) => (
 					<div
@@ -152,7 +166,7 @@ export function Editor({
 				))}
 			</div>
 
-			<div className="relative min-h-0 flex-1 bg-white dark:bg-night">
+			<div className="relative min-h-0 flex-1 bg-white dark:bg-slate-950">
 				{/*
 				 * Invisible except for the mark. `text-transparent` hides the copy of
 				 * the text; the real one is the textarea's, painted on top.

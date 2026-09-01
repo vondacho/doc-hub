@@ -1009,40 +1009,25 @@ export default function StoryMapBoard({
 
 	return (
 		/*
-		 * `data-theme` is the whole override.
+		 * The stage follows the page. The daylight switch is on the board pane
+		 * alone — see the `data-theme` further down.
 		 *
-		 * `dark:` resolves against the nearest ancestor that carries it — see the
-		 * `@custom-variant` in global.css — so every component under here follows
-		 * the board's theme without knowing that a board theme exists. Absent
-		 * while the board follows the page, which is why the default behaviour is
-		 * byte-for-byte what it was before this was added.
+		 * It used to be here, so that the toolbar, the legend and the dialogs came
+		 * with it: they are part of the board, and the argument was that a light
+		 * board under a dark toolbar would look like a rendering fault. What that
+		 * missed is the source pane, which was under it too. Pinning the board to
+		 * daylight to read it in a lit room turned the editor white as well —
+		 * and the editor is not the board. It is a page of text somebody is in the
+		 * middle of writing, its colours are the one thing on screen that should
+		 * hold still, and ba-cm's mapper has never moved them: there the override
+		 * sits on the map panel and nothing else.
 		 *
-		 * It sits on the stage rather than on the grid so the toolbar, the legend
-		 * and the dialogs come with it: they are part of the board, and a light
-		 * board under a dark toolbar would look like a rendering fault.
-		 *
-		 * ## The stage must state its own colours, not inherit them
-		 *
-		 * `bg-white text-ink dark:bg-night dark:text-slate-100` here is not
-		 * decoration — it is what makes the override sound.
-		 *
-		 * Anything inside the board that does not set a colour inherits one, and
-		 * the nearest one used to be on `<body>`. Body's `dark:` resolves at body
-		 * level, where there is no `data-theme`, so it follows the operating
-		 * system. Pin the board to daylight on a machine in dark mode and the
-		 * board's own surfaces correctly turned white while every unstyled string
-		 * inside them stayed near-white, inherited from a body that had never
-		 * heard of the override. The swimlane names went first, because they were
-		 * the largest text on the board carrying no colour class of its own.
-		 *
-		 * Restating the pair here stops the inheritance at the boundary: the whole
-		 * subtree now takes its foreground and background from the same attribute
-		 * that decides its variants. The values are the ones `<body>` uses, so a
-		 * board that is *not* pinned looks exactly as it did before.
+		 * `bg-white text-ink dark:bg-night dark:text-slate-100` stays here, still
+		 * not decoration. It is the page's own pair, and it is what the source
+		 * pane and the toolbar now inherit while the board goes its own way.
 		 */
 		<div
 			ref={stage}
-			data-theme={boardTheme ?? undefined}
 			className={`flex flex-col gap-4 bg-white text-ink dark:bg-night dark:text-slate-100 ${
 				fullscreen ? 'h-screen overflow-hidden p-4' : ''
 			}`}
@@ -1233,7 +1218,39 @@ export default function StoryMapBoard({
 					 * Without it this section demands the whole grid's width and the
 					 * source pane next to it is squeezed to nothing.
 					 */
-					<section aria-label="The map" className="flex min-h-0 min-w-0 flex-1 flex-col gap-4">
+										/*
+					 * `data-theme` is the whole override, and it stops here.
+					 *
+					 * `dark:` resolves against the nearest ancestor that carries it —
+					 * see the `@custom-variant` in global.css — so everything under
+					 * this section follows the board's theme without knowing that a
+					 * board theme exists, and everything outside it, the source pane
+					 * above all, carries on following the page. Absent while the board
+					 * follows the page too.
+					 *
+					 * ## The section must state its own colours, not inherit them
+					 *
+					 * `bg-white text-ink dark:bg-night dark:text-slate-100` is not
+					 * decoration — it is what makes the override sound.
+					 *
+					 * Anything inside that does not set a colour inherits one, and the
+					 * nearest would otherwise be the stage's, which resolves where
+					 * there is no `data-theme` and so follows the operating system.
+					 * Pin the board to daylight on a machine in dark mode and its own
+					 * surfaces correctly turn white while every unstyled string inside
+					 * them stays near-white. The swimlane names go first, being the
+					 * largest text on the board carrying no colour class of its own.
+					 *
+					 * Restating the pair stops the inheritance at the boundary: the
+					 * subtree takes its foreground and background from the same
+					 * attribute that decides its variants. The values are the page's,
+					 * so a board that is *not* pinned looks exactly as it did.
+					 */
+					<section
+						aria-label="The map"
+						data-theme={boardTheme ?? undefined}
+						className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 bg-white text-ink dark:bg-night dark:text-slate-100"
+					>
 			{empty ? (
 				<EmptyBoard onLoadSample={() => load(SAMPLE_SOURCE)} onAddActivity={() => dispatch({ type: 'addActivity', index: 0 })} />
 			) : (
