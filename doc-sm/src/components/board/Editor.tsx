@@ -31,16 +31,32 @@
 import { useEffect, useRef } from 'react';
 import type { Problem } from '../../lib/storymap/problems.ts';
 
+/**
+ * The type sizes the source pane offers, smallest first.
+ *
+ * Stops rather than a free number, for the reason the board's zoom has stops:
+ * the useful range is small, every step has to stay legible in a monospace
+ * face, and a spinner that can produce 14.5px is a control nobody wants to
+ * operate. Five of them, so the ends are reachable in two presses.
+ *
+ * 15px is where the pane sits by default and where the reset returns to.
+ */
+export const TEXT_SIZES = [13, 15, 17, 19, 21] as const;
+export const DEFAULT_TEXT_SIZE = 15;
+
 export function Editor({
 	value,
 	onChange,
 	problems,
 	revealLine,
 	highlight,
+	textSize,
 }: {
 	value: string;
 	onChange: (value: string) => void;
 	problems: readonly Problem[];
+	/** The type size for the whole pane, in px. One of `TEXT_SIZES`. */
+	textSize: number;
 	/** Set when a problem is clicked, to move the caret there. */
 	revealLine: number | null;
 	/**
@@ -100,12 +116,27 @@ export function Editor({
 	 */
 	const metrics = 'px-3 py-3 whitespace-pre-wrap break-words';
 
+	/*
+	 * The type size for the whole pane — gutter, backdrop and textarea inherit it
+	 * from here, which is the same reason the metrics above are declared once.
+	 * Setting it anywhere else would put the highlight on the wrong words.
+	 *
+	 * It is the visitor's to choose (the control is in the pane's footer, beside
+	 * the problem count) and 15px is only where it starts, not what it is. The
+	 * source *is* the document — the board is a render of it, every gesture is a
+	 * splice into it, and it is read across a table as often as it is typed into
+	 * — so the one number that decides whether it can be read at all belongs to
+	 * the person reading it, not to this file.
+	 *
+	 * The line height stays a ratio and the gutter is measured in `em`, so both
+	 * follow the size rather than having to be chosen again at each stop.
+	 */
 	return (
-		<div className="flex h-full min-h-0 font-mono text-[13px] leading-[1.55]">
+		<div className="flex h-full min-h-0 font-mono leading-[1.6]" style={{ fontSize: `${textSize}px` }}>
 			<div
 				ref={gutter}
 				aria-hidden="true"
-				className="w-12 shrink-0 overflow-hidden border-r border-slate-200 bg-slate-50 py-3 text-right select-none dark:border-slate-700 dark:bg-night-raised"
+				className="w-[3.6em] shrink-0 overflow-hidden border-r border-slate-200 bg-slate-50 py-3 text-right select-none dark:border-slate-700 dark:bg-night-raised"
 			>
 				{lines.map((_, index) => (
 					<div

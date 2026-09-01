@@ -52,7 +52,7 @@ import { EMPTY_SOURCE } from '../../lib/eventstorm/sample.ts';
 import { BASE_FONT, BoardGrid } from './BoardGrid.tsx';
 import { StoreState } from './StoreState.tsx';
 import { Divider } from './Divider.tsx';
-import { Editor } from './Editor.tsx';
+import { DEFAULT_TEXT_SIZE, Editor } from './Editor.tsx';
 import { SourceProblems } from './SourceProblems.tsx';
 import type { Product } from '../../lib/products.ts';
 import { Toolbar } from './Toolbar.tsx';
@@ -197,6 +197,14 @@ export default function EventStormBoard({
 	/** Which panels are showing, and how the width is divided between them. */
 	const [panes, setPanes] = useState<storage.Panes>('both');
 	const [split, setSplit] = useState(42);
+	/**
+	 * The size the source is set in, chosen in the pane's own footer.
+	 *
+	 * A view preference like the legend and the split, and restored from the
+	 * store the same way — the default is only what somebody who has never
+	 * touched it gets.
+	 */
+	const [textSize, setTextSize] = useState(DEFAULT_TEXT_SIZE);
 	const [revealLine, setRevealLine] = useState<number | null>(null);
 	const [problemsCollapsed, setProblemsCollapsed] = useState(false);
 	const [dirty, setDirty] = useState(false);
@@ -566,6 +574,7 @@ export default function EventStormBoard({
 	useEffect(() => setAgentWidth(storage.loadAgentWidth()), []);
 	useEffect(() => setPanes(storage.loadPanes()), []);
 	useEffect(() => setSplit(storage.loadSplit()), []);
+	useEffect(() => setTextSize(storage.loadEditorText()), []);
 
 	/**
 	 * Follow the OS while the board is not pinned.
@@ -872,6 +881,7 @@ export default function EventStormBoard({
 								problems={problems}
 								revealLine={revealLine}
 								highlight={highlight}
+								textSize={textSize}
 							/>
 						</div>
 						<SourceProblems
@@ -880,6 +890,11 @@ export default function EventStormBoard({
 							collapsed={problemsCollapsed}
 							onToggle={() => setProblemsCollapsed((was) => !was)}
 							onReveal={(line) => setRevealLine(line)}
+							textSize={textSize}
+							onTextSize={(px) => {
+								setTextSize(px);
+								storage.saveEditorText(px);
+							}}
 						/>
 					</section>
 				)}

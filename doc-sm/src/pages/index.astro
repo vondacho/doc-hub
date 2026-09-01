@@ -41,7 +41,22 @@ const ticketingConfigured = isConfigured(ticketingApiUrl());
 	title="Story mapping — doc-hub"
 	description="A user story mapping board. Import and export a .storymap file; the board saves itself in your browser and nothing is stored on the server."
 >
-	<main id="main" class="mx-auto w-full max-w-[110rem] px-6 py-10">
+	{/*
+	  Wider than a reading page, and deliberately not capped at a fixed width.
+
+	  A map is not prose: the thing on screen is a grid, one column per step and
+	  one row per band, and every centimetre the window has spare is another step
+	  visible without scrolling sideways. A flat `110rem` cap gave a 32-inch
+	  monitor the same map as a laptop and two hand-spans of white on either side
+	  of it, so it grows with the window and never takes less than 90% of it.
+
+	  The `max()` keeps the old width where it was the wider of the two — under
+	  about 1950px, 90vw is narrower than 110rem — so nothing changes on a laptop.
+
+	  dsl.astro and 404.astro stay at `max-w-5xl`: they are pages you read, and a
+	  line of prose 2000px long is worse than one with margins.
+	*/}
+	<main id="main" class="mx-auto w-full max-w-[max(110rem,90vw)] px-6 py-10">
 		<header class="mb-8">
 			<p class="text-xs font-semibold tracking-[0.16em] text-ink-muted uppercase dark:text-slate-400">
 				doc-hub · story mapping
