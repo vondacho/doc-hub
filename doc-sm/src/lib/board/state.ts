@@ -74,6 +74,15 @@ export interface Activity {
 	/** An activity is a capability: same ticket and status a step and story carry. */
 	readonly ticket: string | null;
 	readonly status: StoryStatus;
+	/**
+	 * The card's free labels, in the order the file writes them.
+	 *
+	 * Every kind carries them — an activity, a step and a story alike — because
+	 * a tag says something that is *also* true of a card, and there is no level
+	 * of the backbone where that stops being useful. See `tagKey` in the
+	 * document model for what a tag is and why the vocabulary is open.
+	 */
+	readonly tags: readonly string[];
 	/** This activity's cast. Its stories may name one of these, and no other. */
 	readonly personas: readonly string[];
 	readonly stepOrder: readonly Id[];
@@ -86,6 +95,7 @@ export interface Step {
 	/** A step is an epic: same ticket and status a story carries. */
 	readonly ticket: string | null;
 	readonly status: StoryStatus;
+	readonly tags: readonly string[];
 }
 
 export interface Story {
@@ -107,6 +117,7 @@ export interface Story {
 	readonly persona: string | null;
 	readonly want: string | null;
 	readonly soThat: string | null;
+	readonly tags: readonly string[];
 }
 
 export interface BoardState {

@@ -300,6 +300,52 @@ export interface Span {
 	readonly column: number;
 }
 
+/**
+ * A free label on a note: `+legal`, `+risk`, `+"ask the payments team"`.
+ *
+ * Every kind takes them and any number of them. The kind keyword says what a
+ * note *is* — that is the notation, and it is one answer per card — where a tag
+ * says something that is also true of it, alongside however many others are.
+ *
+ * ## Why the vocabulary is open
+ *
+ * There is no list of permitted tags and no validation beyond the shape of the
+ * word. A closed set would have to be decided by whoever writes this file, for
+ * every room that will ever run a storm — and the useful tags are exactly the
+ * ones nobody could have guessed: the team who has to be asked, the regulation
+ * that applies, the system nobody owns any more, the workshop day it came from.
+ * A vocabulary invented here would be wrong everywhere and would make the right
+ * answer unspellable.
+ *
+ * The cost is that `+legel` is a tag rather than an error. That is the same
+ * bargain a note makes, and the wall pays it back the same way: the tags in use
+ * are shown, so a misspelling is a chip that appears once beside one that
+ * appears eleven times.
+ *
+ * ## Why they are not coloured
+ *
+ * Because on this board colour is *everything*. The ten kinds are Brandolini's
+ * ten colours, they were never ours to choose, and somebody who has stood at
+ * one of these walls has to recognise this one without being told. A second
+ * colour system laid over that would not merely compete with the notation, it
+ * would destroy it. So a tag is a word in a plain outline, and it stays quiet.
+ *
+ * ## Case does not make a second tag
+ *
+ * `+Legal` and `+legal` are one label written twice, and a wall that drew them
+ * as two chips would be inviting the split it exists to prevent — the whole
+ * value of a tag is that everything wearing it is found together. So the
+ * duplicate check folds case, and the parser refuses the second one.
+ *
+ * What is *stored* is what was typed. Folding the value as well would mean the
+ * file could not say `+GDPR`, and an acronym flattened to `gdpr` on its way
+ * through a tool nobody asked to normalise it is the kind of small theft that
+ * makes people stop trusting a format.
+ */
+export function tagKey(tag: string): string {
+	return tag.trim().toLowerCase();
+}
+
 export interface CardNode {
 	readonly kind: CardKind;
 	/** The words on the note. One line, in the room's own language. */
@@ -327,6 +373,8 @@ export interface CardNode {
 	 */
 	readonly column: number;
 	readonly notes: readonly string[];
+	/** The note's free labels, in the order the file writes them. See `tagKey`. */
+	readonly tags: readonly string[];
 	/** The whole declaration, keyword to closing brace. */
 	readonly span: Span;
 	/** The kind keyword alone — `event`, `actor` — for a change of kind. */
@@ -341,6 +389,17 @@ export interface CardNode {
 	 * such a card is the moment it acquires a column in the text.
 	 */
 	readonly columnSpan: Span | null;
+	/**
+	 * `+legal`, `+risk` — one span per tag, sigil included, in written order.
+	 *
+	 * A list rather than one span over the run, because tags are the one
+	 * annotation a note may carry more than one of and they need not be adjacent:
+	 * `+legal @4 +risk` is legal, and a single span from the first `+` to the
+	 * last would have the column inside it.
+	 *
+	 * Empty on a note with no tags, which is most of them.
+	 */
+	readonly tagSpans: readonly Span[];
 	/** The `{ … }` holding the notes, or null on a card that has none. */
 	readonly notesSpan: Span | null;
 }

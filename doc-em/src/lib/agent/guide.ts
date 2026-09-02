@@ -40,14 +40,14 @@ examplemap "Title" {
   delivery "Sprint 24" sprint #CLONB-S24 points 13   // sprint | release
   delivery "2026.9" release #CLONB-R9
 
-  story "Redeem a voucher" #CLONB-42 ~analysing @"2026.9" {
+  story "Redeem a voucher" #CLONB-42 ~analysing @"2026.9" +payments {
     as   "Returning customer"
     want "to apply a voucher code at checkout"
     so   "I pay the price I was promised"
     question "Which currencies can a voucher be issued in?"
   }
 
-  rule "A voucher must not be expired" {
+  rule "A voucher must not be expired" +legal +risk {
     example "A voucher that expired yesterday is refused" @"Sprint 24" {
       given "a voucher SUMMER10 that expired on 2026-08-21"
       given "a basket of 40 CHF"
@@ -56,7 +56,7 @@ examplemap "Title" {
       then  "the basket total is still 40 CHF"
     }
     example "A voucher expiring today is accepted" @"Sprint 25"   // title alone is legal
-    question "Is expiry checked when it is applied, or when the basket is paid?"
+    question "Is expiry checked when it is applied, or when the basket is paid?" +"ask finance"
     note "Prose about this rule. A trailing backslash\\
           carries the string onto the next line."
   }
@@ -76,7 +76,16 @@ ordinary: somebody named the case before anybody wrote it out.
 Annotations after a title: \`#CLONB-42\` is the ticket, \`~analysing\` is the
 status (\`open\`, \`analysing\`, \`ready\`, \`in-progress\`, \`done\`, \`closed\`),
 and \`@"Sprint 24"\` names a \`delivery\` declared at the top. The ticket and the
-status belong to the ticketing system; doc-em does not own either.
+status belong to the ticketing system; doc-em does not own either. **Only the
+story takes a ticket or a status.**
+
+\`+legal\` is a tag, and every card takes any number of them —
+\`+"needs the payments team"\` when the label has spaces in it. The vocabulary
+is open: there is no list of permitted tags, so use the ones already on the map
+rather than inventing a parallel set for the same idea. Do not propose a tag as
+a substitute for a question. A tag is a label on something the room has said; a
+red card is something the room could not answer, and turning the second into
+the first is how a map stops being useful.
 
 Comments are \`//\` to end of line.`;
 

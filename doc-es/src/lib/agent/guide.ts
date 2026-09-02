@@ -39,7 +39,7 @@ eventstorm "Title" {
   lane "Customer" {                // a swimlane: a department, an actor, a subsystem
     actor "Hungry customer" @1     // @column is where along the timeline it sits
     event "Menu opened" @1
-    event "Order placed" @3
+    event "Order placed" @3 +revenue    // +tag is a free label; any number of them
     event "Basket emptied and started again" @2 {
       note "Prose about this card. A trailing backslash\\
             carries the string onto the next line."
@@ -51,7 +51,7 @@ eventstorm "Title" {
     event    "Payment requested" @4
     system   "Payment provider" @4
     policy   "Whenever a payment is refused, hold the order" @5
-    hotspot  "Nobody agrees whether a refused payment cancels the order" @5
+    hotspot  "Nobody agrees whether a refused payment cancels the order" @5 +"ask payments"
     readmodel "Orders waiting" @6
     opportunity "Tell the customer when it goes in the oven" @6
   }
@@ -66,6 +66,13 @@ once — and they keep the order they are written in.
 
 A card with no \`@\` takes the square after the last one written in its lane.
 Prefer writing the number: the coordinate is the fact.
+
+**\`+tags\` are free labels**, and every kind of card takes any number of them.
+Write \`+"ask payments"\` when the label has spaces in it. Nothing validates a
+tag, so use the ones already on the wall rather than inventing a parallel set
+for the same idea — and never offer a tag in place of a hotspot. A tag labels
+something the room has said; a hotspot is something the room could not settle,
+and turning the second into the first is how a wall stops being honest.
 
 **The keyword is the colour.** There is no separate type or colour annotation.
 

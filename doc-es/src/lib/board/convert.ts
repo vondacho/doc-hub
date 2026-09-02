@@ -81,7 +81,7 @@ export function toBoard(document: EventStormDocument): BoardState {
 			.sort((a, b) => a.card.column - b.card.column)
 			.forEach(({ card, cardIndex }) => {
 				const id = cardId(laneIndex, cardIndex);
-				cards[id] = { id, kind: card.kind, title: card.title, notes: [...card.notes] };
+				cards[id] = { id, kind: card.kind, title: card.title, notes: [...card.notes], tags: [...card.tags] };
 				const key = cellKey(lid, card.column);
 				(cells[key] ??= []).push(id);
 			});

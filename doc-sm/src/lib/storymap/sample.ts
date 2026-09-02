@@ -79,12 +79,12 @@ storymap "Doc-Hub Onboarding" {
   delivery "Sprint 25" sprint #CLONB-S25
   delivery "MVP" release #CLONB-R1
 
-  activity "Discover documentation" #CLONB-1 ~in-progress {
+  activity "Discover documentation" #CLONB-1 ~in-progress +search {
     persona "Business analyst"
     persona "Product manager"
     persona "Support engineer"
     step "Search the catalog" #CLONB-10 ~in-progress {
-      story "Full-text search" @"Sprint 24" #CLONB-42 ~in-progress {
+      story "Full-text search" @"Sprint 24" #CLONB-42 ~in-progress +search +"needs an index" {
         as "Business analyst"
         want "to search every product at once"
         so "I can answer a question without knowing which product owns it"
@@ -109,7 +109,7 @@ storymap "Doc-Hub Onboarding" {
     persona "Support engineer"
     persona "Documentation owner"
     step "Check how current it is" #CLONB-12 ~in-progress {
-      story "Show the age of the docs" @"Sprint 24" #CLONB-51 ~done {
+      story "Show the age of the docs" @"Sprint 24" #CLONB-51 ~done +trust {
         as "Support engineer"
         want "to see when a page was last updated"
         so "I can judge whether to trust it"
@@ -120,7 +120,7 @@ storymap "Doc-Hub Onboarding" {
         so "I fix them before somebody is misled"
       }
     }
-    step "Check who owns it" #CLONB-13 ~ready {
+    step "Check who owns it" #CLONB-13 ~ready +trust {
       story "Name the owning squad" @"Sprint 24" {
         as "Support engineer"
         want "to see which squad owns a product"

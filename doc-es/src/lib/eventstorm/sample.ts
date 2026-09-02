@@ -55,7 +55,7 @@ eventstorm "Ordering a pizza" {
       note "Happens more than anybody expected. Worth\\
             understanding before it is designed away."
     }
-    event "Order placed" @3
+    event "Order placed" @3 +revenue
     event "Pizza delivered" @8
   }
 
@@ -64,9 +64,9 @@ eventstorm "Ordering a pizza" {
     event "Payment requested" @4
     system "Payment provider" @4
     policy "Whenever a payment is refused, hold the order" @5
-    event "Payment refused" @5
+    event "Payment refused" @5 +revenue
     event "Payment accepted" @5
-    hotspot "Nobody agrees whether a refused payment cancels the order" @5
+    hotspot "Nobody agrees whether a refused payment cancels the order" @5 +"ask payments" +revenue
   }
 
   lane "Kitchen" {

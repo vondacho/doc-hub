@@ -48,6 +48,14 @@ export type BoardAction =
 	| { type: 'addCard'; laneId: Id; column: number; kind: CardKind }
 	| { type: 'retitleCard'; id: Id; title: string }
 	| { type: 'setCardNotes'; id: Id; text: string }
+	/**
+	 * Write a note's tags. The list replaces whatever it had.
+	 *
+	 * Whole rather than add-one/remove-one, because that is the shape the editor
+	 * on the note produces: somebody types a line of labels and commits it. An
+	 * empty list clears them, and is the ordinary way a tag is taken off.
+	 */
+	| { type: 'setCardTags'; id: Id; tags: readonly string[] }
 	/** Re-colour a note: what looked like an event turns out to be a hotspot. */
 	| { type: 'setCardKind'; id: Id; kind: CardKind }
 	| { type: 'removeCard'; id: Id }

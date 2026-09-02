@@ -181,6 +181,25 @@ export function reindent(block: string, from: string, to: string): string {
 		.join('\n');
 }
 
+/**
+ * A name bare when the scanner will read it back as one token, quoted when it
+ * will not.
+ *
+ * `+legal` is what people write by hand, so it is what an edit emits. But
+ * nothing stops a tag being `ask finance`, and writing that bare would produce
+ * a file this parser cannot read — the scanner would see `+ask` and then a
+ * stray word — so it is quoted instead of emitted as something that will not
+ * round-trip.
+ *
+ * doc-em and doc-sm have carried this since their references were bare names.
+ * Here it arrives with tags, which are the first thing on this grammar written
+ * after a sigil that is not a number.
+ */
+export function quoteIfNeeded(name: string): string {
+	// Must match the lexer's IDENT_START / IDENT_PART.
+	return /^[A-Za-z0-9_][A-Za-z0-9_-]*$/.test(name) ? name : quote(name);
+}
+
 /** The leading whitespace of the line `at` sits on, in spaces. */
 export function lineIndent(source: string, at: number): string {
 	const start = source.lastIndexOf('\n', Math.max(0, at - 1)) + 1;

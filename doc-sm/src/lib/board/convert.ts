@@ -136,6 +136,7 @@ export function toBoard(document: StoryMapDocument): BoardState {
 				notes: [...step.notes],
 				ticket: step.ticket,
 				status: step.status,
+				tags: [...step.tags],
 			};
 			stepOrder.push(pid);
 
@@ -147,6 +148,7 @@ export function toBoard(document: StoryMapDocument): BoardState {
 					notes: [...story.notes],
 					ticket: story.ticket,
 					status: story.status,
+					tags: [...story.tags],
 					persona: story.persona,
 					want: story.want,
 					soThat: story.soThat,
@@ -168,6 +170,7 @@ export function toBoard(document: StoryMapDocument): BoardState {
 			notes: [...activity.notes],
 			ticket: activity.ticket,
 			status: activity.status,
+			tags: [...activity.tags],
 			personas: [...activity.personas],
 			stepOrder,
 		};

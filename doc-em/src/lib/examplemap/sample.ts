@@ -56,7 +56,7 @@ examplemap "Redeem a voucher" {
   delivery "Sprint 25" sprint #CLONB-S25 points 8
   delivery "2026.9" release #CLONB-R9
 
-  story "Redeem a voucher" #CLONB-42 ~analysing @"2026.9" {
+  story "Redeem a voucher" #CLONB-42 ~analysing @"2026.9" +payments {
     as "Returning customer"
     want "to apply a voucher code at checkout"
     so "I pay the price I was promised"
@@ -71,15 +71,15 @@ examplemap "Redeem a voucher" {
       then "the voucher is refused"
       then "the basket total is still 40 CHF"
     }
-    example "A voucher expiring today is accepted" @"Sprint 25"
-    question "Is expiry checked when it is applied, or when the basket is paid?"
+    example "A voucher expiring today is accepted" @"Sprint 25" +edge-case
+    question "Is expiry checked when it is applied, or when the basket is paid?" +"ask finance"
   }
 
   rule "A voucher applies once per basket" {
     example "Applying the same voucher twice leaves one discount" @"2026.9"
   }
 
-  rule "A voucher cannot take a basket below zero" {
+  rule "A voucher cannot take a basket below zero" +legal {
     note "The finance team asked for this in writing. Do not\\
           change it without them."
     example "A 50 CHF voucher on a 30 CHF basket leaves a total of 0.00 CHF" @"Sprint 24" {

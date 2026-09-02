@@ -23,6 +23,7 @@ import { tokenize, type Token, type TokenKind } from './lexer.ts';
 import {
 	CARD_KINDS,
 	cardKeyword,
+	tagKey,
 	cardLabel,
 	emptyLane,
 	isCardKind,
@@ -229,7 +230,10 @@ function createParser(tokens: readonly Token[], problems: Problem[], source: str
 		 */
 		let column = nextColumn(cards);
 		let columnSpan: Span | null = null;
-		while (at('at')) {
+		const tags: string[] = [];
+		const tagSpans: Span[] = [];
+		while (at('at') || at('plus')) {
+			if (parseTag(tags, tagSpans, cardKeyword[kind])) continue;
 			const sigil = advance();
 			if (!at('ident') || !/^\d+$/.test(peek().value)) {
 				problemAt(
@@ -266,12 +270,68 @@ function createParser(tokens: readonly Token[], problems: Problem[], source: str
 			title: title.value,
 			column,
 			notes,
+			tags,
 			span: spanFrom(keyword),
 			kindSpan: tokenSpan(keyword),
 			titleSpan: tokenSpan(title),
 			columnSpan,
+			tagSpans,
 			notesSpan: noteRun.first === null ? null : spanFrom(noteRun.first, noteRun.last ?? noteRun.first),
 		});
+		return true;
+	}
+
+	/**
+	 * `+legal` — one tag, appended to `tags`.
+	 *
+	 * Returns false when the next token is not its sigil, so it drops into the
+	 * `@column` loop above rather than being a second loop beside it. Order does
+	 * not matter to either: `event "Order placed" +legal @4` and
+	 * `event "Order placed" @4 +legal` are the same note.
+	 *
+	 * A bare word or a quoted string, exactly as `@` takes its argument.
+	 * `+needs-legal` is what somebody types; `+"ask the payments team"` is what
+	 * they type when the label is a phrase.
+	 *
+	 * Every failure here reports and carries on. A malformed tag is a bad label
+	 * on a note that is otherwise fine, and swallowing the rest of the
+	 * declaration over one would lose the note's own words.
+	 */
+	function parseTag(tags: string[], spans: Span[], owner: string): boolean {
+		if (!at('plus')) return false;
+		const sigil = advance();
+
+		if (!at('ident') && !at('string')) {
+			problemAt(
+				sigil,
+				`Expected a tag after \`+\`, found ${describe(peek())}.`,
+				'A tag is a word: +legal, or +"ask the payments team" when it has spaces in it.',
+			);
+			return true;
+		}
+
+		const found = advance();
+		const value = found.value.trim();
+
+		// `+""` parses and means nothing. Refused rather than dropped, because a
+		// tag that vanishes on export is the round-trip failure this format does
+		// not have anywhere else.
+		if (value === '') {
+			problemAt(found, 'This tag has no text.', 'Write what the tag says: +legal');
+			return true;
+		}
+
+		if (tags.some((tag) => tagKey(tag) === tagKey(value))) {
+			problemAt(
+				sigil,
+				`This ${owner} is tagged \`${value}\` twice.`,
+				'A tag is on a note or it is not. Saying it again says no more, and usually means a bad merge.',
+			);
+			return true;
+		}
+
+		tags.push(value);
+		spans.push(spanFrom(sigil, found));
 		return true;
 	}
 

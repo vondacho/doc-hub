@@ -42,6 +42,7 @@ import {
 	type StoryNode,
 	type StoryStatus,
 	NOWHERE,
+	tagKey,
 	type AnnotationSpans,
 	type Span,
 } from './model.ts';
@@ -196,6 +197,70 @@ function createParser(tokens: readonly Token[], problems: Problem[], source: str
 		return true;
 	}
 
+	/**
+	 * `+legal` — one tag, appended to `tags`.
+	 *
+	 * Shaped like `parseNote`: it returns false when the next token is not its
+	 * sigil, so it drops into an annotation loop next to `@`, `#` and `~`
+	 * without any of them having to know it is there. That matters because a
+	 * card's annotations may be written in any order, and tags are the only one
+	 * that may repeat — a loop that special-cased them would have to be written
+	 * four times, once per card kind.
+	 *
+	 * A bare word or a quoted string, exactly as `@` and `#` take their
+	 * argument. `+needs-legal` is what somebody types; `+"needs the payments
+	 * team"` is what they type when the label is a phrase.
+	 *
+	 * Every failure here reports and carries on. A malformed tag is a bad label
+	 * on a card that is otherwise fine, and swallowing the rest of the
+	 * declaration over one would lose the rule it was on.
+	 */
+	function parseTag(tags: string[], spans: Span[], owner: string): boolean {
+		if (!at('plus')) return false;
+		const sigil = advance();
+
+		if (!at('ident') && !at('string')) {
+			problemAt(
+				sigil,
+				`Expected a tag after \`+\`, found ${describe(peek())}.`,
+				'A tag is a word: +legal, or +"needs the payments team" when it has spaces in it.',
+			);
+			return true;
+		}
+
+		const found = advance();
+		const value = found.value.trim();
+
+		// `+""` parses and means nothing. Refused rather than dropped, because a
+		// tag that vanishes on export is the round-trip failure this format does
+		// not have anywhere else.
+		if (value === '') {
+			problemAt(found, 'This tag has no text.', 'Write what the tag says: +legal');
+			return true;
+		}
+
+		if (tags.some((tag) => tagKey(tag) === tagKey(value))) {
+			problemAt(
+				sigil,
+				`This ${owner} is tagged \`${value}\` twice.`,
+				'A tag is on a card or it is not. Saying it again says no more, and usually means a bad merge.',
+			);
+			return true;
+		}
+
+		tags.push(value);
+		spans.push(spanFrom(sigil, found));
+		return true;
+	}
+
+	/** The tags on a card written without any other annotation: a rule, a question. */
+	function parseTags(owner: string): { tags: string[]; tagSpans: Span[] } {
+		const tags: string[] = [];
+		const tagSpans: Span[] = [];
+		while (parseTag(tags, tagSpans, owner));
+		return { tags, tagSpans };
+	}
+
 	function parseQuestion(questions: QuestionNode[]): boolean {
 		if (!at('keyword', 'question')) return false;
 		const keyword = advance();
@@ -207,16 +272,19 @@ function createParser(tokens: readonly Token[], problems: Problem[], source: str
 			synchronize();
 			return true;
 		}
+		const { tags, tagSpans } = parseTags('question');
 		const notes: string[] = [];
 		const run = noteRun();
 		const body = parseBody('question', () => parseNote(notes, run));
 		questions.push({
 			title: title.value,
 			notes,
+			tags,
 			spans: {
 				span: spanFrom(keyword),
 				titleSpan: tokenSpan(title),
 				annotations: NO_ANNOTATIONS,
+				tagSpans,
 				openBrace: body?.open ?? -1,
 				notesSpan: runSpan(run),
 			},
@@ -272,7 +340,10 @@ function createParser(tokens: readonly Token[], problems: Problem[], source: str
 		// what makes the story true.
 		let delivery: string | null = null;
 		let deliverySpan: Span | null = null;
-		while (at('at')) {
+		const tags: string[] = [];
+		const tagSpans: Span[] = [];
+		while (at('at') || at('plus')) {
+			if (parseTag(tags, tagSpans, 'example')) continue;
 			const sigil = advance();
 			const name = parseReference(sigil, 'this example', 'a delivery');
 			if (name === null) continue;
@@ -293,6 +364,7 @@ function createParser(tokens: readonly Token[], problems: Problem[], source: str
 			title: title.value,
 			notes,
 			delivery,
+			tags,
 			given: steps.given,
 			when: steps.when,
 			then: steps.then,
@@ -301,6 +373,7 @@ function createParser(tokens: readonly Token[], problems: Problem[], source: str
 				span: spanFrom(keyword),
 				titleSpan: tokenSpan(title),
 				annotations: { release: deliverySpan, ticket: null, status: null },
+				tagSpans,
 				openBrace: body?.open ?? -1,
 				notesSpan: runSpan(run),
 			},
@@ -317,6 +390,7 @@ function createParser(tokens: readonly Token[], problems: Problem[], source: str
 			return true;
 		}
 
+		const { tags, tagSpans } = parseTags('rule');
 		const notes: string[] = [];
 		const examples: ExampleNode[] = [];
 		const questions: QuestionNode[] = [];
@@ -328,12 +402,14 @@ function createParser(tokens: readonly Token[], problems: Problem[], source: str
 		rules.push({
 			title: title.value,
 			notes,
+			tags,
 			examples,
 			questions,
 			spans: {
 				span: spanFrom(keyword),
 				titleSpan: tokenSpan(title),
 				annotations: NO_ANNOTATIONS,
+				tagSpans,
 				openBrace: body?.open ?? -1,
 				notesSpan: runSpan(run),
 			},
@@ -411,25 +487,33 @@ function createParser(tokens: readonly Token[], problems: Problem[], source: str
 	}
 
 	/**
-	 * The `#ticket` and `~status` that may follow the story's title.
+	 * The `#ticket`, `~status` and `+tags` that may follow the story's title.
 	 *
-	 * Only the story takes them. A rule is not a ticket and neither is an
-	 * example: they are the story broken down, and breaking a story down does not
-	 * produce more tickets — that is the difference between example mapping and
-	 * the story map next door, where every row is a level in the tracker.
+	 * Only the story takes the first two. A rule is not a ticket and neither is
+	 * an example: they are the story broken down, and breaking a story down does
+	 * not produce more tickets — that is the difference between example mapping
+	 * and the story map next door, where every row is a level in the tracker.
+	 *
+	 * Tags are the exception, and every card takes them, which is why they are
+	 * read by `parseTag` here rather than written into this function: the story
+	 * is the one card where they share a loop with something else.
 	 *
 	 * Either order is accepted, since there is no reading in which one is more
-	 * correct, and each may appear once. A repeat is an error rather than a
-	 * last-one-wins, because a repeat means a bad merge.
+	 * correct, and the ticket and status may each appear once. A repeat is an
+	 * error rather than a last-one-wins, because a repeat means a bad merge.
 	 */
 	function parseStoryAnnotations(): {
 		ticket: string | null;
 		status: StoryStatus;
 		release: string | null;
 		spans: AnnotationSpans;
+		tags: string[];
+		tagSpans: Span[];
 	} {
 		let ticket: string | null = null;
 		let status: StoryStatus | null = null;
+		const tags: string[] = [];
+		const tagSpans: Span[] = [];
 		// Each annotation's own span, sigil included, so setting a status leaves
 		// the ticket beside it on the same line alone.
 		const spans: { release: Span | null; ticket: Span | null; status: Span | null } = {
@@ -439,7 +523,8 @@ function createParser(tokens: readonly Token[], problems: Problem[], source: str
 		};
 		let release: string | null = null;
 
-		while (at('at') || at('hash') || at('tilde')) {
+		while (at('at') || at('hash') || at('tilde') || at('plus')) {
+			if (parseTag(tags, tagSpans, 'story')) continue;
 			const sigil = advance();
 
 			if (sigil.kind === 'at') {
@@ -500,7 +585,7 @@ function createParser(tokens: readonly Token[], problems: Problem[], source: str
 		}
 
 		// Unlinked, unscheduled, and nothing said about it yet.
-		return { ticket, status: status ?? DEFAULT_STORY_STATUS, release, spans };
+		return { ticket, status: status ?? DEFAULT_STORY_STATUS, release, spans, tags, tagSpans };
 	}
 
 	/**
@@ -643,6 +728,9 @@ function createParser(tokens: readonly Token[], problems: Problem[], source: str
 					span: spanFrom(keyword),
 					titleSpan: tokenSpan(title),
 					annotations: { release: null, ticket: ticketSpan, status: null },
+					// A band is not a card and takes no tags. Empty rather than
+					// absent, so one helper can still address any declaration.
+					tagSpans: [],
 					openBrace: body?.open ?? -1,
 					notesSpan: runSpan(run),
 				},
@@ -668,7 +756,7 @@ function createParser(tokens: readonly Token[], problems: Problem[], source: str
 			return true;
 		}
 
-		const { ticket, status, release, spans } = parseStoryAnnotations();
+		const { ticket, status, release, spans, tags, tagSpans } = parseStoryAnnotations();
 		const notes: string[] = [];
 		const run = noteRun();
 		const clauseSpans: { persona: Span | null; want: Span | null; soThat: Span | null } = {
@@ -704,6 +792,7 @@ function createParser(tokens: readonly Token[], problems: Problem[], source: str
 			persona: need.persona,
 			want: need.want,
 			soThat: need.soThat,
+			tags,
 			questions,
 			personaSpan: clauseSpans.persona,
 			wantSpan: clauseSpans.want,
@@ -712,6 +801,7 @@ function createParser(tokens: readonly Token[], problems: Problem[], source: str
 				span: spanFrom(keyword),
 				titleSpan: tokenSpan(title),
 				annotations: spans,
+				tagSpans,
 				openBrace: body?.open ?? -1,
 				notesSpan: runSpan(run),
 			},

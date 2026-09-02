@@ -25,6 +25,18 @@ const rules: { title: string; body: string }[] = [
     body: 'A card is written with the keyword of its kind — `event`, `actor`, `system`, `hotspot`, `opportunity` — and there is no separate colour or type annotation. A card whose keyword said one thing and whose annotation said another would be a state the file could express and the board could not.',
   },
   {
+    title: 'Any note takes any number of `+tags`',
+    body: 'A tag is a free label, written after the title: `hotspot "Nobody agrees whether a refused payment cancels the order" @5 +"ask payments" +revenue`. Use quotes when the label has spaces in it. Every kind takes them, and takes as many as you like — the keyword says what a note *is*, which is one answer per card, where a tag says something that is also true of it.',
+  },
+  {
+    title: 'There is no list of permitted tags',
+    body: 'Nothing here validates a tag beyond the shape of the word, and `+legel` is therefore a tag rather than an error. A fixed vocabulary would have to be chosen once, here, for every room that will ever run a storm — and the useful tags are exactly the ones nobody could have guessed: the team who has to be asked, the system nobody owns any more, the workshop day it came from. The wall pays the bargain back by drawing the tags in use, so a misspelling shows up as a chip that appears once beside one that appears eleven times.',
+  },
+  {
+    title: 'Tags are not coloured, and never will be',
+    body: 'On this board colour is *everything*. The ten kinds are Brandolini’s ten colours, they were never ours to choose, and somebody who has stood at one of these walls has to recognise this one without being told. A second colour system laid over that would not merely compete with the notation — it would destroy it. So a tag is a small word in a plain outline that borrows the note’s own ink, and staying quiet is the point of it.',
+  },
+  {
     title: 'The board is a grid: lanes down, time across',
     body: 'A `lane` is a horizontal swimlane — a department, an actor, a subsystem — and `@column` on a card says where along the timeline it sits. Column 4 is the same moment in every lane, which is what lets two notes side by side mean *simultaneous*, and what lets a lane have a visible gap where its neighbour is busy.',
   },
@@ -128,8 +140,9 @@ Product    = 'product'  , String ;   (* at most one *)
 Level      = 'level'    , ( 'big-picture' | 'process-modelling'
                           | 'software-design' ) ;   (* at most one; default big-picture *)
 Lane       = 'lane'     , String , [ '{' , { Card | Note } , '}' ] ;
-Card       = Kind , String , [ Column ] , [ '{' , { Note } , '}' ] ;
+Card       = Kind , String , { Column | Tag } , [ '{' , { Note } , '}' ] ;
 Column     = '@' , Integer ;   (* one-based; defaults to the next square *)
+Tag        = '+' , ( Ident | String ) ;   (* any number; any kind of note *)
 Kind       = 'event' | 'actor' | 'system' | 'hotspot' | 'opportunity'
            | 'context'                                     (* big picture *)
            | 'command' | 'policy' | 'readmodel'            (* process modelling *)

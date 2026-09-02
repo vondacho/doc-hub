@@ -35,6 +35,18 @@ const rules: { title: string; body: string }[] = [
     body: 'A `#id` and a `~status` may follow the story’s title, in either order: `story "Redeem a voucher" #CLONB-42 ~ready`. Rules, examples and questions take neither. Breaking a story down does not produce more tickets — that is the difference between this board and the story map next door, where every row is a level in the tracker.',
   },
   {
+    title: 'Any card takes any number of `+tags`',
+    body: 'A tag is a free label, written after the title: `rule "A voucher must not be expired" +legal +risk`. Use `+"needs the payments team"` when the label has spaces in it. Every kind takes them — story, rule, example and question — and takes as many as you like, which is what separates a tag from everything else on the line: the `#id` says which one thing this is and the `~status` says the one place it has got to, where a tag says something that is *also* true.',
+  },
+  {
+    title: 'There is no list of permitted tags',
+    body: 'Nothing here validates a tag beyond the shape of the word, and `+legel` is therefore a tag rather than an error. A fixed vocabulary would have to be chosen once, here, for every team that will ever run a session — and the useful tags are exactly the ones nobody could have guessed: the team that has to be asked, the regulation that applies, the thing that went wrong last time. The board pays the bargain back by drawing the tags in use, so a misspelling shows up as a chip that appears once beside one that appears eleven times.',
+  },
+  {
+    title: 'Tags are not coloured, and will not be',
+    body: 'Colour is already this board’s notation — the four card kinds *are* the four colours — and the health hues are spoken for elsewhere. A palette for an open vocabulary would need a colour per tag nobody has invented yet, competing with the one encoding a reader has to trust. So a tag is a small word in a plain outline, and staying quiet is the point of it.',
+  },
+  {
     title: 'The id is set here, and only here',
     body: 'The board shows the ticket id and will not let you retype it. An example mapping session refines a story; it does not re-address one, and a mistyped id silently points a whole map of rules at somebody else’s ticket. Changing it is an edit to this file, where it is deliberate and shows up in a diff. The `~status` beside it is the opposite: that is what a session changes, so it is one click on the card menu as well as a word here.',
   },
@@ -166,7 +178,7 @@ Delivery   = 'delivery' , String , ( 'sprint' | 'release' ) ,
              { Ticket | Points } ,
              [ '{' , { Note } , '}' ] ;   (* order is timeline order *)
 Points     = 'points'   , Integer ;   (* sprints only; at most one *)
-Story      = 'story'    , String , { Ticket | Status | Ships } ,
+Story      = 'story'    , String , { Ticket | Status | Ships | Tag } ,
              [ '{' , { As | Want | So | Question | Note } , '}' ] ;   (* exactly one *)
 As         = 'as'       , String ;   (* who the story is for; at most one *)
 Want       = 'want'     , String ;   (* what they want; at most one *)
@@ -175,10 +187,11 @@ Ticket     = '#' , ( Ident | String ) ;   (* at most one *)
 Status     = '~' , ( 'open' | 'analysing' | 'ready'
                    | 'in-progress' | 'done' | 'closed' ) ;   (* at most one *)
 Ships      = '@' , ( Ident | String ) ;   (* names a Delivery *)
-Rule       = 'rule'     , String , [ '{' , { Example | Question | Note } , '}' ] ;
-Example    = 'example'  , String , [ Ships ] , [ '{' , { Step | Note } , '}' ] ;
+Tag        = '+' , ( Ident | String ) ;   (* any number; any card *)
+Rule       = 'rule'     , String , { Tag } , [ '{' , { Example | Question | Note } , '}' ] ;
+Example    = 'example'  , String , { Ships | Tag } , [ '{' , { Step | Note } , '}' ] ;
 Step       = ( 'given' | 'when' | 'then' ) , String ;   (* each repeatable *)
-Question   = 'question' , String , [ '{' , { Note } , '}' ] ;
+Question   = 'question' , String , { Tag } , [ '{' , { Note } , '}' ] ;
 Note       = 'note'     , String ;
 String     = '"' , { Char | Escape | Splice } , '"' ;
 Escape     = '\\\\' , ( '"' | '\\\\' | 'n' | 't' ) ;

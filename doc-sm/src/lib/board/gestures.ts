@@ -110,6 +110,14 @@ export type BoardAction =
 	 */
 	| { type: 'setNotes'; kind: CardKind; id: Id; text: string }
 	/**
+	 * Write a card's tags. The list replaces whatever it had.
+	 *
+	 * Whole rather than add-one/remove-one, because that is the shape the editor
+	 * on the card produces: somebody types a line of labels and commits it. An
+	 * empty list clears them, and is the ordinary way a tag is taken off.
+	 */
+	| { type: 'setTags'; kind: CardKind; id: Id; tags: readonly string[] }
+	/**
 	 * Write one clause of a story's need.
 	 *
 	 * One field at a time, because that is how they are read and corrected. The

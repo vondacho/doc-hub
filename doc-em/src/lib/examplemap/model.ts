@@ -171,9 +171,70 @@ export interface NodeSpans {
 	readonly span: Span;
 	readonly titleSpan: Span;
 	readonly annotations: AnnotationSpans;
+	/**
+	 * `+legal`, `+risk` — one span per tag, sigil included, in written order.
+	 *
+	 * A list rather than a member of `AnnotationSpans`, because tags are the one
+	 * annotation a card may carry more than one of, and the single-span shape
+	 * next door is exactly what encodes "at most one". They also need not be
+	 * adjacent: `#CLONB-42 +legal ~ready +risk` is legal, and a run recorded as
+	 * one span from the first `+` to the last would have the ticket and the
+	 * status inside it.
+	 *
+	 * Empty on a card with no tags, which is most of them.
+	 */
+	readonly tagSpans: readonly Span[];
 	/** The `{` that opens it, or -1 when written without a body. */
 	readonly openBrace: number;
 	readonly notesSpan: Span | null;
+}
+
+/**
+ * A free label on a card: `+legal`, `+risk`, `+"needs the payments team"`.
+ *
+ * Every card kind takes them and any number of them, which is what separates a
+ * tag from everything else a card carries. The `#ticket` says which one thing
+ * this is; the `~status` says the one place it has got to; a tag says something
+ * that is *also* true, alongside however many others are.
+ *
+ * ## Why the vocabulary is open
+ *
+ * There is no list of permitted tags and no validation beyond the shape of the
+ * word. A closed set would have to be decided by whoever writes this file, for
+ * every team that will ever run a session — and the useful tags are exactly the
+ * ones nobody could have guessed: the name of the team that has to be asked,
+ * the regulation that applies, the release train, the thing that went wrong
+ * last time. A vocabulary invented here would be wrong everywhere and would
+ * make the right answer unspellable.
+ *
+ * The cost is that `+legel` is a tag rather than an error. That is the same
+ * bargain a note makes, and the board pays it back the same way: the tags in
+ * use are shown, so a misspelling is a chip that appears once beside one that
+ * appears eleven times.
+ *
+ * ## Why they are not coloured
+ *
+ * Colour is already this board's notation — the four card kinds *are* the four
+ * colours — and the four status hues in global.css are spoken for. A palette
+ * for an open vocabulary would need a colour per tag nobody has invented yet,
+ * and it would be competing with the one encoding a reader has to trust. So a
+ * tag is a word in a monochrome chip, and being small is how it stays out of
+ * the way of the card it is on.
+ *
+ * ## Case does not make a second tag
+ *
+ * `+Legal` and `+legal` are one label written twice, and a board that drew them
+ * as two chips would be inviting the split it exists to prevent — the whole
+ * value of a tag is that everything wearing it is found together. So the
+ * duplicate check folds case, and the parser refuses the second one.
+ *
+ * What is *stored* is what was typed. Folding the value as well would mean the
+ * file could not say `+GDPR`, and an acronym flattened to `gdpr` on its way
+ * through a tool nobody asked to normalise it is the kind of small theft that
+ * makes people stop trusting a format.
+ */
+export function tagKey(tag: string): string {
+	return tag.trim().toLowerCase();
 }
 
 export interface DeliveryNode {
@@ -295,6 +356,7 @@ export interface ExampleNode {
 	 * ordering them.
 	 */
 	readonly delivery: string | null;
+	readonly tags: readonly string[];
 	readonly given: readonly string[];
 	readonly when: readonly string[];
 	readonly then: readonly string[];
@@ -305,6 +367,7 @@ export interface ExampleNode {
 export interface QuestionNode {
 	readonly title: string;
 	readonly notes: readonly string[];
+	readonly tags: readonly string[];
 
 	readonly spans: NodeSpans;
 }
@@ -312,6 +375,7 @@ export interface QuestionNode {
 export interface RuleNode {
 	readonly title: string;
 	readonly notes: readonly string[];
+	readonly tags: readonly string[];
 	readonly examples: readonly ExampleNode[];
 	/**
 	 * Questions raised while discussing this rule.
@@ -407,6 +471,7 @@ export interface StoryNode {
 	readonly persona: string | null;
 	readonly want: string | null;
 	readonly soThat: string | null;
+	readonly tags: readonly string[];
 	/** Questions raised before any rule existed: doubts about the story itself. */
 	readonly questions: readonly QuestionNode[];
 	readonly personaSpan: Span | null;
@@ -592,6 +657,7 @@ export function emptyStory(title = UNDEFINED_STORY): StoryNode {
 		persona: null,
 		want: null,
 		soThat: null,
+		tags: [],
 		questions: [],
 		personaSpan: null,
 		wantSpan: null,
@@ -600,6 +666,7 @@ export function emptyStory(title = UNDEFINED_STORY): StoryNode {
 			span: NOWHERE,
 			titleSpan: NOWHERE,
 			annotations: { release: null, ticket: null, status: null },
+			tagSpans: [],
 			openBrace: -1,
 			notesSpan: null,
 		},

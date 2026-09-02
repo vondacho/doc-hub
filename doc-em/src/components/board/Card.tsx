@@ -26,12 +26,22 @@ import { cardClass } from '../../lib/board/kinds.ts';
 import { cardLabel, joinNotes, type CardKind } from '../../lib/examplemap/model.ts';
 import { CardMenu, type CardMenuAction } from './CardMenu.tsx';
 import { Icon } from './Icon.tsx';
+import { Tags } from './Tags.tsx';
 
 export interface CardProps {
 	readonly id: string;
 	readonly kind: CardKind;
 	readonly title: string;
 	readonly notes: readonly string[];
+	/**
+	 * The card's free labels, drawn as chips under everything else.
+	 *
+	 * Every kind has them, so this is a required prop rather than an optional
+	 * one: a card that forgot to pass its tags would show none and look exactly
+	 * like a card that has none. An empty list draws nothing at all.
+	 */
+	readonly tags: readonly string[];
+	readonly onTags: (tags: readonly string[]) => void;
 	/** Extra text after the kind in the accessible name — "2 of 5 under …". */
 	readonly position?: string;
 	readonly menu: readonly CardMenuAction[];
@@ -79,6 +89,8 @@ export function Card({
 	kind,
 	title,
 	notes,
+	tags,
+	onTags,
 	position,
 	menu,
 	detailOpen,
@@ -196,6 +208,14 @@ export function Card({
 					)}
 				</div>
 			)}
+
+			{/*
+			 * Below the notes and above the story's ticket line, which is the
+			 * order of least-to-most fixed: the sentence is what the card says,
+			 * the tags are what somebody added to it, and the filing underneath
+			 * is what another system owns.
+			 */}
+			<Tags tags={tags} owner={title} onTags={onTags} />
 
 			{children}
 		</div>

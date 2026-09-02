@@ -27,6 +27,7 @@ import { joinNotes } from '../../lib/storymap/model.ts';
 import type { CardKind, Id } from '../../lib/board/state.ts';
 import { CardMenu, type CardMenuAction } from './CardMenu.tsx';
 import { Icon } from './Icon.tsx';
+import { Tags } from './Tags.tsx';
 
 export interface CardProps {
 	readonly id: Id;
@@ -45,6 +46,15 @@ export interface CardProps {
 	/** Free prose. This is the part somebody can type into. */
 	readonly notes: readonly string[];
 	readonly onNotes: (text: string) => void;
+	/**
+	 * The card's free labels, drawn as chips under everything else.
+	 *
+	 * Every kind has them, so this is a required prop rather than an optional
+	 * one: a card that forgot to pass its tags would show none and look exactly
+	 * like a card that has none. An empty list draws nothing at all.
+	 */
+	readonly tags: readonly string[];
+	readonly onTags: (tags: readonly string[]) => void;
 	/** Extra text after the kind in the accessible name — "in MVP, 2 of 5". */
 	readonly position?: string;
 	readonly menu: readonly CardMenuAction[];
@@ -89,6 +99,8 @@ export function Card({
 	position,
 	menu,
 	meta,
+	tags,
+	onTags,
 	detailOpen,
 	onToggleDetail,
 	detailLabel,
@@ -243,6 +255,14 @@ export function Card({
 					)}
 				</div>
 			)}
+
+			{/*
+			 * Below the notes and above the story's ticket line, which is the
+			 * order of least-to-most fixed: the title is what the card says, the
+			 * tags are what somebody added to it, and the filing underneath is
+			 * what another system owns.
+			 */}
+			<Tags tags={tags} owner={title} onTags={onTags} />
 
 			{meta}
 

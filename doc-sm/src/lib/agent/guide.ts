@@ -40,12 +40,12 @@ storymap "Title" {
   delivery "Sprint 24" sprint #CLONB-S24    // sprint | release
   delivery "MVP" release #CLONB-R1
 
-  activity "Discover documentation" #CLONB-1 ~in-progress {
+  activity "Discover documentation" #CLONB-1 ~in-progress +search {
     persona "Business analyst"     // who does this; listed on the activity
     persona "Product manager"
 
     step "Search the catalog" #CLONB-10 ~in-progress {
-      story "Full-text search" @"Sprint 24" #CLONB-42 ~in-progress {
+      story "Full-text search" @"Sprint 24" #CLONB-42 ~in-progress +search +"needs an index" {
         as   "Business analyst"
         want "to search every product at once"
         so   "I can answer a question without knowing which product owns it"
@@ -79,6 +79,12 @@ Annotations, in this order after the title:
 - \`~ready\` — the status: \`open\`, \`analysing\`, \`ready\`, \`in-progress\`,
   \`done\`, \`closed\`. Also owned by the ticketing system for a card that carries
   a ticket; \`open\` is the local placeholder for a card that carries none.
+- \`+search\` — a tag. Unlike the three above it, a card may carry any number of
+  them, and all three kinds take them. Use \`+"needs an index"\` when the label
+  has spaces in it. The vocabulary is open — nothing validates a tag — so use
+  the ones already on the map rather than inventing a parallel set for the same
+  idea, and do not propose a tag where the honest answer is that the story is
+  too big or the slice is wrong.
 
 A story's three clauses are \`as\` / \`want\` / \`so\` — who, what, why. A
 \`persona\` is listed on the activity it belongs to, one per line, and a story

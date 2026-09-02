@@ -28,6 +28,18 @@ const rules: { title: string; body: string }[] = [
 		body: 'A story carries the ticket id the ticketing system issued, written whole after a #. doc-sm never invents one. A story with no # is simply not linked yet, which is where every story starts.',
 	},
 	{
+		title: 'Any card takes any number of `+tags`',
+		body: 'A tag is a free label, written after the title: `story "Search every product at once" @MVP +search +legal`. Use `+"needs the payments team"` when the label has spaces in it. All three rows take them — activity, step and story — and take as many as you like, which is what separates a tag from everything else on the line: the `#id` says which one thing this is, the `~status` says the one place it has got to, the `@delivery` says the one band it sits in, and a tag says something that is *also* true.',
+	},
+	{
+		title: 'There is no list of permitted tags',
+		body: 'Nothing here validates a tag beyond the shape of the word, and `+legel` is therefore a tag rather than an error. A fixed vocabulary would have to be chosen once, here, for every team that will ever map a product — and the useful tags are exactly the ones nobody could have guessed: the squad that owns it, the regulation that applies, the platform it only affects. The board pays the bargain back by drawing the tags in use, so a misspelling shows up as a chip that appears once beside one that appears eleven times.',
+	},
+	{
+		title: 'Tags are not coloured, and will not be',
+		body: 'The four status colours mean *health* and nothing else may borrow them, and the bands and rows are already competing for the same reader’s attention. A palette for an open vocabulary would need a colour per tag nobody has invented yet. So a tag is a small word in a plain outline, and staying quiet is the point of it.',
+	},
+	{
 		title: 'Status defaults to Open',
 		body: 'One of ~open, ~analysing, ~ready, ~in-progress, ~done, ~closed. The default is Open and is never written to the file. You can set it here, but once a story is linked the ticketing system is the truth and this is a cached copy of it.',
 	},
@@ -130,12 +142,12 @@ Space       = 'space'    , String ;   (* at most one; defaults to the product *)
 Delivery    = 'delivery' , String , ( 'sprint' | 'release' ) , [ TicketRef ] ,
                            [ '{' , { Note } , '}' ] ;   (* order is timeline order *)
             | 'release'  , String , [ '{' , { Note } , '}' ] ;   (* older spelling, still read *)
-Activity    = 'activity' , String , { TicketRef | StatusRef } ,
+Activity    = 'activity' , String , { TicketRef | StatusRef | Tag } ,
                            [ '{' , { Persona | Step | Note } , '}' ] ;
 Persona     = 'persona'  , String ;   (* the activity's cast; unique within it *)
-Step        = 'step'     , String , { TicketRef | StatusRef } ,
+Step        = 'step'     , String , { TicketRef | StatusRef | Tag } ,
                            [ '{' , { Story | Note } , '}' ] ;
-Story       = 'story'    , String , { DeliveryRef | TicketRef | StatusRef } ,
+Story       = 'story'    , String , { DeliveryRef | TicketRef | StatusRef | Tag } ,
                            [ '{' , { As | Want | So | Note } , '}' ] ;
 As          = 'as'       , String ;   (* a persona this activity lists *)
 Want        = 'want'     , String ;   (* one clause, one line, however long *)
@@ -144,6 +156,7 @@ Note        = 'note'     , String ;
 DeliveryRef = '@' , ( Ident | String ) ;   (* at most one, any order *)
 TicketRef   = '#' , ( Ident | String ) ;   (* at most one *)
 StatusRef   = '~' , Ident ;                (* at most one *)
+Tag         = '+' , ( Ident | String ) ;   (* any number; any card *)
 String      = '"' , { Char | Escape | Splice } , '"' ;
 Escape      = '\\' , ( '"' | '\\' | 'n' | 't' ) ;
 Splice      = '\\' , newline , { space } ;   (* carries the string on; is a break *)

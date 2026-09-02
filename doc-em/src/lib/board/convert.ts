@@ -121,7 +121,7 @@ export function toBoard(document: ExampleMapDocument): BoardState {
 	const addQuestions = (nodes: readonly QuestionNode[], parent: number | 'story'): Id[] =>
 		nodes.map((node, index) => {
 			const id = questionId(parent, index);
-			questions[id] = { id, title: node.title, notes: [...node.notes] };
+			questions[id] = { id, title: node.title, notes: [...node.notes], tags: [...node.tags] };
 			return id;
 		});
 
@@ -135,6 +135,7 @@ export function toBoard(document: ExampleMapDocument): BoardState {
 				id,
 				title: example.title,
 				notes: [...example.notes],
+				tags: [...example.tags],
 				given: [...example.given],
 				when: [...example.when],
 				then: [...example.then],
@@ -149,6 +150,7 @@ export function toBoard(document: ExampleMapDocument): BoardState {
 			id: rid,
 			title: rule.title,
 			notes: [...rule.notes],
+			tags: [...rule.tags],
 			questionIds: addQuestions(rule.questions, ruleIndex),
 		};
 		ruleOrder.push(rid);
@@ -172,6 +174,7 @@ export function toBoard(document: ExampleMapDocument): BoardState {
 						persona: document.story.persona,
 						want: document.story.want,
 						soThat: document.story.soThat,
+						tags: [...document.story.tags],
 						questions: storyQuestions,
 					},
 		deliveryOrder,

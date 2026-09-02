@@ -22,6 +22,19 @@
  * So this writes and never reads. The `.examplemap` file is what round-trips;
  * this is the artefact, and the board says as much before it hands it over.
  *
+ * ## Tags are the one thing that crosses cleanly
+ *
+ * A card's `+tags` are written as Gherkin `@tags` on the Feature, Rule or
+ * Scenario they belong to. That is not a convention invented here: `@tag` is
+ * Gherkin's own, every Cucumber reads it, and `--tags @legal` is how somebody
+ * runs exactly the scenarios a label picked out. It is the only part of this
+ * translation where the board's word and Gherkin's word mean the same thing.
+ *
+ * They are spelled to match Gherkin rather than to match the board: a tag is
+ * one token there, so a space becomes a hyphen and `@` is the sigil. That makes
+ * `+"ask finance"` come out as `@ask-finance`, which is lossy in the direction
+ * this file is already lossy in — it writes and never reads.
+ *
  * ## The steps
  *
  * An example's card is one line — "a voucher that expired yesterday is refused".
@@ -48,7 +61,9 @@ export function toGherkin(document: ExampleMapDocument): string {
 	// Refusing would be the wrong call: the rules and examples are the scenarios,
 	// and they are worth writing out whether or not anybody has got round to
 	// naming the story they belong to.
-	const out: string[] = [`Feature: ${document.story?.title ?? document.title}`];
+	const out: string[] = [];
+	emitTags(out, '', document.story?.tags ?? []);
+	out.push(`Feature: ${document.story?.title ?? document.title}`);
 
 	for (const note of document.story?.notes ?? []) {
 		for (const line of note.split('\n')) out.push(`  ${line}`);
@@ -56,6 +71,7 @@ export function toGherkin(document: ExampleMapDocument): string {
 
 	for (const rule of document.rules) {
 		out.push('');
+		emitTags(out, '  ', rule.tags);
 		out.push(`  Rule: ${rule.title}`);
 		for (const note of rule.notes) {
 			for (const line of note.split('\n')) out.push(`    ${line}`);
@@ -72,6 +88,7 @@ export function toGherkin(document: ExampleMapDocument): string {
 
 		for (const example of rule.examples) {
 			out.push('');
+			emitTags(out, '    ', example.tags);
 			// `Scenario:`, not `Example:`. Gherkin accepts both — they are synonyms —
 			// and this writes the one nearly every reader and every tutorial uses. The
 			// green card keeps its own name on the board, because there it is an
@@ -85,6 +102,28 @@ export function toGherkin(document: ExampleMapDocument): string {
 	}
 
 	return `${out.join('\n')}\n`;
+}
+
+/**
+ * A card's tags, as the `@tag` line Gherkin puts above a keyword.
+ *
+ * All of them on one line, which is what Gherkin's own examples do and what
+ * every formatter produces. A card with none writes nothing at all rather than
+ * a blank line, so the file of a map that uses no tags is byte-identical to the
+ * one this wrote before tags existed.
+ *
+ * Each tag is squeezed into one token: whitespace becomes a hyphen, and
+ * anything that is not a letter, digit, hyphen or underscore is dropped. A
+ * Gherkin tag ends at the first space, so `@ask finance` would be the tag
+ * `@ask` followed by a syntax error — a file that will not parse is a worse
+ * answer than a tag spelled slightly differently from the card.
+ */
+function emitTags(out: string[], indent: string, tags: readonly string[]): void {
+	const written = tags
+		.map((tag) => tag.trim().replace(/\s+/g, '-').replace(/[^A-Za-z0-9_-]/g, ''))
+		.filter((tag) => tag !== '');
+	if (written.length === 0) return;
+	out.push(`${indent}${written.map((tag) => `@${tag}`).join(' ')}`);
 }
 
 /**

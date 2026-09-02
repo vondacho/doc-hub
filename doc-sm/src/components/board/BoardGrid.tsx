@@ -46,6 +46,7 @@ import { activityDerived, stepDerived } from '../../lib/board/detail.ts';
 import { StoryNeed } from './StoryNeed.tsx';
 import { BandRail } from './BandRail.tsx';
 import { StoryMeta } from './StoryMeta.tsx';
+import { newTag } from './Tags.tsx';
 import { Icon } from './Icon.tsx';
 import { Card } from './Card.tsx';
 import type { CardMenuAction } from './CardMenu.tsx';
@@ -287,6 +288,8 @@ export function BoardGrid({
 								derived={activityDerived(activity)}
 								notes={activity.notes}
 								onNotes={(text) => dispatch({ type: 'setNotes', kind: 'activity', id: activityId, text })}
+								tags={activity.tags}
+								onTags={(tags) => dispatch({ type: 'setTags', kind: 'activity', id: activityId, tags })}
 								meta={
 									<StoryMeta
 										ticket={activity.ticket}
@@ -339,6 +342,8 @@ export function BoardGrid({
 										derived={stepDerived(step)}
 									notes={step.notes}
 									onNotes={(text) => dispatch({ type: 'setNotes', kind: 'step', id: stepId, text })}
+									tags={step.tags}
+									onTags={(tags) => dispatch({ type: 'setTags', kind: 'step', id: stepId, tags })}
 									meta={
 										<StoryMeta
 											ticket={step.ticket}
@@ -468,6 +473,8 @@ export function BoardGrid({
 											}
 											notes={story.notes}
 											onNotes={(text) => dispatch({ type: 'setNotes', kind: 'story', id: storyId, text })}
+											tags={story.tags}
+											onTags={(tags) => dispatch({ type: 'setTags', kind: 'story', id: storyId, tags })}
 											detailOpen={expanded.has(storyId)}
 											onToggleDetail={() => onToggleDetail(storyId)}
 											detailLabel="need"
@@ -574,6 +581,30 @@ function ticketActions(
 	];
 }
 
+/**
+ * "Add a tag", on every card's menu.
+ *
+ * Shaped exactly like `addNoteAction` below, and for the reason that one is
+ * shaped that way: the menu writes a placeholder into the file and the card
+ * then shows it, rather than the menu reaching into the card to open an editor.
+ * The chip that appears says `new-tag` and is one click from being renamed,
+ * which is the same two-step the notes take.
+ *
+ * That also keeps the tag editor's existence a fact about the card rather than
+ * a fact the menu has to know, so the menu is still a list of dispatches.
+ */
+function addTagAction(
+	dispatch: (action: BoardAction) => void,
+	kind: CardKind,
+	id: Id,
+	tags: readonly string[],
+): CardMenuAction {
+	return {
+		label: tags.length === 0 ? 'Add a tag' : 'Add another tag',
+		run: () => dispatch({ type: 'setTags', kind, id, tags: [...tags, newTag(tags)] }),
+	};
+}
+
 function addNoteAction(
 	dispatch: (action: BoardAction) => void,
 	kind: CardKind,
@@ -678,6 +709,7 @@ function cardMenu(
 		{ label: 'Move right', run: right, disabledReason: right ? undefined : 'It is already last.' },
 		addStep,
 		addNoteAction(dispatch, kind, id, notes),
+		addTagAction(dispatch, kind, id, card?.tags ?? []),
 		...(card ? statusActions(dispatch, kind, id, card.status, card.ticket !== null) : []),
 		...(card ? ticketActions(dispatch, kind, id, card.ticket, ticketing) : []),
 		...kindChangeActions(board, dispatch, kind, id),
@@ -741,6 +773,7 @@ function storyMenu(
 		...statusMoves,
 		...ticketMoves,
 		addNoteAction(dispatch, 'story', storyId, story?.notes ?? []),
+		addTagAction(dispatch, 'story', storyId, story?.tags ?? []),
 		...kindChangeActions(board, dispatch, 'story', storyId),
 		{ label: 'Delete story', separated: true, run: () => dispatch({ type: 'removeCard', kind: 'story', id: storyId }) },
 	];

@@ -91,6 +91,11 @@ export function applyAction(
 			return edit.setNotes(source, d, owner, action.text);
 		}
 
+		case 'setTags': {
+			const owner = nodeOf(d, action.kind, action.id);
+			return edit.setTags(source, d, owner, action.tags);
+		}
+
 		case 'addRule':
 			return edit.addRule(source, d, action.index);
 

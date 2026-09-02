@@ -39,6 +39,7 @@ import {
 	type StepNode,
 	type StoryMapDocument,
 	type StoryNode,
+	tagKey,
 	type AnnotationSpans,
 	type Span,
 	type StoryStatus,
@@ -71,6 +72,7 @@ interface RawSpans {
 	readonly span: Span;
 	readonly titleSpan: Span;
 	readonly annotations: AnnotationSpans;
+	readonly tagSpans: readonly Span[];
 	readonly openBrace: number;
 	readonly notesSpan: Span | null;
 }
@@ -81,6 +83,7 @@ interface RawStory {
 	readonly ref: RawRef | null;
 	readonly ticket: string | null;
 	readonly status: StoryStatus;
+	readonly tags: string[];
 	/** Unresolved until the whole file is read, exactly like a release ref. */
 	persona: RawRef | null;
 	want: string | null;
@@ -98,6 +101,7 @@ interface RawStep {
 	readonly notes: string[];
 	readonly ticket: string | null;
 	readonly status: StoryStatus;
+	readonly tags: string[];
 	readonly stories: RawStory[];
 	spans: RawSpans | null;
 }
@@ -107,6 +111,7 @@ interface RawActivity {
 	readonly notes: string[];
 	readonly ticket: string | null;
 	readonly status: StoryStatus;
+	readonly tags: string[];
 	readonly personas: string[];
 	readonly personaTokens: Token[];
 	readonly steps: RawStep[];
@@ -323,10 +328,14 @@ function createParser(tokens: readonly Token[], problems: Problem[], source: str
 		ticket: string | null;
 		status: StoryStatus;
 		spans: AnnotationSpans;
+		tags: string[];
+		tagSpans: Span[];
 	} {
 		let ref: RawRef | null = null;
 		let ticket: string | null = null;
 		let status: StoryStatus | null = null;
+		const tags: string[] = [];
+		const tagSpans: Span[] = [];
 		// Each annotation's own span, sigil included, so a change of release does
 		// not disturb the ticket sitting next to it on the same line.
 		const spans: { release: Span | null; ticket: Span | null; status: Span | null } = {
@@ -335,7 +344,8 @@ function createParser(tokens: readonly Token[], problems: Problem[], source: str
 			status: null,
 		};
 
-		while (at('at') || at('hash') || at('tilde')) {
+		while (at('at') || at('hash') || at('tilde') || at('plus')) {
+			if (parseTag(tags, tagSpans, noun)) continue;
 			const sigil = advance();
 
 			if (sigil.kind === 'at') {
@@ -411,7 +421,62 @@ function createParser(tokens: readonly Token[], problems: Problem[], source: str
 		}
 
 		// Unlinked, and nothing said about it yet.
-		return { ref, ticket, status: status ?? DEFAULT_STORY_STATUS, spans };
+		return { ref, ticket, status: status ?? DEFAULT_STORY_STATUS, spans, tags, tagSpans };
+	}
+
+	/**
+	 * `+legal` — one tag, appended to `tags`.
+	 *
+	 * Returns false when the next token is not its sigil, so it drops into the
+	 * annotation loop above beside `@`, `#` and `~` rather than being a fourth
+	 * branch of it. That matters because tags are the only annotation a card may
+	 * carry more than one of: the loop's other three each guard against a
+	 * repeat, and this one counts them.
+	 *
+	 * A bare word or a quoted string, exactly as `@` and `#` take their
+	 * argument. `+needs-legal` is what somebody types; `+"needs the payments
+	 * team"` is what they type when the label is a phrase.
+	 *
+	 * Every failure here reports and carries on. A malformed tag is a bad label
+	 * on a card that is otherwise fine, and swallowing the rest of the
+	 * declaration over one would lose the stories underneath it.
+	 */
+	function parseTag(tags: string[], spans: Span[], owner: string): boolean {
+		if (!at('plus')) return false;
+		const sigil = advance();
+
+		if (!at('ident') && !at('string')) {
+			problemAt(
+				sigil,
+				`Expected a tag after \`+\`, found ${describe(peek())}.`,
+				'A tag is a word: +legal, or +"needs the payments team" when it has spaces in it.',
+			);
+			return true;
+		}
+
+		const found = advance();
+		const value = found.value.trim();
+
+		// `+""` parses and means nothing. Refused rather than dropped, because a
+		// tag that vanishes on export is the round-trip failure this format does
+		// not have anywhere else.
+		if (value === '') {
+			problemAt(found, 'This tag has no text.', 'Write what the tag says: +legal');
+			return true;
+		}
+
+		if (tags.some((tag) => tagKey(tag) === tagKey(value))) {
+			problemAt(
+				sigil,
+				`This ${owner} is tagged \`${value}\` twice.`,
+				'A tag is on a card or it is not. Saying it again says no more, and usually means a bad merge.',
+			);
+			return true;
+		}
+
+		tags.push(value);
+		spans.push(spanFrom(sigil, found));
+		return true;
 	}
 
 	function parseStory(stories: RawStory[]): boolean {
@@ -423,7 +488,7 @@ function createParser(tokens: readonly Token[], problems: Problem[], source: str
 			return true;
 		}
 
-		const { ref, ticket, status, spans } = parseAnnotations(true, 'a story');
+		const { ref, ticket, status, spans, tags, tagSpans } = parseAnnotations(true, 'a story');
 
 		const notes: string[] = [];
 		const run = noteRun();
@@ -434,6 +499,7 @@ function createParser(tokens: readonly Token[], problems: Problem[], source: str
 			ref,
 			ticket,
 			status,
+			tags,
 			persona: null,
 			want: null,
 			soThat: null,
@@ -492,6 +558,7 @@ function createParser(tokens: readonly Token[], problems: Problem[], source: str
 			span: spanFrom(keyword),
 			titleSpan: tokenSpan(title),
 			annotations: spans,
+			tagSpans,
 			openBrace: body?.open ?? -1,
 			notesSpan: runSpan(run),
 		};
@@ -507,18 +574,19 @@ function createParser(tokens: readonly Token[], problems: Problem[], source: str
 			return true;
 		}
 
-		const { ticket, status, spans } = parseAnnotations(false, 'a step');
+		const { ticket, status, spans, tags, tagSpans } = parseAnnotations(false, 'a step');
 
 		const notes: string[] = [];
 		const stories: RawStory[] = [];
 		const run = noteRun();
-		const raw: RawStep = { title: title.value, notes, ticket, status, stories, spans: null };
+		const raw: RawStep = { title: title.value, notes, ticket, status, tags, stories, spans: null };
 		steps.push(raw);
 		const body = parseBody('step', () => parseStory(stories) || parseNote(notes, run));
 		raw.spans = {
 			span: spanFrom(keyword),
 			titleSpan: tokenSpan(title),
 			annotations: spans,
+			tagSpans,
 			openBrace: body?.open ?? -1,
 			notesSpan: runSpan(run),
 		};
@@ -534,7 +602,7 @@ function createParser(tokens: readonly Token[], problems: Problem[], source: str
 			return true;
 		}
 
-		const { ticket, status, spans } = parseAnnotations(false, 'an activity');
+		const { ticket, status, spans, tags, tagSpans } = parseAnnotations(false, 'an activity');
 
 		const notes: string[] = [];
 		const personas: string[] = [];
@@ -546,6 +614,7 @@ function createParser(tokens: readonly Token[], problems: Problem[], source: str
 			notes,
 			ticket,
 			status,
+			tags,
 			personas,
 			personaTokens,
 			steps,
@@ -584,6 +653,7 @@ function createParser(tokens: readonly Token[], problems: Problem[], source: str
 			span: spanFrom(keyword),
 			titleSpan: tokenSpan(title),
 			annotations: spans,
+			tagSpans,
 			openBrace: body?.open ?? -1,
 			notesSpan: runSpan(run),
 		};
@@ -714,6 +784,9 @@ function createParser(tokens: readonly Token[], problems: Problem[], source: str
 			titleSpan: tokenSpan(title),
 			// A band takes no release and no status — see the note above.
 			annotations: { release: null, ticket: ticketSpan, status: null },
+			// Nor any tags: a band is not a card. Empty rather than absent, so
+			// one helper can still address any declaration.
+			tagSpans: [],
 			openBrace: body?.open ?? -1,
 			notesSpan: runSpan(run),
 		};
@@ -853,6 +926,7 @@ function spansOf(spans: RawSpans | null) {
 			span: NOWHERE,
 			titleSpan: NOWHERE,
 			annotations: { release: null, ticket: null, status: null },
+			tagSpans: [],
 			openBrace: -1,
 			notesSpan: null,
 		}
@@ -941,6 +1015,7 @@ function resolve(
 		notes: [...activity.notes],
 		ticket: activity.ticket,
 		status: activity.status,
+		tags: [...activity.tags],
 		personas: [...activity.personas],
 		...spansOf(activity.spans),
 		personasSpan: activity.personasSpan,
@@ -949,6 +1024,7 @@ function resolve(
 			notes: [...step.notes],
 			ticket: step.ticket,
 			status: step.status,
+			tags: [...step.tags],
 			...spansOf(step.spans),
 			stories: step.stories.map((story): StoryNode => ({
 				title: story.title,
@@ -959,6 +1035,7 @@ function resolve(
 				soThat: story.soThat,
 				ticket: story.ticket,
 				status: story.status,
+				tags: [...story.tags],
 				...spansOf(story.spans),
 				personaSpan: story.personaSpan,
 				wantSpan: story.wantSpan,

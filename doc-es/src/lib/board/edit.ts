@@ -33,8 +33,19 @@ import {
 	type EventStormDocument,
 	type LaneNode,
 	type Level,
+	type Span,
 } from '../eventstorm/model.ts';
-import { blockEnd, indentInside, INDENT, lineIndent, lineRegion, quote, splice, spliceAll } from './source.ts';
+import {
+	blockEnd,
+	indentInside,
+	INDENT,
+	lineIndent,
+	lineRegion,
+	quote,
+	quoteIfNeeded,
+	splice,
+	spliceAll,
+} from './source.ts';
 
 /** Where a card is written: which lane, and which card inside it. */
 export interface CardAt {
@@ -287,6 +298,60 @@ export function retitleCard(
 	const card = cardAt(document, at);
 	if (card === undefined || unwritable(document)) return source;
 	return splice(source, card.titleSpan, quote(title));
+}
+
+/**
+ * A span grown left over the space in front of it.
+ *
+ * Removing an annotation without it leaves the gap that separated it from its
+ * neighbour, so a set-then-clear does not return the line to where it started
+ * and the stray space shows up in the diff.
+ */
+function withGap(source: string, span: Span): Span {
+	let start = span.start;
+	while (start > 0 && (source[start - 1] === ' ' || source[start - 1] === '\t')) start -= 1;
+	return { ...span, start };
+}
+
+/**
+ * `+tags` on a note, rewritten as one run.
+ *
+ * There is no single span to replace: tags are the one annotation a note may
+ * carry several of, and they need not be written next to each other. So the run
+ * is rewritten *where the first tag already is* and the rest are struck out —
+ * which keeps a hand-written `+legal @4 +risk` from having its column rewritten
+ * out of the middle, and leaves the column exactly where its author put it.
+ *
+ * A note with no tags yet gets the run appended past everything else on the
+ * line — after the `@column` when there is one, so the coordinate stays next to
+ * the words and the open-ended part goes last. Clearing the final tag takes the
+ * space in front of it too.
+ */
+export function setCardTags(
+	source: string,
+	document: EventStormDocument,
+	at: CardAt,
+	tags: readonly string[],
+): string {
+	const card = cardAt(document, at);
+	if (card === undefined || unwritable(document)) return source;
+
+	const written = tags.map((tag) => `+${quoteIfNeeded(tag)}`).join(' ');
+	const spans = card.tagSpans;
+
+	if (spans.length === 0) {
+		if (written === '') return source;
+		const end = Math.max(card.titleSpan.end, card.columnSpan?.end ?? 0);
+		return splice(source, { ...card.titleSpan, start: end, end }, ` ${written}`);
+	}
+
+	const [first, ...rest] = spans as readonly Span[] as [Span, ...Span[]];
+	return spliceAll(source, [
+		// Every tag after the first goes whatever happens to the first, because
+		// the run is rewritten whole and leaving the old ones would double them.
+		...rest.map((span) => ({ span: withGap(source, span), replacement: '' })),
+		{ span: written === '' ? withGap(source, first) : first, replacement: written },
+	]);
 }
 
 /**

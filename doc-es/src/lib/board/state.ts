@@ -30,6 +30,13 @@ export interface Card {
 	readonly kind: CardKind;
 	readonly title: string;
 	readonly notes: readonly string[];
+	/**
+	 * The note's free labels, in the order the file writes them.
+	 *
+	 * See `tagKey` in the document model for what a tag is, why the vocabulary
+	 * is open, and why they are the one thing on this wall that is not coloured.
+	 */
+	readonly tags: readonly string[];
 }
 
 /**

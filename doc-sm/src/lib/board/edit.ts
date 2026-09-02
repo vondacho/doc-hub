@@ -40,7 +40,7 @@ import {
 	type StoryStatus,
 } from '../storymap/model.ts';
 import { quoteIfNeeded } from '../storymap/parser.ts';
-import { blockEnd, indentInside, INDENT, lineIndent, lineRegion, quote, splice } from './source.ts';
+import { blockEnd, indentInside, INDENT, lineIndent, lineRegion, quote, splice, spliceAll } from './source.ts';
 
 /** Where a step is written. */
 export interface StepAt {
@@ -149,15 +149,91 @@ function setAnnotation(
 
 	if (text === null) {
 		if (span === null) return source;
-		// The space before it goes too, or the line keeps a gap where the
-		// annotation used to be.
-		let start = span.start;
-		while (start > 0 && (source[start - 1] === ' ' || source[start - 1] === '\t')) start -= 1;
-		return splice(source, { ...span, start }, '');
+		return splice(source, withGap(source, span), '');
 	}
 
 	if (span !== null) return splice(source, span, text);
 	return splice(source, { ...owner.titleSpan, start: owner.titleSpan.end }, ` ${text}`);
+}
+
+/**
+ * A span grown left over the space in front of it.
+ *
+ * Removing an annotation without it leaves the gap that separated it from its
+ * neighbour, so a set-then-clear does not return the line to where it started
+ * and the stray space shows up in the diff.
+ */
+function withGap(source: string, span: Span): Span {
+	let start = span.start;
+	while (start > 0 && (source[start - 1] === ' ' || source[start - 1] === '\t')) start -= 1;
+	return { ...span, start };
+}
+
+/** Everything writing a tag run needs from a node, whatever kind it is. */
+type Tagged = {
+	readonly titleSpan: Span;
+	readonly annotations: AnnotationSpans;
+	readonly tagSpans: readonly Span[];
+};
+
+/**
+ * Past the last thing written on the declaration line — the title, or whichever
+ * annotation sits furthest along it.
+ *
+ * Where a *new* tag run goes. `setAnnotation` writes straight after the title
+ * instead, which is right for the one-of-a-kind annotations: `#id`, `~status`
+ * and `@release` are what a reader looks for first, so they stay next to the
+ * words. Tags are the open-ended part and belong after them, for the same
+ * reason a list of labels goes at the end of a line rather than the middle.
+ */
+function annotationsEnd(owner: Tagged): number {
+	const spans = [owner.annotations.release, owner.annotations.ticket, owner.annotations.status, ...owner.tagSpans];
+	return spans.reduce((end, span) => (span !== null && span.end > end ? span.end : end), owner.titleSpan.end);
+}
+
+/**
+ * `+tags` on whichever card owns them, rewritten as one run.
+ *
+ * Not a `setAnnotation` case, because there is no single span to replace: tags
+ * are the one annotation a card may carry several of, and they need not be
+ * written next to each other. So the run is rewritten *where the first tag
+ * already is* and the rest are struck out — which keeps a hand-written
+ * `+legal #CLONB-42 +risk` from having its ticket rewritten out of the middle,
+ * and leaves the ticket exactly where its author put it.
+ *
+ * A card with no tags yet gets the run appended past everything else on the
+ * line. Clearing the last tag takes the space in front of it too.
+ *
+ * Takes the resolved node rather than a position, like `setNotes` and unlike
+ * everything around it: both are gestures every kind of card shares, so the
+ * caller has already worked out which node it is holding, and asking for a
+ * `StoryAt` or a step index instead would mean three exports here and a
+ * `switch` at the other end to choose between them.
+ */
+export function setTags(
+	source: string,
+	d: StoryMapDocument,
+	owner: Tagged | undefined,
+	tags: readonly string[],
+): string {
+	if (owner === undefined || unwritable(d)) return source;
+
+	const written = tags.map((tag) => `+${quoteIfNeeded(tag)}`).join(' ');
+	const spans = owner.tagSpans;
+
+	if (spans.length === 0) {
+		if (written === '') return source;
+		const at = annotationsEnd(owner);
+		return splice(source, { ...owner.titleSpan, start: at, end: at }, ` ${written}`);
+	}
+
+	const [first, ...rest] = spans as readonly Span[] as [Span, ...Span[]];
+	return spliceAll(source, [
+		// Every tag after the first goes whatever happens to the first, because
+		// the run is rewritten whole and leaving the old ones would double them.
+		...rest.map((span) => ({ span: withGap(source, span), replacement: '' })),
+		{ span: written === '' ? withGap(source, first) : first, replacement: written },
+	]);
 }
 
 export function setStoryRelease(

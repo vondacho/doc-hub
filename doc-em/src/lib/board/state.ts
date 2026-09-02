@@ -94,6 +94,15 @@ export interface Card {
 	readonly id: Id;
 	readonly title: string;
 	readonly notes: readonly string[];
+	/**
+	 * The card's free labels, in the order the file writes them.
+	 *
+	 * On `Card` rather than on each of the three that extend it, because every
+	 * kind takes them — including the story, which is not a `Card` here only
+	 * because it is singular and carries a need. See `tagKey` in the document
+	 * model for what a tag is and why the vocabulary is open.
+	 */
+	readonly tags: readonly string[];
 }
 
 /**
@@ -150,6 +159,7 @@ export interface Story {
 	readonly persona: string | null;
 	readonly want: string | null;
 	readonly soThat: string | null;
+	readonly tags: readonly string[];
 	readonly questions: readonly Id[];
 }
 

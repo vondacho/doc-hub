@@ -44,6 +44,7 @@ import { cardClass } from '../../lib/board/kinds.ts';
 import type { BoardAction } from '../../lib/board/gestures.ts';
 import { cardsAt, cellKey, columnCount, type BoardState, type Id } from '../../lib/board/state.ts';
 import { CardMenu, type CardMenuAction } from './CardMenu.tsx';
+import { newTag, Tags } from './Tags.tsx';
 import { EDGE, GAP, KindPalette } from './KindPalette.tsx';
 import { Icon } from './Icon.tsx';
 
@@ -673,7 +674,11 @@ function StickyNote({
 			onClick={onSelect}
 			// The ring is `inset` so selecting does not grow the note and shift the
 			// wall around it.
-			className={`relative rounded-[0.2em] border px-[0.25em] py-[0.2em] text-[0.6em] leading-tight shadow-sm ${
+			// Padding is doc-sm's, to the same figures. It reads against this
+			// element's own `text-[0.6em]`, so copying the numbers rather than
+			// scaling them is what makes a note's text sit the same distance from
+			// its edge — measured in its own words — as a card's does next door.
+			className={`relative rounded-[0.2em] border px-[0.55em] py-[0.4em] text-[0.6em] leading-tight shadow-sm ${
 				selected ? 'ring-2 ring-brand ring-inset dark:ring-sky-400' : ''
 			} ${cardClass[card.kind]}`}
 		>
@@ -737,6 +742,22 @@ function StickyNote({
 			{open && card.notes.length > 0 && (
 				<p className="mt-[0.15em] break-words whitespace-pre-line opacity-80">{card.notes.join('\n\n')}</p>
 			)}
+
+			{/*
+			 * Outside the `open` guard, unlike the notes above it.
+			 *
+			 * A note's prose is hidden until asked for because there can be
+			 * paragraphs of it and forty stickies are on screen at once. Tags are
+			 * a word each, and hiding them would defeat the only thing they are
+			 * for: seeing at a glance which notes on the wall are labelled the
+			 * same. A tag nobody can see until they open the card is a tag that
+			 * may as well be a note.
+			 */}
+			<Tags
+				tags={card.tags}
+				owner={card.title}
+				onTags={(tags) => dispatch({ type: 'setCardTags', id, tags })}
+			/>
 		</div>
 	);
 }
@@ -765,6 +786,14 @@ function cardMenu(
 					id,
 					text: card && card.notes.length > 0 ? `${card.notes.join('\n\n')}\n\nNew note` : 'New note',
 				}),
+		},
+		{
+			// The same two-step "Add a note" takes: the menu writes a placeholder
+			// into the file, the note then shows the chip, and one click renames
+			// it. That keeps the tag editor a fact about the card rather than one
+			// the menu has to know, so the menu stays a list of dispatches.
+			label: (card?.tags.length ?? 0) === 0 ? 'Add a tag' : 'Add another tag',
+			run: () => dispatch({ type: 'setCardTags', id, tags: [...(card?.tags ?? []), newTag(card?.tags ?? [])] }),
 		},
 		// Re-colouring is offered only within this level's notation, for the same
 		// reason the `+` strip is: a board must not be able to place a card the

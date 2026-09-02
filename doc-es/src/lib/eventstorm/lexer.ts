@@ -32,6 +32,7 @@ export type TokenKind =
 	| 'at'
 	| 'hash'
 	| 'tilde'
+	| 'plus'
 	| 'lbrace'
 	| 'rbrace'
 	| 'eof';
@@ -90,6 +91,24 @@ export const MAX_SOURCE_BYTES = 2 * 1024 * 1024;
 // string (`#client-onboarding-42`), and both arrive after `#` as one token.
 const IDENT_START = /[A-Za-z0-9_]/;
 const IDENT_PART = /[A-Za-z0-9_-]/;
+
+/**
+ * The one-character sigils, and the token each becomes.
+ *
+ * A table rather than a chain of ternaries, because the chain was already two
+ * deep at three sigils and the fourth is the one that would have made it
+ * unreadable. Adding a fifth is a line here and a member of `TokenKind`.
+ *
+ * None of them mean anything to the scanner. `+` is a tag on this grammar and
+ * could be a sum on another; what it *is* is one character that stands alone,
+ * and that is the whole of what this decides.
+ */
+const SIGIL: Readonly<Record<string, TokenKind>> = {
+	'@': 'at',
+	'#': 'hash',
+	'~': 'tilde',
+	'+': 'plus',
+};
 
 /**
  * Scan `source` into tokens, appending anything wrong to `problems`.
@@ -185,10 +204,11 @@ export function tokenize(
 			continue;
 		}
 
-		if (char === '@' || char === '#' || char === '~') {
+		const sigil = SIGIL[char];
+		if (sigil !== undefined) {
 			index += 1;
 			tokens.push({
-				kind: char === '@' ? 'at' : char === '#' ? 'hash' : 'tilde',
+				kind: sigil,
 				value: char,
 				line,
 				column: startColumn,

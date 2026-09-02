@@ -224,7 +224,7 @@ function Preview({
 			    StickyNote uses, against the same square-sized `em`, so the picture
 			    and the thing it is a picture of are set in one size at every zoom. */}
 			<div
-				className={`rounded-[0.2em] border px-[0.4em] py-[0.55em] text-center text-[0.6em] leading-tight shadow-sm ${cardClass[kind]}`}
+				className={`rounded-[0.2em] border px-[0.55em] py-[0.4em] text-center text-[0.6em] leading-tight shadow-sm ${cardClass[kind]}`}
 			>
 				{newCardTitle[kind]}
 			</div>

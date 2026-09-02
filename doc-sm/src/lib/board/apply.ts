@@ -193,15 +193,13 @@ export function applyAction(
 		}
 
 		case 'setNotes': {
-			const at = locate(action.kind, action.id);
-			if (at === null) return source;
-			const owner =
-				action.kind === 'activity'
-					? d.activities[at.activity]
-					: action.kind === 'step'
-						? d.activities[at.activity]?.steps[at.step]
-						: d.activities[at.activity]?.steps[at.step]?.stories[at.story];
+			const owner = nodeOf(d, action.kind, action.id);
 			return edit.setNotes(source, d, owner, action.text);
+		}
+
+		case 'setTags': {
+			const owner = nodeOf(d, action.kind, action.id);
+			return edit.setTags(source, d, owner, action.tags);
 		}
 
 		// Handled by the board: these replace the document rather than edit it.
@@ -229,6 +227,22 @@ function locate(kind: 'activity' | 'step' | 'story', id: string) {
 		return at === null ? null : { ...at, story: 0 };
 	}
 	return storyPositionOf(id);
+}
+
+/**
+ * The declaration an id names, whatever level of the backbone it sits at.
+ *
+ * The three rows are three types with the same shape, and the gestures every
+ * card shares — notes, tags — want the node rather than the coordinates. Lifted
+ * out of `setNotes`'s case when the second such gesture arrived, because a
+ * three-armed conditional written twice is the one that gets fixed once.
+ */
+function nodeOf(d: StoryMapDocument, kind: 'activity' | 'step' | 'story', id: string) {
+	const at = locate(kind, id);
+	if (at === null) return undefined;
+	if (kind === 'activity') return d.activities[at.activity];
+	if (kind === 'step') return d.activities[at.activity]?.steps[at.step];
+	return d.activities[at.activity]?.steps[at.step]?.stories[at.story];
 }
 
 /** Whether this gesture is one `applyAction` can carry out. */

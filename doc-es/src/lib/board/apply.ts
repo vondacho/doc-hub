@@ -84,6 +84,11 @@ export function applyAction(
 			return at === null ? source : edit.setCardNotes(source, document, at, action.text);
 		}
 
+		case 'setCardTags': {
+			const at = positionOf(action.id);
+			return at === null ? source : edit.setCardTags(source, document, at, action.tags);
+		}
+
 		case 'setCardKind': {
 			const at = positionOf(action.id);
 			return at === null ? source : edit.setCardKind(source, document, at, action.kind);

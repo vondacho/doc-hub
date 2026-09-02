@@ -77,6 +77,7 @@ import {
 import { Card } from './Card.tsx';
 import { DeliveryRail } from './DeliveryRail.tsx';
 import { StoryMeta } from './StoryMeta.tsx';
+import { newTag } from './Tags.tsx';
 import { StoryNeed } from './StoryNeed.tsx';
 import { ExampleSteps } from './ExampleSteps.tsx';
 import type { CardMenuAction } from './CardMenu.tsx';
@@ -263,6 +264,8 @@ export function BoardGrid({
 								onSelect={() => onSelect({ kind: 'story', id: STORY_DETAIL_KEY })}
 								title={story.title}
 								notes={story.notes}
+								tags={story.tags}
+								onTags={(tags) => dispatch({ type: 'setTags', kind: 'story', id: '', tags })}
 								fixed
 								data={{ type: 'story' }}
 								detailOpen={expanded.has(STORY_DETAIL_KEY)}
@@ -287,6 +290,7 @@ export function BoardGrid({
 												text: story.notes.length > 0 ? `${story.notes.join('\n\n')}\n\nNew note` : 'New note',
 											}),
 									},
+									addTag(dispatch, 'story', '', story.tags),
 									{ label: 'Ask a question about the story', separated: true, run: () => dispatch({ type: 'addQuestion', parent: { story: true } }) },
 									...statusActions(dispatch, story.status, story.ticket !== null),
 									...releaseActions(board, dispatch),
@@ -328,6 +332,8 @@ export function BoardGrid({
 									onSelect={() => onSelect({ kind: 'rule', id: ruleId })}
 									title={rule.title}
 									notes={rule.notes}
+									tags={rule.tags}
+									onTags={(tags) => dispatch({ type: 'setTags', kind: 'rule', id: ruleId, tags })}
 									position={`rule ${index + 1} of ${board.ruleOrder.length}`}
 									data={{ type: 'rule' }}
 									detailOpen={expanded.has(ruleId)}
@@ -484,6 +490,8 @@ function ExampleCell({
 									onSelect={() => onSelect({ kind: 'example', id })}
 									title={card.title}
 									notes={card.notes}
+									tags={card.tags}
+									onTags={(tags) => dispatch({ type: 'setTags', kind: 'example', id, tags })}
 									position={`${index + 1} of ${ids.length} under "${rule.title}", ${where}`}
 									data={{ type: 'example', cell: key }}
 									detailOpen={expanded.has(id)}
@@ -568,13 +576,15 @@ function QuestionStrip({
 								onSelect={() => onSelect({ kind: 'question', id })}
 								title={card.title}
 								notes={card.notes}
+								tags={card.tags}
+								onTags={(tags) => dispatch({ type: 'setTags', kind: 'question', id, tags })}
 								position={`${index + 1} of ${ids.length}`}
 								data={{ type: 'question', parent }}
 								detailOpen={expanded.has(id)}
 								onToggleDetail={() => onToggleDetail(id)}
 								onRetitle={(title) => dispatch({ type: 'retitle', kind: 'question', id, title })}
 								onNotes={(text) => dispatch({ type: 'setNotes', kind: 'question', id, text })}
-								menu={cardMenu(dispatch, 'question', id, card.notes)}
+								menu={cardMenu(dispatch, 'question', id, card.notes, card.tags)}
 							/>
 						</li>
 					);
@@ -676,6 +686,30 @@ function addNote(
 }
 
 /**
+ * "Add a tag", on every card's menu.
+ *
+ * Shaped exactly like `addNote` above, and for the reason that one is shaped
+ * that way: the menu writes a placeholder into the file and the card then shows
+ * it, rather than the menu reaching into the card to open an editor. The chip
+ * that appears says `new-tag` and is one click from being renamed, which is the
+ * same two-step the notes take.
+ *
+ * That also keeps the tag editor's existence a fact about the card rather than
+ * a fact the menu has to know, so the menu is still a list of dispatches.
+ */
+function addTag(
+	dispatch: (action: BoardAction) => void,
+	kind: CardKind,
+	id: Id,
+	tags: readonly string[],
+): CardMenuAction {
+	return {
+		label: tags.length === 0 ? 'Add a tag' : 'Add another tag',
+		run: () => dispatch({ type: 'setTags', kind, id, tags: [...tags, newTag(tags)] }),
+	};
+}
+
+/**
  * An example's menu: one entry per clause, plus the usual note and delete.
  *
  * The entries say "Add another Given" once a clause has something in it, because
@@ -703,6 +737,7 @@ function exampleMenu(
 	return [
 		...STEP_CLAUSES.map(clause),
 		addNote(dispatch, 'example', id, example.notes),
+		addTag(dispatch, 'example', id, example.tags),
 		...scheduleActions(board, dispatch, id, cell),
 		{
 			label: 'Delete this example',
@@ -755,9 +790,11 @@ function cardMenu(
 	kind: 'question',
 	id: Id,
 	notes: readonly string[],
+	tags: readonly string[],
 ): CardMenuAction[] {
 	return [
 		addNote(dispatch, kind, id, notes),
+		addTag(dispatch, kind, id, tags),
 		{
 			label: `Delete this ${cardLabel[kind].toLowerCase()}`,
 			separated: true,
@@ -795,6 +832,7 @@ function ruleMenu(
 		},
 		{ label: 'Ask a question about it', run: () => dispatch({ type: 'addQuestion', parent: { ruleId: id } }) },
 		addNote(dispatch, 'rule', id, rule?.notes ?? []),
+		addTag(dispatch, 'rule', id, rule?.tags ?? []),
 		{ label: 'Add a rule after it', separated: true, run: () => dispatch({ type: 'addRule', index: index + 1 }) },
 		{
 			label: 'Delete the rule and its cards',

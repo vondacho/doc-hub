@@ -68,6 +68,14 @@ export type BoardAction =
 	| { type: 'setStoryNeed'; field: NeedField; text: string }
 	| { type: 'retitle'; kind: CardKind; id: Id; title: string }
 	| { type: 'setNotes'; kind: CardKind; id: Id; text: string }
+	/**
+	 * Write a card's tags. The list replaces whatever it had.
+	 *
+	 * Whole rather than add-one/remove-one, because that is the shape the editor
+	 * on the card produces: somebody types a line of labels and commits it. An
+	 * empty list clears them, and is the ordinary way a tag is taken off.
+	 */
+	| { type: 'setTags'; kind: CardKind; id: Id; tags: readonly string[] }
 	| { type: 'addRule'; index: number }
 	/** The band is where the `+` was clicked; a new example is born scheduled. */
 	| { type: 'addExample'; ruleId: Id; band: BandId }

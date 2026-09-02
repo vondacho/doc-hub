@@ -144,6 +144,56 @@ export interface AnnotationSpans {
 	readonly status: Span | null;
 }
 
+
+/**
+ * A free label on a card: `+legal`, `+risk`, `+"needs the payments team"`.
+ *
+ * Every card kind takes them and any number of them, which is what separates a
+ * tag from everything else a card carries. The `#ticket` says which one thing
+ * this is; the `~status` says the one place it has got to; the `@release` says
+ * the one band it sits in; a tag says something that is *also* true, alongside
+ * however many others are.
+ *
+ * ## Why the vocabulary is open
+ *
+ * There is no list of permitted tags and no validation beyond the shape of the
+ * word. A closed set would have to be decided by whoever writes this file, for
+ * every team that will ever map a product — and the useful tags are exactly the
+ * ones nobody could have guessed: the squad that owns it, the regulation that
+ * applies, the platform it only affects, the thing that went wrong last time. A
+ * vocabulary invented here would be wrong everywhere and would make the right
+ * answer unspellable.
+ *
+ * The cost is that `+legel` is a tag rather than an error. That is the same
+ * bargain a note makes, and the board pays it back the same way: the tags in
+ * use are shown, so a misspelling is a chip that appears once beside one that
+ * appears eleven times.
+ *
+ * ## Why they are not coloured
+ *
+ * The four status colours in global.css mean *health* and say in as many words
+ * that nothing else may borrow them. A palette for an open vocabulary would
+ * need a colour per tag nobody has invented yet, and it would be competing with
+ * the release bands and the card rows for the same reader's attention. So a tag
+ * is a word in a monochrome chip, and being small is how it stays out of the
+ * way of the card it is on.
+ *
+ * ## Case does not make a second tag
+ *
+ * `+Legal` and `+legal` are one label written twice, and a board that drew them
+ * as two chips would be inviting the split it exists to prevent — the whole
+ * value of a tag is that everything wearing it is found together. So the
+ * duplicate check folds case, and the parser refuses the second one.
+ *
+ * What is *stored* is what was typed. Folding the value as well would mean the
+ * file could not say `+GDPR`, and an acronym flattened to `gdpr` on its way
+ * through a tool nobody asked to normalise it is the kind of small theft that
+ * makes people stop trusting a format.
+ */
+export function tagKey(tag: string): string {
+	return tag.trim().toLowerCase();
+}
+
 export interface DeliveryNode {
 	readonly title: string;
 	readonly kind: DeliveryKind;
@@ -168,6 +218,13 @@ export interface DeliveryNode {
 	readonly kindSpan: Span;
 	readonly titleSpan: Span;
 	readonly annotations: AnnotationSpans;
+	/**
+	 * Always empty: a band is not a card and takes no tags.
+	 *
+	 * Carried anyway so one helper can address any declaration, which is what
+	 * lets `setTags` in edit.ts take a node rather than four kinds of position.
+	 */
+	readonly tagSpans: readonly Span[];
 	/** The `{` that opens it, or -1 when it was written without a body. */
 	readonly openBrace: number;
 	readonly notesSpan: Span | null;
@@ -205,10 +262,12 @@ export interface ActivityNode {
 	 * somebody the activity never mentioned, one of the two is wrong.
 	 */
 	readonly personas: readonly string[];
+	readonly tags: readonly string[];
 	readonly steps: readonly StepNode[];
 	readonly span: Span;
 	readonly titleSpan: Span;
 	readonly annotations: AnnotationSpans;
+	readonly tagSpans: readonly Span[];
 	/** The `persona` line, or null when the activity names none. */
 	readonly personasSpan: Span | null;
 	readonly openBrace: number;
@@ -231,10 +290,12 @@ export interface StepNode {
 	readonly notes: readonly string[];
 	readonly ticket: string | null;
 	readonly status: StoryStatus;
+	readonly tags: readonly string[];
 	readonly stories: readonly StoryNode[];
 	readonly span: Span;
 	readonly titleSpan: Span;
 	readonly annotations: AnnotationSpans;
+	readonly tagSpans: readonly Span[];
 	readonly openBrace: number;
 	readonly notesSpan: Span | null;
 }
@@ -300,9 +361,11 @@ export interface StoryNode {
 	 * last heard from it.
 	 */
 	readonly status: StoryStatus;
+	readonly tags: readonly string[];
 	readonly span: Span;
 	readonly titleSpan: Span;
 	readonly annotations: AnnotationSpans;
+	readonly tagSpans: readonly Span[];
 	/** The `persona` line inside the story, or null when it names none. */
 	readonly personaSpan: Span | null;
 	/** The `want …` line, and the `so that …` line. */
