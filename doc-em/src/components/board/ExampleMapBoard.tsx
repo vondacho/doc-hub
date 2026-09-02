@@ -48,7 +48,7 @@ import {
 } from '../../lib/board/history.ts';
 import { cardClass } from '../../lib/board/kinds.ts';
 import { resetsHistory, type BoardAction, type QuestionParent } from '../../lib/board/gestures.ts';
-import { cardsWithDetail, type BoardState, type Id } from '../../lib/board/state.ts';
+import { cardsWithDetail, filtered, tagsInUse, type BoardState, type Id } from '../../lib/board/state.ts';
 import { featureFilename, toGherkin, unwritableQuestions } from '../../lib/examplemap/gherkin.ts';
 import { cardLabel, deliveryKindLabel, type CardKind } from '../../lib/examplemap/model.ts';
 import { parse } from '../../lib/examplemap/parser.ts';
@@ -63,6 +63,7 @@ import { DEFAULT_TEXT_SIZE, Editor } from './Editor.tsx';
 import { GherkinDialog } from './GherkinDialog.tsx';
 import { SourceProblems } from './SourceProblems.tsx';
 import { Legend } from './Legend.tsx';
+import { TagFilter } from './TagFilter.tsx';
 import { Readings } from './Readings.tsx';
 import { Toolbar } from './Toolbar.tsx';
 
@@ -311,6 +312,19 @@ export default function ExampleMapBoard({
 	/** What the page is showing right now, so the toggle can offer the opposite. */
 	const [pageIsDark, setPageIsDark] = useState(false);
 	const [expanded, setExpanded] = useState<ReadonlySet<Id>>(() => new Set());
+	/**
+	 * Which tags the map is pointing at, by `tagKey`. Empty is the filter off.
+	 *
+	 * View state, like `expanded` above it, and deliberately **not** stored: a
+	 * filter is a question somebody is asking right now, not a property of the
+	 * board. Coming back tomorrow to a map with two thirds of it greyed out, and
+	 * no memory of having asked, is the failure mode a remembered filter has —
+	 * where a remembered zoom or legend is just where you left things.
+	 *
+	 * Keys rather than spellings, so a map carrying `+Legal` on one card and
+	 * `+legal` on another filters to both from one chip.
+	 */
+	const [tagFilter, setTagFilter] = useState<ReadonlySet<string>>(() => new Set());
 	/**
 	 * What is currently under the cursor, for the drag overlay.
 	 *
@@ -622,6 +636,33 @@ export default function ExampleMapBoard({
 		});
 	}, []);
 
+	const tags = useMemo(() => tagsInUse(board), [board]);
+	const matching = useMemo(() => filtered(board, tagFilter), [board, tagFilter]);
+
+	const toggleTag = useCallback((key: string) => {
+		setTagFilter((was) => {
+			const next = new Set(was);
+			if (!next.delete(key)) next.add(key);
+			return next;
+		});
+	}, []);
+
+	/*
+	 * A tag that is no longer on any card stops being a filter.
+	 *
+	 * Otherwise deleting the last `+legal` rule, or renaming that tag in the
+	 * source pane, leaves the map filtered by something nothing wears — every
+	 * card dimmed, and no chip left on the row to press to undo it. The board
+	 * would look broken, and the only way out would be a reload.
+	 */
+	useEffect(() => {
+		const live = new Set(tags.map((entry) => entry.key));
+		setTagFilter((was) => {
+			const next = new Set([...was].filter((key) => live.has(key)));
+			return next.size === was.size ? was : next;
+		});
+	}, [tags]);
+
 	const zoom = ZOOM_STOPS[zoomIndex] ?? 1;
 
 	useEffect(() => {
@@ -897,6 +938,24 @@ export default function ExampleMapBoard({
 
 			{legend && <Legend />}
 
+			{/* Outside the `legend` gate above it. That switch hides reference text
+			    you may already know; a filter you have turned on is state, not
+			    reference, and hiding it would leave the map dimmed with nothing on
+			    screen explaining why. */}
+			<TagFilter
+				tags={tags}
+				chosen={tagFilter}
+				onToggle={toggleTag}
+				onClear={() => setTagFilter(new Set())}
+				matching={matching?.size ?? 0}
+				total={
+					(board.story === null ? 0 : 1) +
+					Object.keys(board.rules).length +
+					Object.keys(board.examples).length +
+					Object.keys(board.questions).length
+				}
+			/>
+
 			{note && (
 				<p
 					role="alert"
@@ -1062,6 +1121,7 @@ export default function ExampleMapBoard({
 						onToggleDetail={toggleDetail}
 						selected={selected}
 						onSelect={setSelected}
+						matching={matching}
 					/>
 					)}
 

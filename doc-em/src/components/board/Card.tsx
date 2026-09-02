@@ -42,6 +42,27 @@ export interface CardProps {
 	 */
 	readonly tags: readonly string[];
 	readonly onTags: (tags: readonly string[]) => void;
+	/**
+	 * Whether the tag filter is on and this card is not one of its answers.
+	 *
+	 * ## Turned down, not taken away
+	 *
+	 * A filter that hid what it did not match would be the obvious thing and
+	 * would be wrong here. The red cards are this board's output: a map is read
+	 * to find out what nobody agreed on, and a filter that removed cards would
+	 * quietly answer "are there open questions against this rule?" with a map
+	 * that no longer had any on it. The map would have stopped being true at the
+	 * moment it was asked a question.
+	 *
+	 * So the map keeps its shape and everything unmatched recedes. The question
+	 * a filter actually asks is *where* the tagged work sits, and that needs the
+	 * cards either side of the answer to still be there.
+	 *
+	 * Not `hidden`, not `pointer-events-none`: a dimmed card stays draggable,
+	 * editable and selectable. Filtering is a way of looking at the map, not a
+	 * mode the map is in.
+	 */
+	readonly dimmed?: boolean;
 	/** Extra text after the kind in the accessible name — "2 of 5 under …". */
 	readonly position?: string;
 	readonly menu: readonly CardMenuAction[];
@@ -91,6 +112,7 @@ export function Card({
 	notes,
 	tags,
 	onTags,
+	dimmed = false,
 	position,
 	menu,
 	detailOpen,
@@ -117,7 +139,12 @@ export function Card({
 
 	// The accessible name says the kind out loud. Colour is the notation here, and
 	// colour is never allowed to be the only signal.
-	const label = `${cardLabel[kind]}: ${title}${position ? `, ${position}` : ''}`;
+	// Colour is never the only signal on this board, and opacity is a colour
+	// signal. A dimmed card says so in the one place a screen reader will meet
+	// it — beside the kind, which is on the same name for the same reason.
+	const label = `${cardLabel[kind]}: ${title}${position ? `, ${position}` : ''}${
+		dimmed ? ', not matching the tag filter' : ''
+	}`;
 
 	return (
 		<div
@@ -133,7 +160,7 @@ export function Card({
 			// grid around it.
 			className={`group relative rounded-[0.4em] border px-[0.55em] py-[0.4em] text-[1em] shadow-sm transition-shadow motion-reduce:transition-none ${
 				selected ? 'ring-2 ring-brand ring-inset dark:ring-sky-400' : ''
-			} ${cardClass[kind]} ${className}`}
+			} ${dimmed ? 'opacity-25' : ''} ${cardClass[kind]} ${className}`}
 		>
 			{editing ? (
 				<TitleEditor

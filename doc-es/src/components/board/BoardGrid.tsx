@@ -88,6 +88,7 @@ export function BoardGrid({
 	onToggleDetail,
 	selected,
 	onSelect,
+	matching,
 }: {
 	board: BoardState;
 	dispatch: (action: BoardAction) => void;
@@ -100,6 +101,15 @@ export function BoardGrid({
 	/** The card whose text the source pane is emphasising, if any. */
 	selected: { kind: 'lane' | 'card'; id: Id } | null;
 	onSelect: (pick: { kind: 'lane' | 'card'; id: Id }) => void;
+	/**
+	 * The notes the tag filter is pointing at, or `null` when it is off.
+	 *
+	 * Threaded down to the sticky rather than applied here, because what a
+	 * filter does on this wall is change how a note is *drawn* — it does not
+	 * change which notes exist, which squares are on the grid, or where
+	 * anything sits. See `StickyNote` for why.
+	 */
+	matching: ReadonlySet<Id> | null;
 }) {
 	const scroller = useRef<HTMLDivElement>(null);
 
@@ -207,6 +217,7 @@ export function BoardGrid({
 								onToggleDetail={onToggleDetail}
 								selected={selected}
 								onSelect={onSelect}
+								matching={matching}
 							/>
 						)),
 					)}
@@ -377,6 +388,7 @@ function Square({
 	onToggleDetail,
 	selected,
 	onSelect,
+	matching,
 }: {
 	board: BoardState;
 	dispatch: (action: BoardAction) => void;
@@ -385,6 +397,8 @@ function Square({
 	row: number;
 	expanded: ReadonlySet<Id>;
 	onToggleDetail: (id: Id) => void;
+	/** Passed through to the notes, like `selected`: a square is not filtered. */
+	matching: ReadonlySet<Id> | null;
 	/** Passed through to the notes: a square is not itself selectable. */
 	selected: { kind: 'lane' | 'card'; id: Id } | null;
 	onSelect: (pick: { kind: 'lane' | 'card'; id: Id }) => void;
@@ -471,6 +485,7 @@ function Square({
 									onToggleDetail={onToggleDetail}
 									selected={selected?.kind === 'card' && selected.id === id}
 									onSelect={() => onSelect({ kind: 'card', id })}
+									matching={matching}
 								/>
 							</li>
 						);
@@ -630,6 +645,7 @@ function StickyNote({
 	onToggleDetail,
 	selected,
 	onSelect,
+	matching,
 }: {
 	id: Id;
 	board: BoardState;
@@ -641,6 +657,8 @@ function StickyNote({
 	/** Whether the source pane is emphasising this note's declaration. */
 	selected: boolean;
 	onSelect: () => void;
+	/** The filter's matches, or null when it is off. See `dimmed` below. */
+	matching: ReadonlySet<Id> | null;
 }) {
 	const card = board.cards[id];
 	const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
@@ -661,7 +679,32 @@ function StickyNote({
 
 	if (!card) return null;
 	const open = expanded.has(id);
-	const label = `${cardLabel[card.kind]}: ${card.title}, ${position}`;
+
+	/*
+	 * Turned down, not taken away.
+	 *
+	 * A filter that hid the notes it did not match would be the obvious thing
+	 * and would be wrong here, because on this wall **an empty square means
+	 * something**: `CardNode.column` argues that a lane with nothing at column 3
+	 * and something at column 4 has a *gap*, and that the gap is a fact about
+	 * the domain. Removing notes would manufacture gaps the timeline does not
+	 * have, and the answer to "where is the legal work" would be drawn on a wall
+	 * that had stopped being true.
+	 *
+	 * So the wall keeps its shape and everything unmatched recedes. The question
+	 * a storm actually asks of a tag is *where along the timeline* it lands, and
+	 * that question needs the notes either side of the answer to still be there.
+	 *
+	 * Not `hidden`, not `pointer-events-none`: a dimmed note stays draggable,
+	 * editable and selectable. Filtering is a way of looking at the wall, not a
+	 * mode the wall is in.
+	 */
+	const dimmed = matching !== null && !matching.has(id);
+
+	// Colour is never the only signal on this board, and opacity is a colour
+	// signal. A dimmed note says so in the one place a screen reader will meet
+	// it — beside the kind, which is on the same name for the same reason.
+	const label = `${cardLabel[card.kind]}: ${card.title}, ${position}${dimmed ? ', not matching the tag filter' : ''}`;
 
 	return (
 		<div
@@ -672,15 +715,26 @@ function StickyNote({
 				opacity: isDragging ? 0.35 : undefined,
 			}}
 			onClick={onSelect}
-			// The ring is `inset` so selecting does not grow the note and shift the
-			// wall around it.
-			// Padding is doc-sm's, to the same figures. It reads against this
-			// element's own `text-[0.6em]`, so copying the numbers rather than
-			// scaling them is what makes a note's text sit the same distance from
-			// its edge — measured in its own words — as a card's does next door.
+			/*
+			 * The ring is `inset` so selecting does not grow the note and shift the
+			 * wall around it.
+			 *
+			 * Padding is doc-sm's, to the same figures. It reads against this
+			 * element's own `text-[0.6em]`, so copying the numbers rather than
+			 * scaling them is what makes a note's text sit the same distance from
+			 * its edge — measured in its own words — as a card's does next door.
+			 *
+			 * The dim is not transitioned. `useSortable` puts its own `transition`
+			 * in the inline style above, which wins over any class — so an opacity
+			 * transition here would animate on the renders where dnd-kit happens to
+			 * have left that property empty and snap on the rest. A filter that
+			 * fades sometimes is worse than one that is simply immediate, and
+			 * immediate is the right feel for a control you toggle to look at
+			 * something.
+			 */
 			className={`relative rounded-[0.2em] border px-[0.55em] py-[0.4em] text-[0.6em] leading-tight shadow-sm ${
 				selected ? 'ring-2 ring-brand ring-inset dark:ring-sky-400' : ''
-			} ${cardClass[card.kind]}`}
+			} ${dimmed ? 'opacity-25' : ''} ${cardClass[card.kind]}`}
 		>
 			{editing ? (
 				<textarea

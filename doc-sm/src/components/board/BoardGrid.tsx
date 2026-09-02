@@ -97,6 +97,7 @@ export function BoardGrid({
 	onToggleDetail,
 	selected,
 	onSelect,
+	matching,
 }: {
 	board: BoardState;
 	dispatch: (action: BoardAction) => void;
@@ -124,6 +125,14 @@ export function BoardGrid({
 	/** Cards whose detail is open. Everything not in here is collapsed. */
 	expanded: ReadonlySet<Id>;
 	onToggleDetail: (id: Id) => void;
+	/**
+	 * The cards the tag filter is pointing at, or `null` when it is off.
+	 *
+	 * Includes the steps and activities *above* a hit, not only the cards
+	 * wearing the tag — see `filtered` in state.ts for why a heading must never
+	 * be greyed out over a lit card.
+	 */
+	matching: ReadonlySet<Id> | null;
 }) {
 	const geometry = useMemo(() => columnGeometry(board), [board]);
 	const bands = bandOrder(board);
@@ -297,6 +306,7 @@ export function BoardGrid({
 										onEditTicket={() => onLinkTicket('activity', activityId)}
 									/>
 								}
+								dimmed={matching !== null && !matching.has(activityId)}
 								detailOpen={expanded.has(activityId)}
 								onToggleDetail={() => onToggleDetail(activityId)}
 								detailLabel="cast"
@@ -351,6 +361,7 @@ export function BoardGrid({
 											onEditTicket={() => onLinkTicket('step', stepId)}
 										/>
 									}
+									dimmed={matching !== null && !matching.has(stepId)}
 									detailOpen={expanded.has(stepId)}
 									onToggleDetail={() => onToggleDetail(stepId)}
 									detailLabel="notes"
@@ -475,6 +486,7 @@ export function BoardGrid({
 											onNotes={(text) => dispatch({ type: 'setNotes', kind: 'story', id: storyId, text })}
 											tags={story.tags}
 											onTags={(tags) => dispatch({ type: 'setTags', kind: 'story', id: storyId, tags })}
+											dimmed={matching !== null && !matching.has(storyId)}
 											detailOpen={expanded.has(storyId)}
 											onToggleDetail={() => onToggleDetail(storyId)}
 											detailLabel="need"

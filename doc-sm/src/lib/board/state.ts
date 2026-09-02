@@ -25,6 +25,7 @@
  * off-by-ones live.
  */
 
+import { tagKey } from '../storymap/model.ts';
 import type { CardKind, DeliveryKind, StoryStatus } from '../storymap/model.ts';
 
 export type { CardKind, DeliveryKind, StoryStatus };
@@ -180,6 +181,133 @@ export function stepOrder(board: BoardState): readonly Id[] {
 
 export function storiesIn(board: BoardState, stepId: Id, band: BandId): readonly Id[] {
 	return board.cells[cellKey(stepId, band)] ?? [];
+}
+
+/** One tag as the filter row offers it: how it is spelled, and how many wear it. */
+export interface TagInUse {
+	/** The first spelling seen, reading the backbone in board order. */
+	readonly tag: string;
+	/** What `tagKey` folds it to. The identity the filter actually matches on. */
+	readonly key: string;
+	readonly count: number;
+}
+
+/**
+ * Every tag on the board, most-used first, with how many cards wear each.
+ *
+ * ## Folded by key, labelled by first spelling
+ *
+ * The parser refuses one card tagged `+Legal +legal`, but nothing stops *two*
+ * cards spelling the same label differently — the check is per card, because
+ * that is the scope in which a repeat means a bad merge. Here the two are one
+ * tag with a count of two, since a filter that offered both would defeat the
+ * only thing a tag is for.
+ *
+ * The label shown is the first spelling encountered, reading the board the way
+ * a person does. Not the commonest, which would be more democratic and would
+ * also make the chip rename itself as cards are added — a control whose text
+ * moves under the reader is worse than one that picked a spelling and kept it.
+ *
+ * ## Counted across all three rows
+ *
+ * An activity, a step and a story wearing `+search` are three cards wearing it.
+ * The count is what a chip is worth pressing for, and a number that only
+ * counted stories would be wrong about a board whose backbone carries the
+ * labels.
+ */
+export function tagsInUse(board: BoardState): readonly TagInUse[] {
+	const found = new Map<string, { tag: string; count: number }>();
+
+	const add = (tags: readonly string[]) => {
+		for (const tag of tags) {
+			const key = tagKey(tag);
+			const seen = found.get(key);
+			if (seen === undefined) found.set(key, { tag, count: 1 });
+			else seen.count += 1;
+		}
+	};
+
+	// Board order, so "first spelling seen" means something a reader can predict.
+	for (const activityId of board.activityOrder) {
+		const activity = board.activities[activityId];
+		if (activity === undefined) continue;
+		add(activity.tags);
+		for (const stepId of activity.stepOrder) {
+			add(board.steps[stepId]?.tags ?? []);
+			for (const band of bandOrder(board)) {
+				for (const storyId of storiesIn(board, stepId, band)) add(board.stories[storyId]?.tags ?? []);
+			}
+		}
+	}
+
+	return [...found.entries()]
+		.map(([key, { tag, count }]) => ({ tag, key, count }))
+		.sort((a, b) => b.count - a.count || a.key.localeCompare(b.key));
+}
+
+/**
+ * Which cards the filter is pointing at, or `null` when it is not on.
+ *
+ * `null` rather than "every id", because the two mean different things to the
+ * caller: no filter is not the same as a filter that happens to match
+ * everything, and only the first should leave the board undimmed.
+ *
+ * **A card matches if it wears *any* of the chosen tags.** Union, not
+ * intersection. The question somebody asks a map is "where is the payments
+ * work, and the legal work" — narrowing to cards that are both is a rarer thing
+ * to want, and it is the one of the two that can silently answer "nowhere" and
+ * look like a broken filter.
+ *
+ * ## A parent matches when anything under it does
+ *
+ * This is where the story map differs from the wall in doc-es, and it is the
+ * containment that causes it. There every card is a peer, so a card either
+ * wears the tag or it does not. Here an activity is the *heading of a column*
+ * and a step is the heading under it — so filtering for `+search` and dimming
+ * an activity whose story is lit would grey out the label of the very thing
+ * being pointed at. The column would read as switched off while its contents
+ * read as switched on.
+ *
+ * So a hit lights its ancestors. That is the same argument that made this a dim
+ * and not a hide: a filter here is for finding where something is, and an
+ * answer with its own heading greyed out has lost the half that says where.
+ *
+ * It does not run the other way. A tagged activity does not light its stories:
+ * they are the specific things being looked for, and lighting all of them would
+ * answer a question nobody asked.
+ */
+export function filtered(board: BoardState, keys: ReadonlySet<string>): ReadonlySet<Id> | null {
+	if (keys.size === 0) return null;
+
+	const wears = (tags: readonly string[]) => tags.some((tag) => keys.has(tagKey(tag)));
+	const matching = new Set<Id>();
+
+	for (const activityId of board.activityOrder) {
+		const activity = board.activities[activityId];
+		if (activity === undefined) continue;
+		let inActivity = wears(activity.tags);
+
+		for (const stepId of activity.stepOrder) {
+			let inStep = wears(board.steps[stepId]?.tags ?? []);
+
+			for (const band of bandOrder(board)) {
+				for (const storyId of storiesIn(board, stepId, band)) {
+					if (!wears(board.stories[storyId]?.tags ?? [])) continue;
+					matching.add(storyId);
+					inStep = true;
+				}
+			}
+
+			if (inStep) {
+				matching.add(stepId);
+				inActivity = true;
+			}
+		}
+
+		if (inActivity) matching.add(activityId);
+	}
+
+	return matching;
 }
 
 /**

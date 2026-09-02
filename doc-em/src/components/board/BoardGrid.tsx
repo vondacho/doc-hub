@@ -121,6 +121,7 @@ export function BoardGrid({
 	onToggleDetail,
 	selected,
 	onSelect,
+	matching,
 }: {
 	board: BoardState;
 	dispatch: (action: BoardAction) => void;
@@ -132,6 +133,14 @@ export function BoardGrid({
 	onSelect: (pick: { kind: CardKind | 'delivery'; id: Id }) => void;
 	expanded: ReadonlySet<Id>;
 	onToggleDetail: (id: Id) => void;
+	/**
+	 * The cards the tag filter is pointing at, or `null` when it is off.
+	 *
+	 * Includes the rule *above* a matching example or question, not only the
+	 * cards wearing the tag — see `filtered` in state.ts for why a heading must
+	 * never be greyed out over a lit card.
+	 */
+	matching: ReadonlySet<Id> | null;
 }) {
 	const scroller = useRef<HTMLDivElement>(null);
 	const grid = useRef<HTMLDivElement>(null);
@@ -268,6 +277,7 @@ export function BoardGrid({
 								onTags={(tags) => dispatch({ type: 'setTags', kind: 'story', id: '', tags })}
 								fixed
 								data={{ type: 'story' }}
+								dimmed={matching !== null && !matching.has(STORY_DETAIL_KEY)}
 								detailOpen={expanded.has(STORY_DETAIL_KEY)}
 								onToggleDetail={() => onToggleDetail(STORY_DETAIL_KEY)}
 								detailName="the need"
@@ -313,6 +323,7 @@ export function BoardGrid({
 								onToggleDetail={onToggleDetail}
 								selected={selected}
 								onSelect={onSelect}
+								matching={matching}
 							/>
 						</div>
 						</>
@@ -336,6 +347,7 @@ export function BoardGrid({
 									onTags={(tags) => dispatch({ type: 'setTags', kind: 'rule', id: ruleId, tags })}
 									position={`rule ${index + 1} of ${board.ruleOrder.length}`}
 									data={{ type: 'rule' }}
+									dimmed={matching !== null && !matching.has(ruleId)}
 									detailOpen={expanded.has(ruleId)}
 									onToggleDetail={() => onToggleDetail(ruleId)}
 									onRetitle={(title) => dispatch({ type: 'retitle', kind: 'rule', id: ruleId, title })}
@@ -384,6 +396,7 @@ export function BoardGrid({
 									onToggleDetail={onToggleDetail}
 									selected={selected}
 									onSelect={onSelect}
+									matching={matching}
 									stacked
 								/>
 								<div className="flex gap-1 opacity-0 transition group-hover/q:opacity-100 focus-within:opacity-100 motion-reduce:transition-none">
@@ -413,6 +426,7 @@ export function BoardGrid({
 								row={FIRST_BAND_ROW + bandIndex}
 								expanded={expanded}
 								onToggleDetail={onToggleDetail}
+								matching={matching}
 							/>
 						)),
 					)}
@@ -447,6 +461,7 @@ function ExampleCell({
 	onToggleDetail,
 	selected,
 	onSelect,
+	matching,
 }: {
 	board: BoardState;
 	dispatch: (action: BoardAction) => void;
@@ -456,6 +471,8 @@ function ExampleCell({
 	row: number;
 	expanded: ReadonlySet<Id>;
 	onToggleDetail: (id: Id) => void;
+	/** Passed through to the cards, like `selected`: a cell is not filtered. */
+	matching: ReadonlySet<Id> | null;
 	/** Passed through to the cards: a cell is not itself selectable. */
 	selected: { kind: CardKind | 'delivery'; id: Id } | null;
 	onSelect: (pick: { kind: CardKind | 'delivery'; id: Id }) => void;
@@ -494,6 +511,7 @@ function ExampleCell({
 									onTags={(tags) => dispatch({ type: 'setTags', kind: 'example', id, tags })}
 									position={`${index + 1} of ${ids.length} under "${rule.title}", ${where}`}
 									data={{ type: 'example', cell: key }}
+									dimmed={matching !== null && !matching.has(id)}
 									detailOpen={expanded.has(id)}
 									onToggleDetail={() => onToggleDetail(id)}
 									onRetitle={(title) => dispatch({ type: 'retitle', kind: 'example', id, title })}
@@ -537,6 +555,7 @@ function QuestionStrip({
 	onToggleDetail,
 	selected,
 	onSelect,
+	matching,
 	stacked = false,
 }: {
 	board: BoardState;
@@ -545,6 +564,8 @@ function QuestionStrip({
 	ids: readonly Id[];
 	expanded: ReadonlySet<Id>;
 	onToggleDetail: (id: Id) => void;
+	/** Passed through to the cards, like `selected`: a strip is not filtered. */
+	matching: ReadonlySet<Id> | null;
 	/** Passed through to the cards: a strip is not itself selectable. */
 	selected: { kind: CardKind | 'delivery'; id: Id } | null;
 	onSelect: (pick: { kind: CardKind | 'delivery'; id: Id }) => void;
@@ -580,6 +601,7 @@ function QuestionStrip({
 								onTags={(tags) => dispatch({ type: 'setTags', kind: 'question', id, tags })}
 								position={`${index + 1} of ${ids.length}`}
 								data={{ type: 'question', parent }}
+								dimmed={matching !== null && !matching.has(id)}
 								detailOpen={expanded.has(id)}
 								onToggleDetail={() => onToggleDetail(id)}
 								onRetitle={(title) => dispatch({ type: 'retitle', kind: 'question', id, title })}

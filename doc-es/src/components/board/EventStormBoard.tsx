@@ -42,9 +42,10 @@ import {
 } from '../../lib/board/history.ts';
 import { cardClass } from '../../lib/board/kinds.ts';
 import { resetsHistory, type BoardAction } from '../../lib/board/gestures.ts';
-import { cardsWithDetail, type BoardState, type Id } from '../../lib/board/state.ts';
+import { cardsWithDetail, filtered, tagsInUse, type BoardState, type Id } from '../../lib/board/state.ts';
 import { cardLabel, type CardKind, type EventStormDocument } from '../../lib/eventstorm/model.ts';
 import { Legend } from './Legend.tsx';
+import { TagFilter } from './TagFilter.tsx';
 import { parse } from '../../lib/eventstorm/parser.ts';
 import { EventStormParseError, type Problem } from '../../lib/eventstorm/problems.ts';
 import { SAMPLE_SOURCE, freshSource } from '../../lib/eventstorm/sample.ts';
@@ -259,6 +260,19 @@ export default function EventStormBoard({
 	const justOpened = useRef(false);
 	const [zoomIndex, setZoomIndex] = useState(DEFAULT_ZOOM_INDEX);
 	const [expanded, setExpanded] = useState<ReadonlySet<Id>>(new Set());
+	/**
+	 * Which tags the wall is pointing at, by `tagKey`. Empty is the filter off.
+	 *
+	 * View state, like `expanded` above it, and deliberately **not** stored: a
+	 * filter is a question somebody is asking right now, not a property of the
+	 * board. Coming back tomorrow to a wall with two thirds of it greyed out,
+	 * and no memory of having asked, is the failure mode a remembered filter
+	 * has — where a remembered zoom or legend is just where you left things.
+	 *
+	 * Keys rather than spellings, so a wall carrying `+Legal` on one note and
+	 * `+legal` on another filters to both from one chip.
+	 */
+	const [tagFilter, setTagFilter] = useState<ReadonlySet<string>>(new Set());
 	const [fullscreen, setFullscreen] = useState(false);
 	/**
 	 * The board's own light/dark override, or `null` to follow the page.
@@ -549,6 +563,33 @@ export default function EventStormBoard({
 	const detailed = useMemo(() => cardsWithDetail(board), [board]);
 	const anyExpanded = detailed.some((id) => expanded.has(id));
 
+	const tags = useMemo(() => tagsInUse(board), [board]);
+	const matching = useMemo(() => filtered(board, tagFilter), [board, tagFilter]);
+
+	const toggleTag = useCallback((key: string) => {
+		setTagFilter((was) => {
+			const next = new Set(was);
+			if (!next.delete(key)) next.add(key);
+			return next;
+		});
+	}, []);
+
+	/*
+	 * A tag that is no longer on any note stops being a filter.
+	 *
+	 * Otherwise deleting the last `+legal` note, or renaming that tag in the
+	 * source pane, leaves the wall filtered by something nothing wears — every
+	 * note dimmed, and no chip left on the row to press to undo it. The board
+	 * would look broken, and the only way out would be a reload.
+	 */
+	useEffect(() => {
+		const live = new Set(tags.map((entry) => entry.key));
+		setTagFilter((was) => {
+			const next = new Set([...was].filter((key) => live.has(key)));
+			return next.size === was.size ? was : next;
+		});
+	}, [tags]);
+
 	const toggleDetail = useCallback((id: Id) => {
 		setExpanded((was) => {
 			const next = new Set(was);
@@ -824,6 +865,20 @@ export default function EventStormBoard({
 				onLevel={(level) => dispatch({ type: 'setLevel', level })}
 			/>
 
+			{/* Under the legend, because the legend says what the colours mean and
+			    this says what somebody wrote on top of them. Outside the `legend`
+			    toggle: that switch hides reference text you may already know, and a
+			    filter you have turned on is state, not reference. Hiding it would
+			    leave the wall dimmed with nothing on screen explaining why. */}
+			<TagFilter
+				tags={tags}
+				chosen={tagFilter}
+				onToggle={toggleTag}
+				onClear={() => setTagFilter(new Set())}
+				matching={matching?.size ?? 0}
+				total={Object.keys(board.cards).length}
+			/>
+
 			{note && (
 				<p
 					role="alert"
@@ -965,6 +1020,7 @@ export default function EventStormBoard({
 					onToggleDetail={toggleDetail}
 					selected={selected}
 					onSelect={setSelected}
+					matching={matching}
 				/>
 				)}
 

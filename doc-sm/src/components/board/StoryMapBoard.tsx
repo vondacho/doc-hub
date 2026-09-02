@@ -65,6 +65,8 @@ import { cardClass, kindLabel } from '../../lib/board/kinds.ts';
 import { resetsHistory, type BoardAction } from '../../lib/board/gestures.ts';
 import {
 	bandOrder,
+	filtered,
+	tagsInUse,
 	unboundStories,
 	splitCellKey,
 	storiesIn,
@@ -88,6 +90,7 @@ import { SourceProblems } from './SourceProblems.tsx';
 import { StoreState } from './StoreState.tsx';
 import { PublishDialog, type PublishProgress } from './PublishDialog.tsx';
 import { Legend } from './Legend.tsx';
+import { TagFilter } from './TagFilter.tsx';
 
 import { Toolbar } from './Toolbar.tsx';
 
@@ -352,6 +355,19 @@ export default function StoryMapBoard({
 	 * having to remember to reset them.
 	 */
 	const [expanded, setExpanded] = useState<ReadonlySet<Id>>(() => new Set());
+	/**
+	 * Which tags the map is pointing at, by `tagKey`. Empty is the filter off.
+	 *
+	 * View state, like `expanded` above it, and deliberately **not** stored: a
+	 * filter is a question somebody is asking right now, not a property of the
+	 * board. Coming back tomorrow to a map with two thirds of it greyed out, and
+	 * no memory of having asked, is the failure mode a remembered filter has —
+	 * where a remembered zoom or legend is just where you left things.
+	 *
+	 * Keys rather than spellings, so a map carrying `+Legal` on one card and
+	 * `+legal` on another filters to both from one chip.
+	 */
+	const [tagFilter, setTagFilter] = useState<ReadonlySet<string>>(() => new Set());
 	const [fullscreen, setFullscreen] = useState(false);
 	/**
 	 * The board's own light/dark override, or `null` to follow the page.
@@ -540,6 +556,35 @@ export default function StoryMapBoard({
 			return next;
 		});
 	}, []);
+
+	/* ---- tags -------------------------------------------------------------- */
+
+	const tags = useMemo(() => tagsInUse(board), [board]);
+	const matching = useMemo(() => filtered(board, tagFilter), [board, tagFilter]);
+
+	const toggleTag = useCallback((key: string) => {
+		setTagFilter((was) => {
+			const next = new Set(was);
+			if (!next.delete(key)) next.add(key);
+			return next;
+		});
+	}, []);
+
+	/*
+	 * A tag that is no longer on any card stops being a filter.
+	 *
+	 * Otherwise deleting the last `+legal` story, or renaming that tag in the
+	 * source pane, leaves the board filtered by something nothing wears — every
+	 * card dimmed, and no chip left on the row to press to undo it. The board
+	 * would look broken, and the only way out would be a reload.
+	 */
+	useEffect(() => {
+		const live = new Set(tags.map((entry) => entry.key));
+		setTagFilter((was) => {
+			const next = new Set([...was].filter((key) => live.has(key)));
+			return next.size === was.size ? was : next;
+		});
+	}, [tags]);
 
 	const toggleAllDetail = useCallback(() => {
 		setExpanded(anyExpanded ? new Set() : new Set(detailed));
@@ -1110,6 +1155,23 @@ export default function StoryMapBoard({
 
 			{legend && <Legend />}
 
+			{/* Outside the `legend` gate above it. That switch hides reference text
+			    you may already know; a filter you have turned on is state, not
+			    reference, and hiding it would leave the map dimmed with nothing on
+			    screen explaining why. */}
+			<TagFilter
+				tags={tags}
+				chosen={tagFilter}
+				onToggle={toggleTag}
+				onClear={() => setTagFilter(new Set())}
+				matching={matching?.size ?? 0}
+				total={
+					Object.keys(board.activities).length +
+					Object.keys(board.steps).length +
+					Object.keys(board.stories).length
+				}
+			/>
+
 			{note && (
 				<p
 					role="alert"
@@ -1280,6 +1342,7 @@ export default function StoryMapBoard({
 							onToggleDetail={toggleDetail}
 							selected={selected}
 							onSelect={setSelected}
+							matching={matching}
 						/>
 
 						{/* Mandatory, not decorative: the board scrolls, and a card

@@ -34,6 +34,7 @@
 
 import {
 	hasSteps,
+	tagKey,
 	type CardKind,
 	type DeliveryKind,
 	type StepClause,
@@ -275,6 +276,127 @@ export function cellOfExample(board: BoardState, exampleId: Id): CellKey | undef
  * they silently disagree the global notes toggle skips the story and nothing
  * else looks wrong. Generated ids are prefixed `r`/`e`/`q`, so it cannot collide.
  */
+/** One tag as the filter row offers it: how it is spelled, and how many wear it. */
+export interface TagInUse {
+	/** The first spelling seen, reading the map in board order. */
+	readonly tag: string;
+	/** What `tagKey` folds it to. The identity the filter actually matches on. */
+	readonly key: string;
+	readonly count: number;
+}
+
+/**
+ * Every tag on the map, most-used first, with how many cards wear each.
+ *
+ * ## Folded by key, labelled by first spelling
+ *
+ * The parser refuses one card tagged `+Legal +legal`, but nothing stops *two*
+ * cards spelling the same label differently — the check is per card, because
+ * that is the scope in which a repeat means a bad merge. Here the two are one
+ * tag with a count of two, since a filter that offered both would defeat the
+ * only thing a tag is for.
+ *
+ * The label shown is the first spelling encountered, reading the map the way a
+ * person does: the story, then each rule with its examples and questions. Not
+ * the commonest, which would be more democratic and would also make the chip
+ * rename itself as cards are added — a control whose text moves under the
+ * reader is worse than one that picked a spelling and kept it.
+ */
+export function tagsInUse(board: BoardState): readonly TagInUse[] {
+	const found = new Map<string, { tag: string; count: number }>();
+
+	const add = (tags: readonly string[]) => {
+		for (const tag of tags) {
+			const key = tagKey(tag);
+			const seen = found.get(key);
+			if (seen === undefined) found.set(key, { tag, count: 1 });
+			else seen.count += 1;
+		}
+	};
+
+	if (board.story !== null) {
+		add(board.story.tags);
+		for (const id of board.story.questions) add(board.questions[id]?.tags ?? []);
+	}
+
+	for (const ruleId of board.ruleOrder) {
+		const rule = board.rules[ruleId];
+		if (rule === undefined) continue;
+		add(rule.tags);
+		for (const id of examplesOfRule(board, ruleId)) add(board.examples[id]?.tags ?? []);
+		for (const id of rule.questionIds) add(board.questions[id]?.tags ?? []);
+	}
+
+	return [...found.entries()]
+		.map(([key, { tag, count }]) => ({ tag, key, count }))
+		.sort((a, b) => b.count - a.count || a.key.localeCompare(b.key));
+}
+
+/**
+ * Which cards the filter is pointing at, or `null` when it is not on.
+ *
+ * `null` rather than "every id", because the two mean different things to the
+ * caller: no filter is not the same as a filter that happens to match
+ * everything, and only the first should leave the map undimmed.
+ *
+ * **A card matches if it wears *any* of the chosen tags.** Union, not
+ * intersection. The question somebody asks a map is "where is the payments
+ * work, and the legal work" — narrowing to cards that are both is a rarer thing
+ * to want, and it is the one of the two that can silently answer "nowhere" and
+ * look like a broken filter.
+ *
+ * ## A rule matches when anything under it does
+ *
+ * This is where the example map differs from the wall in doc-es, and it is the
+ * containment that causes it. There every card is a peer. Here a rule is the
+ * *heading of a column*, and its examples and questions hang beneath it — so
+ * filtering for `+legal` and dimming the rule above a lit example would grey
+ * out the heading of the very thing being pointed at. The column would read as
+ * switched off while its contents read as switched on. The story behaves the
+ * same way with the questions hanging off it.
+ *
+ * It does not run the other way. A tagged rule does not light its examples:
+ * those are the specific things being looked for, and lighting all of them
+ * would answer a question nobody asked.
+ */
+export function filtered(board: BoardState, keys: ReadonlySet<string>): ReadonlySet<Id> | null {
+	if (keys.size === 0) return null;
+
+	const wears = (tags: readonly string[]) => tags.some((tag) => keys.has(tagKey(tag)));
+	const matching = new Set<Id>();
+
+	if (board.story !== null) {
+		let inStory = wears(board.story.tags);
+		for (const id of board.story.questions) {
+			if (!wears(board.questions[id]?.tags ?? [])) continue;
+			matching.add(id);
+			inStory = true;
+		}
+		if (inStory) matching.add(STORY_DETAIL_KEY);
+	}
+
+	for (const ruleId of board.ruleOrder) {
+		const rule = board.rules[ruleId];
+		if (rule === undefined) continue;
+		let inRule = wears(rule.tags);
+
+		for (const id of examplesOfRule(board, ruleId)) {
+			if (!wears(board.examples[id]?.tags ?? [])) continue;
+			matching.add(id);
+			inRule = true;
+		}
+		for (const id of rule.questionIds) {
+			if (!wears(board.questions[id]?.tags ?? [])) continue;
+			matching.add(id);
+			inRule = true;
+		}
+
+		if (inRule) matching.add(ruleId);
+	}
+
+	return matching;
+}
+
 export const STORY_DETAIL_KEY: Id = 'story';
 
 /**
