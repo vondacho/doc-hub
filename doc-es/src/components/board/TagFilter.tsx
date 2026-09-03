@@ -64,10 +64,6 @@ export function TagFilter({
 
 	return (
 		<section aria-labelledby="tag-filter" className="flex flex-wrap items-center gap-1">
-			<h2 id="tag-filter" className="sr-only">
-				Filter the wall by tag
-			</h2>
-
 			<span className="mr-1 text-xs font-semibold text-ink-muted dark:text-slate-400">Tags</span>
 
 			{tags.map(({ tag, key, count }) => {

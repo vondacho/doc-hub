@@ -47,12 +47,14 @@ import {
 	cardsWithDetail,
 	deepestLevel,
 	filtered,
+	levelChoices,
 	tagsInUse,
 	type BoardState,
 	type Id,
 } from '../../lib/board/state.ts';
 import { cardLabel, type CardKind, type EventStormDocument, type Level } from '../../lib/eventstorm/model.ts';
 import { Legend } from './Legend.tsx';
+import { LevelFilter } from './LevelFilter.tsx';
 import { TagFilter } from './TagFilter.tsx';
 import { parse } from '../../lib/eventstorm/parser.ts';
 import { EventStormParseError, type Problem } from '../../lib/eventstorm/problems.ts';
@@ -609,6 +611,8 @@ export default function EventStormBoard({
 	 */
 	const discovered = useMemo(() => deepestLevel(board), [board]);
 	const level = lens ?? discovered;
+	/** The three, each with what it would dim — the level row's `tagsInUse`. */
+	const levels = useMemo(() => levelChoices(board), [board]);
 
 	/*
 	 * The lens is discovered once per document, not once per edit.
@@ -926,29 +930,41 @@ export default function EventStormBoard({
 				}
 			/>
 
-			{/* Not gated the way doc-sm's and doc-em's are: the level picker lives in
-			    here and is a control, not notation. The toggle hides the colours it
-			    explains and leaves the choice of workshop on screen. */}
-			<Legend
-				board={board}
-				level={level}
-				shown={legend}
-				onLevel={setLens}
-			/>
+			{/*
+			 * The two filters, on one row.
+			 *
+			 * They do the same thing to the wall — `filtered` folds them into the
+			 * one set of matches, and a note dimmed by either is dimmed the same
+			 * amount — so putting them on separate rows was drawing one control as
+			 * two. Level first: it is the coarser cut, it is always there, and it
+			 * decides what the tag row is being asked *of*.
+			 *
+			 * Neither is gated by the `legend` switch. That hides reference text you
+			 * may already know; a filter you have turned on is state, and hiding it
+			 * would leave the wall dimmed with nothing on screen explaining why.
+			 *
+			 * `gap-x-6` rather than the `gap-1` inside each row, so the two read as
+			 * two controls rather than one long strip of chips. The tag row removes
+			 * itself entirely on a wall nobody has tagged, and the level row is then
+			 * alone on the line — which is why the gap lives out here rather than as
+			 * a margin on either of them.
+			 */}
+			<div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+				<LevelFilter levels={levels} chosen={level} onLevel={setLens} />
 
-			{/* Under the legend, because the legend says what the colours mean and
-			    this says what somebody wrote on top of them. Outside the `legend`
-			    toggle: that switch hides reference text you may already know, and a
-			    filter you have turned on is state, not reference. Hiding it would
-			    leave the wall dimmed with nothing on screen explaining why. */}
-			<TagFilter
-				tags={tags}
-				chosen={tagFilter}
-				onToggle={toggleTag}
-				onClear={() => setTagFilter(new Set())}
-				matching={matching?.size ?? 0}
-				total={Object.keys(board.cards).length}
-			/>
+				<TagFilter
+					tags={tags}
+					chosen={tagFilter}
+					onToggle={toggleTag}
+					onClear={() => setTagFilter(new Set())}
+					matching={matching?.size ?? 0}
+					total={Object.keys(board.cards).length}
+				/>
+			</div>
+
+			{/* Under the filters: they say how the wall is being read, this says what
+			    the colours on it mean. */}
+			<Legend level={level} shown={legend} />
 
 			{note && (
 				<p

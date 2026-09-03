@@ -19,7 +19,7 @@
  * are regenerated on every import; nothing outside this tab refers to them.
  */
 
-import { kindsFor, LEVELS, levelOfKind, tagKey, type CardKind, type Level } from '../eventstorm/model.ts';
+import { CARD_KINDS, kindsFor, LEVELS, levelOfKind, tagKey, type CardKind, type Level } from '../eventstorm/model.ts';
 
 export type { CardKind, Level };
 export type Id = string;
@@ -240,14 +240,49 @@ export function filtered(board: BoardState, keys: ReadonlySet<string>, level: Le
 }
 
 /**
- * The notes the level is dimming: everything of a kind it does not offer.
+ * The notes a level is dimming: everything of a kind it does not offer.
  *
- * What the picker needs in order to say how much of the wall the lens is
- * holding back. The board never uses it to refuse anything — see `Level`.
+ * Private, because the only question anybody asks of it is the one
+ * `levelChoices` answers. The board never uses it to refuse anything — see
+ * `Level`.
  */
-export function outsideLevel(board: BoardState, level: Level): readonly Card[] {
+function outsideLevel(board: BoardState, level: Level): readonly Card[] {
 	const shown = new Set(kindsFor(level));
 	return Object.values(board.cards).filter((card) => !shown.has(card.kind));
+}
+
+/**
+ * One level as the filter row offers it: what choosing it would turn down.
+ *
+ * `tagsInUse` for the other row, and deliberately the same shape of answer — a
+ * list of choices, each carrying the count that decides whether it is worth
+ * pressing. The two rows sit side by side and are read as one thing, so the
+ * data behind them is built the same way and neither component counts anything
+ * itself.
+ *
+ * All three are always returned, in order of depth. Unlike a tag, a level is
+ * not something the wall either has or has not: every wall can be looked at as
+ * a big picture, and the shallow end of the row is exactly where a wall that
+ * has gone deep is most worth looking at.
+ */
+export interface LevelChoice {
+	readonly level: Level;
+	/** How many notes this level does not offer, and would therefore dim. */
+	readonly dims: number;
+	/** The distinct kinds among them, in notation order, for the tooltip. */
+	readonly kinds: readonly CardKind[];
+}
+
+export function levelChoices(board: BoardState): readonly LevelChoice[] {
+	return LEVELS.map((level) => {
+		const outside = outsideLevel(board, level);
+		const present = new Set(outside.map((card) => card.kind));
+		// Filtered out of the notation order rather than collected in the order
+		// the cards happen to sit in: "command, policy" reads as the notation and
+		// stays put as notes are moved around, where document order would list
+		// the same two kinds differently after a drag.
+		return { level, dims: outside.length, kinds: CARD_KINDS.filter((kind) => present.has(kind)) };
+	});
 }
 
 /**
