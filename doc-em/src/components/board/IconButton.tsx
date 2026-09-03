@@ -13,6 +13,16 @@
  * `group-hover` *and* `group-focus-visible`, and marked `aria-hidden` because
  * the accessible name already says the same words.
  *
+ * **Focus-visible, and not focus-within.** The shorter spelling is the one that
+ * suggests itself and it is wrong: `:focus-within` matches whenever a descendant
+ * holds focus *however it got there*, and a clicked button holds focus until
+ * something else takes it — so the caption stayed up after the pointer had left,
+ * worst on the toggles, which are pressed and then left alone. `:focus-visible`
+ * is the browser's own judgement about whether focus deserves to be *seen*:
+ * keyboard yes, mouse no, which is exactly the distinction the paragraph above
+ * is describing. It is wrapped in `:has()` because the group is the span and the
+ * thing taking focus is the button inside it.
+ *
  * ## The hub's one icon-button metric
  *
  * The same four numbers hold here, in the other two boards and in
@@ -129,7 +139,7 @@ export function IconButton({
 			{tooltip === 'element' && (
 			<span
 				aria-hidden="true"
-				className="pointer-events-none absolute top-full left-1/2 z-50 mt-1.5 -translate-x-1/2 rounded-md bg-ink px-2 py-1 text-xs whitespace-nowrap text-white opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 motion-reduce:transition-none dark:bg-slate-200 dark:text-ink"
+				className="pointer-events-none absolute top-full left-1/2 z-50 mt-1.5 -translate-x-1/2 rounded-md bg-ink px-2 py-1 text-xs whitespace-nowrap text-white opacity-0 transition-opacity group-hover:opacity-100 group-has-[:focus-visible]:opacity-100 motion-reduce:transition-none dark:bg-slate-200 dark:text-ink"
 			>
 				{label}
 			</span>

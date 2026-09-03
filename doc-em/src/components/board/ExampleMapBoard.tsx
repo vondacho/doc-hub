@@ -936,12 +936,11 @@ export default function ExampleMapBoard({
 				onToggleAllDetail={() => setExpanded(anyExpanded ? new Set() : new Set(detailed))}
 			/>
 
-			{legend && <Legend />}
-
-			{/* Outside the `legend` gate above it. That switch hides reference text
-			    you may already know; a filter you have turned on is state, not
-			    reference, and hiding it would leave the map dimmed with nothing on
-			    screen explaining why. */}
+			{/* Not gated by the `legend` switch, whose list now sits below this
+			    rather than above it. That switch hides reference text you may
+			    already know; a filter you have turned on is state, not reference,
+			    and hiding it would leave the map dimmed with nothing on screen
+			    explaining why. */}
 			<TagFilter
 				tags={tags}
 				chosen={tagFilter}
@@ -976,6 +975,23 @@ export default function ExampleMapBoard({
 					</button>
 				</p>
 			)}
+
+			{/*
+			 * Last of the three, because it is the only one of them that is not
+			 * about *this* map.
+			 *
+			 * The filter above says how the map is being read right now and the
+			 * alert says what just happened to it — both are state, both change
+			 * under the reader, and both are worth meeting before a list of what
+			 * the colours mean. Reference text that sits above the state pushes
+			 * the state down the page on every visit, including the visits where
+			 * nobody needed the reference; putting it last costs the reader
+			 * nothing on the day they do want it, and a screenful on the days
+			 * they do not.
+			 *
+			 * doc-es orders its board the same way, for the same reason.
+			 */}
+			{legend && <Legend />}
 
 			<GherkinDialog
 				open={previewingGherkin}
