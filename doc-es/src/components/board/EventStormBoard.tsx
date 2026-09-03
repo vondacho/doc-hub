@@ -31,6 +31,7 @@ import { AgentPanel } from '../agent/AgentPanel.tsx';
 import * as storage from '../../lib/storage.ts';
 import { format as formatSource } from '../../lib/format.ts';
 import { lanePositionOf, positionOf, toBoard } from '../../lib/board/convert.ts';
+import { withoutLegacyLevel } from '../../lib/board/source.ts';
 import { applyAction, isEdit } from '../../lib/board/apply.ts';
 import {
 	canRedo,
@@ -42,8 +43,15 @@ import {
 } from '../../lib/board/history.ts';
 import { cardClass } from '../../lib/board/kinds.ts';
 import { resetsHistory, type BoardAction } from '../../lib/board/gestures.ts';
-import { cardsWithDetail, filtered, tagsInUse, type BoardState, type Id } from '../../lib/board/state.ts';
-import { cardLabel, type CardKind, type EventStormDocument } from '../../lib/eventstorm/model.ts';
+import {
+	cardsWithDetail,
+	deepestLevel,
+	filtered,
+	tagsInUse,
+	type BoardState,
+	type Id,
+} from '../../lib/board/state.ts';
+import { cardLabel, type CardKind, type EventStormDocument, type Level } from '../../lib/eventstorm/model.ts';
 import { Legend } from './Legend.tsx';
 import { TagFilter } from './TagFilter.tsx';
 import { parse } from '../../lib/eventstorm/parser.ts';
@@ -273,6 +281,22 @@ export default function EventStormBoard({
 	 * `+legal` on another filters to both from one chip.
 	 */
 	const [tagFilter, setTagFilter] = useState<ReadonlySet<string>>(new Set());
+	/**
+	 * Which of the three workshops the wall is being looked at as.
+	 *
+	 * View state, beside the tag filter and for the tag filter's reasons — and it
+	 * used to be a line in the file. `Level` in the document model argues that
+	 * change at length; the short of it is that a wall with a command on it *is*
+	 * a process model, so the declaration was a duplicate of the cards, and
+	 * "show me this as a big picture" is a question to ask of a board rather than
+	 * an edit to make to a document.
+	 *
+	 * `null` until the board below discovers it — see the effect that follows.
+	 * A state that starts at `big-picture` and corrects itself on the next tick
+	 * would open every process model with two thirds of it greyed out for a
+	 * frame, which is exactly the sight this feature exists to make deliberate.
+	 */
+	const [lens, setLens] = useState<Level | null>(null);
 	const [fullscreen, setFullscreen] = useState(false);
 	/**
 	 * The board's own light/dark override, or `null` to follow the page.
@@ -356,9 +380,14 @@ export default function EventStormBoard({
 	 * in the pane with its problems listed beneath it, which is the only way
 	 * anybody was ever going to fix it.
 	 */
-	const load = useCallback((text: string) => {
+	const load = useCallback((raw: string) => {
 		// Whatever was here keeps its entry under its own name — see `justOpened`.
 		justOpened.current = true;
+		// The one thing done to a file on the way in. A `level …` line written by
+		// the version that declared one is dead text — the level is read off the
+		// cards now — and this is the moment to be rid of it, while the document
+		// is arriving rather than while somebody is typing in it.
+		const text = withoutLegacyLevel(raw);
 		send({ action: { type: 'import', text }, text });
 		setDocumentKey((n) => n + 1);
 		setDirty(false);
@@ -509,14 +538,22 @@ export default function EventStormBoard({
 	useEffect(() => {
 		const last = storage.lastOpened();
 		if (last === null) return;
-		const text = storage.load(last);
-		if (text === null) return;
+		const stored = storage.load(last);
+		if (stored === null) return;
+		// Migrated on the way out of the store as well as on the way in from a
+		// file: a board saved by the version that wrote a `level` line is the
+		// commonest place one is left, and it would otherwise survive for ever by
+		// never being re-imported.
+		const text = withoutLegacyLevel(stored);
 		send({ action: { type: 'import', text }, text });
 		setDocumentKey((n) => n + 1);
 		previousKey.current = last;
-		// It came *from* the store, so the store already holds it. Without this
-		// the first autosave would write the same bytes back for no reason.
-		savedText.current = text;
+		// What the store *actually* holds, which is the point: if the migration
+		// above changed anything, this differs from `text` and the autosave writes
+		// the cleaned copy back within the debounce, so the line is gone for good
+		// rather than stripped again on every visit. When nothing changed the two
+		// are equal and the first autosave is correctly skipped.
+		savedText.current = stored;
 		// Mount only. `board` is deliberately not a dependency: this restores the
 		// last session, it does not keep re-reading storage.
 		// eslint-disable-next-line react-hooks/exhaustive-deps
@@ -563,8 +600,41 @@ export default function EventStormBoard({
 	const detailed = useMemo(() => cardsWithDetail(board), [board]);
 	const anyExpanded = detailed.some((id) => expanded.has(id));
 
+	/**
+	 * The level the wall actually reaches, and the lens in force.
+	 *
+	 * `discovered` is a fact about the cards and is recomputed on every keystroke
+	 * in the source pane. `level` is what the visitor is looking through, which
+	 * is the discovered value until they say otherwise.
+	 */
+	const discovered = useMemo(() => deepestLevel(board), [board]);
+	const level = lens ?? discovered;
+
+	/*
+	 * The lens is discovered once per document, not once per edit.
+	 *
+	 * Opening a file, loading the example or starting a new board should land on
+	 * the level that shows the whole wall — that is what "discovered" buys, and
+	 * it is why a process model does not open pretending to be a big picture.
+	 * Typing a `policy` into a wall somebody has deliberately set to big picture
+	 * must *not* yank the lens open under them: they asked for that view, the
+	 * legend says one note is dimmed, and the picker is right there. Type the
+	 * same `policy` into a wall nobody has set, and the level follows it — which
+	 * is the same rule read the other way, and the reason a card written in the
+	 * source pane does not arrive already greyed out.
+	 *
+	 * `documentKey` is the line between the two. It changes on an Open, an
+	 * import, a reset — every gesture that means "a different storm" — and on
+	 * nothing else. Clearing to `null` rather than setting the discovered value
+	 * keeps one rule: the lens is the visitor's answer, and no answer means the
+	 * board's.
+	 */
+	useEffect(() => {
+		setLens(null);
+	}, [documentKey]);
+
 	const tags = useMemo(() => tagsInUse(board), [board]);
-	const matching = useMemo(() => filtered(board, tagFilter), [board, tagFilter]);
+	const matching = useMemo(() => filtered(board, tagFilter, level), [board, tagFilter, level]);
 
 	const toggleTag = useCallback((key: string) => {
 		setTagFilter((was) => {
@@ -861,8 +931,9 @@ export default function EventStormBoard({
 			    explains and leaves the choice of workshop on screen. */}
 			<Legend
 				board={board}
+				level={level}
 				shown={legend}
-				onLevel={(level) => dispatch({ type: 'setLevel', level })}
+				onLevel={setLens}
 			/>
 
 			{/* Under the legend, because the legend says what the colours mean and
@@ -1021,6 +1092,7 @@ export default function EventStormBoard({
 					selected={selected}
 					onSelect={setSelected}
 					matching={matching}
+					level={level}
 				/>
 				)}
 

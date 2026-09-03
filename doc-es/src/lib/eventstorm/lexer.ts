@@ -57,14 +57,17 @@ export const EVENTSTORM_KEYWORDS: ReadonlySet<string> = new Set([
 	// What the storm is about. No `space` beside it — an event storm produces a
 	// picture and a set of seams, not work to be raised into a tracker.
 	'product',
-	// Which of the three workshops this is, and therefore which card keywords the
-	// file may use. See `Level` in model.ts.
+	// Retired: the level is discovered from the cards, not declared. Still a
+	// keyword so `parseLegacyLevel` can recognise a line an older version wrote
+	// and skip it — dropped from the set, it would lex as an identifier and the
+	// file would fail to open. See `Level` in model.ts.
 	'level',
 	// A horizontal swimlane. Lanes are declared top to bottom; where a card sits
 	// along the timeline is `@column` on the card, not the order it is written.
 	'lane',
-	// The ten card kinds, in the order the levels introduce them. Which of them a
-	// given file may use depends on its `level` — the parser checks.
+	// The eleven card kinds, in the order the levels introduce them. Any file may
+	// use any of them: the level a board is looked at through decides which are
+	// offered and which are dimmed, never which are legal.
 	'event',
 	'actor',
 	'system',

@@ -66,10 +66,11 @@ const storyMapper = storyMapperUrl();
       level the visitor picks, so it has to live where that setting does — see
       Legend.tsx.
 
-      What is left here is the big-picture five for `<noscript>`, which is the
-      level a storm is at unless somebody says otherwise. A reader without
-      scripting cannot use the board, but they can still be told what the colours
-      on an exported wall mean.
+      What is left here is the big-picture six for `<noscript>`, which is the
+      level every storm is at before it goes deeper, and the only one a server can
+      know: the level is discovered from the cards, and this page has not read any.
+      A reader without scripting cannot use the board, but they can still be told
+      what the colours on an exported wall mean.
     */}
     <noscript>
       <section aria-labelledby="legend-static" class="mb-6">

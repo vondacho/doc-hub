@@ -20,6 +20,10 @@
  * from — a sample that showed half of it would leave the other half looking
  * theoretical.
  *
+ * Nothing in the file says so. The commands and policies say it: the level is
+ * discovered from the cards, and the board opens this at process modelling
+ * because that is the shallowest lens that dims none of it. See `Level`.
+ *
  * The payment lane carries the level's whole point in four squares: a command at
  * 3, the event it causes at 4, the policy that reacts at 5 and the event that
  * reacts to *it*. That is `event → policy → command → system → event` read off
@@ -45,7 +49,6 @@ export const SAMPLE_SOURCE = `// Event storm exported by doc-es.
 
 eventstorm "Ordering a pizza" {
   product "client-onboarding"
-  level process-modelling
 
   lane "Customer" {
     actor "Hungry customer" @1

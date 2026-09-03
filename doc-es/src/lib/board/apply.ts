@@ -43,9 +43,6 @@ export function applyAction(
 		case 'setProduct':
 			return edit.setProduct(source, document, action.product);
 
-		case 'setLevel':
-			return edit.setLevel(source, document, action.level);
-
 		case 'addLane':
 			return edit.addLane(source, document, action.index);
 

@@ -14,7 +14,8 @@
  * fixed, so the markup is the same for every visitor and there is nothing to
  * hydrate. This one depends on a setting the visitor changes, so it has to live
  * where that setting does. The page keeps a `<noscript>` copy of the big-picture
- * five, which is the level a storm is at unless somebody says otherwise.
+ * six — the only level a server can name, since the level is read off cards the
+ * page has not parsed.
  *
  * ## The toggle hides the colours, not the choice
  *
@@ -24,26 +25,39 @@
  * what this board *is*, and a switch labelled "legend" that also took away the
  * only way back to Big Picture would be a trap.
  *
- * ## A level that would orphan notes is disabled, not hidden
+ * ## The level is a lens, so every level is always reachable
  *
- * Going deeper is always allowed. Coming back up is not, once the wall carries
- * notes the shallower notation has no colour for — the file could not express
- * that board, and the board must not hold a state the file cannot. The control
- * says so, and says how many notes are in the way, because a disabled control
- * with no explanation is indistinguishable from a bug.
+ * Going deeper adds colours. Coming back up does not take notes away — it turns
+ * down the ones the shallower notation does not offer, exactly as the tag row
+ * turns down the ones it is not pointing at. That is what makes a storm modelled
+ * to software design showable to a room as a big picture without a second file,
+ * and it is argued once beside `Level` in the document model.
+ *
+ * So no level is ever disabled. What the control owes the reader instead is the
+ * *consequence*: how many notes this lens is holding back, and which level shows
+ * the wall entire. A wall silently missing a third of itself with no line of
+ * text accounting for it is the failure this replaced a disabled button with.
  */
 
 import { kindsFor, cardLabel, cardMeaning, LEVELS, levelLabel, levelMeaning, type Level } from '../../lib/eventstorm/model.ts';
 import { swatchClass } from '../../lib/board/kinds.ts';
-import { orphanedBy } from '../../lib/board/gestures.ts';
-import type { BoardState } from '../../lib/board/state.ts';
+import { deepestLevel, outsideLevel, type BoardState } from '../../lib/board/state.ts';
 
 export function Legend({
 	board,
+	level: chosen,
 	shown,
 	onLevel,
 }: {
 	board: BoardState;
+	/**
+	 * The lens in force — view state held by the island, not a field on the
+	 * board. It stopped being written into the file; see `Level`.
+	 *
+	 * Bound as `chosen` inside, so the `LEVELS.map` below can call its own
+	 * parameter `level` without shadowing the one in force.
+	 */
+	level: Level;
 	/**
 	 * Whether the colours are showing.
 	 *
@@ -55,7 +69,13 @@ export function Legend({
 	shown: boolean;
 	onLevel: (level: Level) => void;
 }) {
-	const kinds = kindsFor(board.level);
+	const kinds = kindsFor(chosen);
+
+	// What the lens is holding back, and the way back to the whole wall. Both are
+	// read from the cards rather than from the level, so a storm that never went
+	// deeper says nothing at all here.
+	const dimmed = outsideLevel(board, chosen);
+	const whole = deepestLevel(board);
 
 	return (
 		<section aria-labelledby="legend" className="flex flex-col gap-3">
@@ -69,25 +89,37 @@ export function Legend({
 				className="flex flex-wrap items-center gap-1"
 			>
 				{LEVELS.map((level) => {
-					const orphans = orphanedBy(board, level);
-					const blocked = orphans.length > 0;
-					const current = board.level === level;
+					const hides = outsideLevel(board, level);
+					const current = chosen === level;
 					return (
 						<button
 							key={level}
 							type="button"
 							role="radio"
 							aria-checked={current}
-							disabled={blocked && !current}
+							/*
+							 * The count is in the accessible name as well as the tooltip,
+							 * for the reason the tag chips carry theirs: "big picture,
+							 * dims 6 notes" is the whole content of this control, and a
+							 * reader given the label alone would be missing the half that
+							 * decides whether to press it.
+							 */
+							aria-label={
+								hides.length > 0
+									? `${levelLabel[level]}, dims ${hides.length} ${hides.length === 1 ? 'note' : 'notes'}`
+									: levelLabel[level]
+							}
 							title={
-								blocked && !current
-									? `${orphans.length} ${orphans.length === 1 ? 'note is' : 'notes are'} not part of ${levelLabel[
-											level
-										].toLowerCase()}: ${[...new Set(orphans.map((card) => cardLabel[card.kind].toLowerCase()))].join(', ')}.`
+								hides.length > 0
+									? `${levelMeaning[level]} ${hides.length} ${hides.length === 1 ? 'note' : 'notes'} on this wall ${
+											hides.length === 1 ? 'is' : 'are'
+										} not part of it and would be dimmed: ${[
+											...new Set(hides.map((card) => cardLabel[card.kind].toLowerCase())),
+										].join(', ')}.`
 									: levelMeaning[level]
 							}
 							onClick={() => onLevel(level)}
-							className={`rounded-full border px-3 py-1 text-xs font-semibold transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:cursor-not-allowed disabled:opacity-40 motion-reduce:transition-none ${
+							className={`rounded-full border px-3 py-1 text-xs font-semibold transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand motion-reduce:transition-none ${
 								current
 									? 'border-ink bg-ink text-white dark:border-slate-200 dark:bg-slate-200 dark:text-ink'
 									: 'border-slate-300 text-ink-muted hover:border-brand hover:text-brand dark:border-slate-600 dark:text-slate-400'
@@ -97,7 +129,22 @@ export function Legend({
 						</button>
 					);
 				})}
-				<p className="ml-2 text-xs text-ink-muted dark:text-slate-400">{levelMeaning[board.level]}</p>
+				{/*
+				 * The lens's own account of itself, in the place the level was chosen.
+				 *
+				 * Always mounted and always live, so the arithmetic is announced at the
+				 * moment it changes rather than a region appearing with text already in
+				 * it — the tag row's rule, and for its reason. It replaces the meaning
+				 * of the current level rather than sitting beside it: once notes are
+				 * being held back, *how many* and *where they went* is the more urgent
+				 * of the two sentences, and two lines of small grey text competing here
+				 * would mean neither is read.
+				 */}
+				<p aria-live="polite" className="ml-2 text-xs text-ink-muted dark:text-slate-400">
+					{dimmed.length > 0
+						? `${dimmed.length} ${dimmed.length === 1 ? 'note is' : 'notes are'} dimmed. ${levelLabel[whole]} shows the whole wall.`
+						: levelMeaning[chosen]}
+				</p>
 			</div>
 
 			{/*

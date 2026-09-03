@@ -24,20 +24,13 @@ import {
 	CARD_KINDS,
 	cardKeyword,
 	tagKey,
-	cardLabel,
 	emptyLane,
 	isCardKind,
-	isLevel,
-	kindsFor,
-	LEVELS,
-	levelLabel,
-	levelOfKind,
 	wrapNote,
 	type CardKind,
 	type CardNode,
 	type EventStormDocument,
 	type LaneNode,
-	type Level,
 	type Span,
 } from './model.ts';
 import { EventStormParseError, isSaturated, report, type Problem } from './problems.ts';
@@ -81,9 +74,6 @@ function createParser(tokens: readonly Token[], problems: Problem[], source: str
 	};
 	const advance = (): Token => tokens[Math.min(position++, tokens.length - 1)]!;
 	const atDeclaration = (): boolean => at('keyword') && peek().value !== 'eventstorm';
-
-	/** Every card written, with its keyword's position, for the level check. */
-	const placed: { kind: CardKind; token: Token }[] = [];
 
 	/*
 	 * Spans, built from what the lexer already records.
@@ -257,11 +247,7 @@ function createParser(tokens: readonly Token[], problems: Problem[], source: str
 
 		const notes: string[] = [];
 		const noteRun: { first: Token | null; last: Token | null } = { first: null, last: null };
-		// Where this card was written, so a level mismatch can be reported at the
-		// keyword rather than at the top of the file. Cleared as the tree is built;
-		// nothing outside this parser sees it.
-		placed.push({ kind, token: keyword });
-		// Pushed *after* the body rather than before it, which is the one shape
+		// Read *after* the body rather than before it, which is the one shape
 		// change spans forced: a declaration's span is not known until its closing
 		// brace has been read.
 		parseBody(cardKeyword[kind], () => parseNote(notes, noteRun));
@@ -377,66 +363,28 @@ function createParser(tokens: readonly Token[], problems: Problem[], source: str
 	}
 
 	/**
-	 * `level process-modelling` — at most one per storm, big picture by default.
+	 * `level process-modelling` — read, discarded, and never written again.
 	 *
-	 * A bare word rather than a quoted string, because it is one of three fixed
-	 * values rather than free text: `level "big-pcture"` should be caught here
-	 * and not become a storm nobody can open.
+	 * **The level is no longer part of the format.** It is discovered from the
+	 * cards on the wall — a storm holding a command is a process model, and
+	 * nothing else has to say so — and the picker on the board is a lens over
+	 * that, not a fact about the document. See `Level` in model.ts.
 	 *
-	 * Omitting it means big picture, which is where the practice starts and what
-	 * a file written before this setting existed was. That default is the reason
-	 * older files keep opening.
+	 * This is here only so a file written by the version that did declare it
+	 * still opens. It is skipped silently rather than reported: the line was
+	 * correct when it was written, its value now agrees with the cards anyway
+	 * (the old parser refused any file where it did not), and greeting somebody's
+	 * saved storm with an error they did not cause is the worst of the three
+	 * options. The line disappears the first time the board rewrites the file.
+	 *
+	 * Both tokens are consumed so the trailing ordinal does not then read as a
+	 * stray identifier, which *would* be an error.
 	 */
-	function parseLevel(state: { value: Level | null; token: Token | null; span: Span | null }): boolean {
+	function parseLegacyLevel(): boolean {
 		if (!at('keyword', 'level')) return false;
-		const keyword = advance();
-
-		if (!at('ident') || !isLevel(peek().value)) {
-			problemAt(
-				peek(),
-				`Expected a level after \`level\`, found ${describe(peek())}.`,
-				`One of: ${LEVELS.join(', ')}.`,
-			);
-			synchronize();
-			return true;
-		}
-		const ordinal = advance();
-		const value = ordinal.value as Level;
-
-		if (state.token !== null) {
-			problemAt(
-				keyword,
-				'The level is declared twice. A storm is run at one level.',
-				`Already declared on line ${state.token.line}.`,
-			);
-			return true;
-		}
-		state.value = value;
-		state.token = keyword;
-		state.span = spanFrom(keyword, ordinal);
+		advance();
+		if (at('ident')) advance();
 		return true;
-	}
-
-	/**
-	 * Every card the declared level has no colour for.
-	 *
-	 * A mismatch is an error rather than a silent promotion of the level. The
-	 * level is a statement about which workshop this is, and quietly deepening it
-	 * because somebody wrote one `command` would change what the file claims
-	 * about itself without anybody deciding to. Reported at each offending
-	 * keyword, with the level that would admit it — so the fix is one word, and
-	 * the message says which word.
-	 */
-	function checkLevel(level: Level): void {
-		const allowed = new Set(kindsFor(level));
-		for (const { kind, token } of placed) {
-			if (allowed.has(kind)) continue;
-			problemAt(
-				token,
-				`A ${cardLabel[kind].toLowerCase()} is not part of ${levelLabel[level].toLowerCase()} event storming.`,
-				`It arrives with ${levelLabel[levelOfKind[kind]].toLowerCase()}. Write \`level ${levelOfKind[kind]}\` at the top of the storm.`,
-			);
-		}
 	}
 
 	/**
@@ -505,11 +453,6 @@ function createParser(tokens: readonly Token[], problems: Problem[], source: str
 			token: null,
 			span: null,
 		};
-		const level: { value: Level | null; token: Token | null; span: Span | null } = {
-			value: null,
-			token: null,
-			span: null,
-		};
 		const notes: string[] = [];
 		const noteRun: { first: Token | null; last: Token | null } = { first: null, last: null };
 		const lanes: LaneNode[] = [];
@@ -534,7 +477,7 @@ function createParser(tokens: readonly Token[], problems: Problem[], source: str
 				'eventstorm',
 				() =>
 					parseProduct(product) ||
-					parseLevel(level) ||
+					parseLegacyLevel() ||
 					parseLane(lanes) ||
 					parseCard(loose) ||
 					parseNote(notes, noteRun),
@@ -561,22 +504,14 @@ function createParser(tokens: readonly Token[], problems: Problem[], source: str
 		// first lane would be claiming they belong to it.
 		const all = loose.length > 0 ? [{ ...emptyLane(), cards: loose }, ...lanes] : lanes;
 
-		// Every card is known by now, so the level can be checked against all of
-		// them at once rather than as each is read — which is what lets `level` be
-		// written at the bottom of the file as well as the top.
-		const chosen = level.value ?? 'big-picture';
-		checkLevel(chosen);
-
 		return {
 			title,
 			titleSpan,
 			product: product.value,
 			productSpan: product.span,
-			levelSpan: level.span,
 			openBrace,
 			notesSpan: noteRun.first === null ? null : spanFrom(noteRun.first, noteRun.last ?? noteRun.first),
 			source,
-			level: chosen,
 			notes: [...notes],
 			// No lanes is a legal storm: a file that names none is one nobody has
 			// drawn a wall on yet, and the board offers the choice rather than
@@ -603,8 +538,6 @@ function blank(title: string, source: string): EventStormDocument {
 		titleSpan: NOWHERE,
 		product: null,
 		productSpan: null,
-		level: 'big-picture',
-		levelSpan: null,
 		notes: [],
 		notesSpan: null,
 		lanes: [],

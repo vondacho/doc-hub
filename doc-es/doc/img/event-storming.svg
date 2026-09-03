@@ -1,0 +1,93 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 820 392" width="820" height="392" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif">
+  <title>An event storming wall</title>
+  <desc>Domain events in orange along a timeline, with the commands, actors and policies around them, and two candidate bounded contexts drawn as dashed frames.</desc>
+
+  <rect x="0" y="0" width="820" height="392" rx="10" fill="#f4f6f9"/>
+
+  <!-- candidate bounded contexts -->
+  <g fill="none" stroke="#8b95a5" stroke-width="1.5" stroke-dasharray="7 5">
+    <rect x="18" y="12" width="308" height="272" rx="10"/>
+    <rect x="334" y="12" width="470" height="272" rx="10"/>
+  </g>
+  <g font-size="12" fill="#5b6472" font-style="italic">
+    <text x="30" y="274">candidate bounded context — Ordering</text>
+    <text x="346" y="274">candidate bounded context — Fulfilment</text>
+  </g>
+
+  <!-- actors -->
+  <g fill="#f7e463" stroke="#d5c134">
+    <rect x="56" y="26" width="88" height="30" rx="3"/>
+    <rect x="360" y="26" width="88" height="30" rx="3"/>
+    <rect x="664" y="26" width="88" height="30" rx="3"/>
+  </g>
+  <g font-size="12" fill="#1f2937" text-anchor="middle">
+    <text x="100" y="46">Customer</text>
+    <text x="404" y="46">Warehouse</text>
+    <text x="708" y="46">Support</text>
+  </g>
+
+  <!-- commands -->
+  <g fill="#7ab8f5" stroke="#4a95dd">
+    <rect x="34" y="72" width="132" height="42" rx="3"/>
+    <rect x="338" y="72" width="132" height="42" rx="3"/>
+    <rect x="642" y="72" width="132" height="42" rx="3"/>
+  </g>
+  <g font-size="12.5" fill="#10233a" text-anchor="middle">
+    <text x="100" y="98">Place order</text>
+    <text x="404" y="98">Ship order</text>
+    <text x="708" y="98">Issue refund</text>
+  </g>
+
+  <!-- domain events -->
+  <g fill="#f5a623" stroke="#d3860c">
+    <rect x="34" y="136" width="132" height="48" rx="3"/>
+    <rect x="186" y="136" width="132" height="48" rx="3"/>
+    <rect x="338" y="136" width="132" height="48" rx="3"/>
+    <rect x="490" y="136" width="132" height="48" rx="3"/>
+    <rect x="642" y="136" width="132" height="48" rx="3"/>
+  </g>
+  <g font-size="12.5" fill="#2b1a00" text-anchor="middle">
+    <text x="100" y="165">Order placed</text>
+    <text x="252" y="165">Payment taken</text>
+    <text x="404" y="165">Order shipped</text>
+    <text x="556" y="165">Delivery failed</text>
+    <text x="708" y="165">Refund issued</text>
+  </g>
+
+  <!-- hotspot, stuck over the corner of the note it disputes -->
+  <g transform="translate(614 141) rotate(45)">
+    <rect x="-15" y="-15" width="30" height="30" fill="#ef5f7a" stroke="#cf3d59"/>
+  </g>
+  <text x="614" y="146" font-size="15" fill="#3b0713" text-anchor="middle" font-weight="600">?</text>
+
+  <!-- policies -->
+  <g fill="#cbb2f0" stroke="#a98adb">
+    <rect x="186" y="206" width="132" height="42" rx="3"/>
+    <rect x="490" y="206" width="132" height="42" rx="3"/>
+  </g>
+  <g font-size="12" fill="#22103a" text-anchor="middle">
+    <text x="252" y="232">Reserve stock</text>
+    <text x="556" y="232">Notify customer</text>
+  </g>
+
+  <!-- timeline -->
+  <g stroke="#5b6472" stroke-width="1.5" fill="none">
+    <path d="M30 306 H784"/>
+    <path d="M776 300 l10 6 -10 6"/>
+  </g>
+  <text x="30" y="326" font-size="12" fill="#5b6472">time, left to right — the wall is read as a story</text>
+
+  <!-- legend -->
+  <g font-size="11.5" fill="#3d4551">
+    <rect x="30" y="352" width="14" height="14" rx="2" fill="#f5a623" stroke="#d3860c"/>
+    <text x="50" y="363">domain event</text>
+    <rect x="150" y="352" width="14" height="14" rx="2" fill="#7ab8f5" stroke="#4a95dd"/>
+    <text x="170" y="363">command</text>
+    <rect x="252" y="352" width="14" height="14" rx="2" fill="#f7e463" stroke="#d5c134"/>
+    <text x="272" y="363">actor</text>
+    <rect x="330" y="352" width="14" height="14" rx="2" fill="#cbb2f0" stroke="#a98adb"/>
+    <text x="350" y="363">policy</text>
+    <rect x="412" y="352" width="14" height="14" rx="2" fill="#ef5f7a" stroke="#cf3d59"/>
+    <text x="432" y="363">hotspot — a disagreement nobody has settled</text>
+  </g>
+</svg>

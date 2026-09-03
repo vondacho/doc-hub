@@ -19,7 +19,7 @@
  * are regenerated on every import; nothing outside this tab refers to them.
  */
 
-import { tagKey, type CardKind, type Level } from '../eventstorm/model.ts';
+import { kindsFor, LEVELS, levelOfKind, tagKey, type CardKind, type Level } from '../eventstorm/model.ts';
 
 export type { CardKind, Level };
 export type Id = string;
@@ -74,8 +74,6 @@ export interface BoardState {
 	readonly title: string;
 	/** The registered product's shortname, or null for a storm about no product. */
 	readonly product: string | null;
-	/** Which workshop this is, and therefore which colours the board offers. */
-	readonly level: Level;
 	readonly notes: readonly string[];
 	/** Top to bottom. Order is the only statement of which lane is where. */
 	readonly laneOrder: readonly Id[];
@@ -93,7 +91,7 @@ export interface BoardState {
 }
 
 export function emptyBoard(title = 'Untitled event storm'): BoardState {
-	return { title, product: null, level: 'big-picture', notes: [], laneOrder: [], lanes: {}, cards: {}, cells: {} };
+	return { title, product: null, notes: [], laneOrder: [], lanes: {}, cards: {}, cells: {} };
 }
 
 /** The cards stacked on one square, in the order they were placed. */
@@ -200,25 +198,73 @@ export function tagsInUse(board: BoardState): readonly TagInUse[] {
 }
 
 /**
- * Which notes the filter is pointing at, or `null` when it is not on.
+ * Which notes the wall is pointing at, or `null` when nothing is filtering it.
  *
  * `null` rather than "every id", because the two mean different things to the
  * caller: no filter is not the same as a filter that happens to match
  * everything, and only the first should leave the wall undimmed.
  *
- * **A note matches if it wears *any* of the chosen tags.** Union, not
- * intersection. The question somebody asks a wall is "where is the payments
- * work, and the legal work" — narrowing to notes that are both is a rarer thing
- * to want, and it is the one of the two that can silently answer "nowhere" and
- * look like a broken filter.
+ * ## Two filters, one answer
+ *
+ * The tag row is one, and the level picker is the other — a board set to big
+ * picture dims the commands and policies on it rather than refusing to be set
+ * there, argued beside `Level` in the document model. They are computed
+ * together and returned as one set because the wall has one dimming: a note
+ * either reads or recedes, and asking a reader to tell two strengths of grey
+ * apart would be inventing a third state nobody asked for.
+ *
+ * The two combine as **and** — a note reads only if it survives both — while
+ * the tags within the row combine as **or**. That is not an inconsistency, it
+ * is the difference between the two questions. The tags are a query somebody
+ * types: "where is the payments work, and the legal work", so union, because
+ * narrowing to notes wearing both is the rarer want and the one that silently
+ * answers "nowhere" and looks broken. The level is the workshop being run, and
+ * a card outside it is outside it however it is tagged.
+ *
+ * `level` is a parameter and not a field on the board, because it is not a fact
+ * about the storm — it is which of it this visitor is looking at. See `Level` in
+ * the document model for why that stopped being written into the file.
  */
-export function filtered(board: BoardState, keys: ReadonlySet<string>): ReadonlySet<Id> | null {
-	if (keys.size === 0) return null;
+export function filtered(board: BoardState, keys: ReadonlySet<string>, level: Level): ReadonlySet<Id> | null {
+	const shown = new Set(kindsFor(level));
+	const byLevel = Object.values(board.cards).some((card) => !shown.has(card.kind));
+	if (keys.size === 0 && !byLevel) return null;
+
 	const matching = new Set<Id>();
 	for (const [id, card] of Object.entries(board.cards)) {
-		if (card.tags.some((tag) => keys.has(tagKey(tag)))) matching.add(id);
+		if (!shown.has(card.kind)) continue;
+		if (keys.size > 0 && !card.tags.some((tag) => keys.has(tagKey(tag)))) continue;
+		matching.add(id);
 	}
 	return matching;
+}
+
+/**
+ * The notes the level is dimming: everything of a kind it does not offer.
+ *
+ * What the picker needs in order to say how much of the wall the lens is
+ * holding back. The board never uses it to refuse anything — see `Level`.
+ */
+export function outsideLevel(board: BoardState, level: Level): readonly Card[] {
+	const shown = new Set(kindsFor(level));
+	return Object.values(board.cards).filter((card) => !shown.has(card.kind));
+}
+
+/**
+ * The shallowest level that dims nothing — how far this wall actually reaches.
+ *
+ * The way back from a lens, and the only number that answers "where is the rest
+ * of it?" in one word. `big-picture` for an empty board, and for one that never
+ * went deeper: a storm with no commands on it is already whole at every level,
+ * which is why the picker says nothing at all in that case.
+ */
+export function deepestLevel(board: BoardState): Level {
+	let deepest = 0;
+	for (const card of Object.values(board.cards)) {
+		const depth = LEVELS.indexOf(levelOfKind[card.kind]);
+		if (depth > deepest) deepest = depth;
+	}
+	return LEVELS[deepest] ?? 'big-picture';
 }
 
 export function cardsWithDetail(board: BoardState): readonly Id[] {

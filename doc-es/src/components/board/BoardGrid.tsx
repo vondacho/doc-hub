@@ -39,7 +39,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { useDroppable } from '@dnd-kit/core';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { cardLabel, cardMeaning, kindsFor, type CardKind } from '../../lib/eventstorm/model.ts';
+import { cardLabel, cardMeaning, kindsFor, levelLabel, type CardKind, type Level } from '../../lib/eventstorm/model.ts';
 import { cardClass } from '../../lib/board/kinds.ts';
 import type { BoardAction } from '../../lib/board/gestures.ts';
 import { cardsAt, cellKey, columnCount, type BoardState, type Id } from '../../lib/board/state.ts';
@@ -89,6 +89,7 @@ export function BoardGrid({
 	selected,
 	onSelect,
 	matching,
+	level,
 }: {
 	board: BoardState;
 	dispatch: (action: BoardAction) => void;
@@ -110,6 +111,20 @@ export function BoardGrid({
 	 * anything sits. See `StickyNote` for why.
 	 */
 	matching: ReadonlySet<Id> | null;
+	/**
+	 * Which workshop the wall is being looked at as, and therefore which cards
+	 * can be placed on it.
+	 *
+	 * Two jobs, and they are one setting on purpose: the `+` strip and the
+	 * re-colour menu offer exactly the notation the legend is showing, so what
+	 * you can put on the wall is always what the wall is currently explaining.
+	 * The third job — dimming what the level does not offer — is already folded
+	 * into `matching` and does not come through here.
+	 *
+	 * View state passed down rather than read off `board`, because it is not a
+	 * property of the storm. See `Level` in the document model.
+	 */
+	level: Level;
 }) {
 	const scroller = useRef<HTMLDivElement>(null);
 
@@ -218,6 +233,7 @@ export function BoardGrid({
 								selected={selected}
 								onSelect={onSelect}
 								matching={matching}
+								level={level}
 							/>
 						)),
 					)}
@@ -389,6 +405,7 @@ function Square({
 	selected,
 	onSelect,
 	matching,
+	level,
 }: {
 	board: BoardState;
 	dispatch: (action: BoardAction) => void;
@@ -402,6 +419,8 @@ function Square({
 	/** Passed through to the notes: a square is not itself selectable. */
 	selected: { kind: 'lane' | 'card'; id: Id } | null;
 	onSelect: (pick: { kind: 'lane' | 'card'; id: Id }) => void;
+	/** The notation on offer here: the `+` strip, and each note's menu. */
+	level: Level;
 }) {
 	const key = cellKey(laneId, column);
 	const { setNodeRef, isOver } = useDroppable({ id: `square:${key}`, data: { accepts: 'card', cell: key } });
@@ -486,6 +505,7 @@ function Square({
 									selected={selected?.kind === 'card' && selected.id === id}
 									onSelect={() => onSelect({ kind: 'card', id })}
 									matching={matching}
+									level={level}
 								/>
 							</li>
 						);
@@ -493,17 +513,20 @@ function Square({
 				</SortableContext>
 			</ul>
 
-			{/* Only the kinds this level admits. The strip is the legend as well as
+			{/* Only the kinds this level offers. The strip is the legend as well as
 			    the control, so offering a colour the notation does not currently
-			    have would be teaching the wrong notation. Hovering one shows the
-			    note it would make — see KindPalette. */}
+			    have would be teaching the wrong notation. Not a rule about what
+			    the file may hold — the level dims deeper notes rather than
+			    forbidding them — but about what *this* workshop places: somebody
+			    running a big picture is placing big-picture cards. Hovering one
+			    shows the note it would make — see KindPalette. */}
 			<div
 				className={`opacity-0 transition focus-within:opacity-100 motion-reduce:transition-none ${
 					onNotes ? '' : 'group-hover/sq:opacity-100'
 				}`}
 			>
 				<KindPalette
-					kinds={kindsFor(board.level)}
+					kinds={kindsFor(level)}
 					where={where}
 					onAdd={(kind) => dispatch({ type: 'addCard', laneId, column, kind })}
 				/>
@@ -646,6 +669,7 @@ function StickyNote({
 	selected,
 	onSelect,
 	matching,
+	level,
 }: {
 	id: Id;
 	board: BoardState;
@@ -659,6 +683,8 @@ function StickyNote({
 	onSelect: () => void;
 	/** The filter's matches, or null when it is off. See `dimmed` below. */
 	matching: ReadonlySet<Id> | null;
+	/** The lens: what the menu may re-colour to, and why this note may be dim. */
+	level: Level;
 }) {
 	const card = board.cards[id];
 	const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
@@ -695,16 +721,32 @@ function StickyNote({
 	 * a storm actually asks of a tag is *where along the timeline* it lands, and
 	 * that question needs the notes either side of the answer to still be there.
 	 *
+	 * The level dims through the same door — a board set to big picture turns
+	 * down the commands and policies on it rather than deleting them, and the
+	 * argument above is why it must. `filtered` folds both into the one set it
+	 * returns; this reads the result and does not care which of the two put a
+	 * note outside it.
+	 *
 	 * Not `hidden`, not `pointer-events-none`: a dimmed note stays draggable,
 	 * editable and selectable. Filtering is a way of looking at the wall, not a
 	 * mode the wall is in.
 	 */
 	const dimmed = matching !== null && !matching.has(id);
 
-	// Colour is never the only signal on this board, and opacity is a colour
-	// signal. A dimmed note says so in the one place a screen reader will meet
-	// it — beside the kind, which is on the same name for the same reason.
-	const label = `${cardLabel[card.kind]}: ${card.title}, ${position}${dimmed ? ', not matching the tag filter' : ''}`;
+	/*
+	 * Colour is never the only signal on this board, and opacity is a colour
+	 * signal. A dimmed note says so in the one place a screen reader will meet
+	 * it — beside the kind, which is on the same name for the same reason.
+	 *
+	 * *Why* it is dimmed is worth the extra clause, because the two reasons have
+	 * different remedies and neither is guessable from "filtered". A note held
+	 * back by the level is answered by moving the level; one held back by the tag
+	 * row is answered by the row. Recomputed here from the kind rather than
+	 * carried alongside `matching`, so there is no second set to keep in step.
+	 */
+	const byLevel = dimmed && !kindsFor(level).includes(card.kind);
+	const why = byLevel ? `not part of ${levelLabel[level].toLowerCase()}` : 'not matching the tag filter';
+	const label = `${cardLabel[card.kind]}: ${card.title}, ${position}${dimmed ? `, ${why}` : ''}`;
 
 	return (
 		<div
@@ -766,18 +808,61 @@ function StickyNote({
 						{...attributes}
 						{...listeners}
 						onClick={() => setEditing(true)}
-						onPointerEnter={(event) => setTip(anchorOf(event.currentTarget))}
+						/*
+						 * No caption on a note the filter has turned down.
+						 *
+						 * A dimmed note is one the wall is currently answering "not
+						 * this one" about, and a tooltip is the loudest thing on the
+						 * board — a full-strength box in full-strength type, painted
+						 * over the notes that *did* match. Running the pointer across a
+						 * filtered wall to read the four notes that survived would
+						 * raise a caption from every one of the thirty-seven that did
+						 * not, which is the filter undone by hover.
+						 *
+						 * It is also the wrong answer to the wrong question. The
+						 * caption says which of the eleven kinds this is; on a note the
+						 * level has dimmed, that is precisely the fact the reader has
+						 * just said they are not looking at.
+						 */
+						onPointerEnter={(event) => {
+							if (dimmed) return;
+							setTip(anchorOf(event.currentTarget));
+						}}
 						onPointerLeave={() => setTip(null)}
-						// A note being picked up is not a note being asked about, and a
-						// caption travelling with the pointer through a drag would sit on
-						// top of the wall the drop is being aimed at.
-						onPointerDown={() => setTip(null)}
+						/*
+						 * A note being picked up is not a note being asked about, and a
+						 * caption travelling with the pointer through a drag would sit on
+						 * top of the wall the drop is being aimed at.
+						 *
+						 * **`listeners.onPointerDown` has to be called by hand here.**
+						 * `{...listeners}` above is where `useSortable` puts it, and a
+						 * prop of the same name written after a spread replaces what the
+						 * spread put there rather than running alongside it. So a plain
+						 * `onPointerDown={() => setTip(null)}` silently unhooks the
+						 * `PointerSensor`'s activator and the note stops being
+						 * draggable at all — while the lane handle a hundred lines up,
+						 * which writes no handler of its own, goes on working. That is a
+						 * hard failure to spot: nothing errors, and half the board still
+						 * drags.
+						 *
+						 * Composed rather than reordered. Putting our handler *before*
+						 * the spread would fix the drag and lose the dismissal, which is
+						 * the same bug facing the other way.
+						 */
+						onPointerDown={(event) => {
+							setTip(null);
+							listeners?.onPointerDown?.(event);
+						}}
 						aria-label={label}
 						className="line-clamp-4 min-w-0 flex-1 cursor-grab text-left break-words hyphens-auto focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand active:cursor-grabbing"
 					>
 						{card.title}
 					</button>
-					{tip !== null && <NoteTooltip kind={card.kind} anchor={tip} />}
+					{/* `dimmed` again, and not only in the handler: the filter can come
+					    on while the pointer is already resting on a note, and a caption
+					    left standing over a note that has just receded is the one case
+					    the guard above cannot see. */}
+					{tip !== null && !dimmed && <NoteTooltip kind={card.kind} anchor={tip} />}
 					{card.notes.length > 0 && (
 						<button
 							type="button"
@@ -789,7 +874,7 @@ function StickyNote({
 							<Icon name={open ? 'up' : 'down'} className="h-[1em] w-[1em]" />
 						</button>
 					)}
-					<CardMenu label={label} actions={cardMenu(board, dispatch, id, card.kind)} />
+					<CardMenu label={label} actions={cardMenu(board, dispatch, id, card.kind, level)} />
 				</div>
 			)}
 
@@ -829,6 +914,8 @@ function cardMenu(
 	dispatch: (action: BoardAction) => void,
 	id: Id,
 	current: CardKind,
+	/** The lens: the notation this menu may re-colour to. */
+	level: Level,
 ): CardMenuAction[] {
 	const card = board.cards[id];
 	return [
@@ -850,9 +937,10 @@ function cardMenu(
 			run: () => dispatch({ type: 'setCardTags', id, tags: [...(card?.tags ?? []), newTag(card?.tags ?? [])] }),
 		},
 		// Re-colouring is offered only within this level's notation, for the same
-		// reason the `+` strip is: a board must not be able to place a card the
-		// file it writes could not describe.
-		...kindsFor(board.level)
+		// reason the `+` strip is: the notation on offer is the workshop being
+		// run. A note of a deeper kind keeps its colour and is dimmed; turning it
+		// into one is a decision that belongs at the level that draws it.
+		...kindsFor(level)
 			.filter((kind) => kind !== current)
 			.map((kind, position) => ({
 				label: `Make it ${cardLabel[kind].toLowerCase()}`,

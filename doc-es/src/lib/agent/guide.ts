@@ -34,7 +34,6 @@ const GRAMMAR = `## The notation: \`.eventstorm\`
 \`\`\`
 eventstorm "Title" {
   product "client-onboarding"      // optional; a registered product's shortname
-  level process-modelling          // big-picture | process-modelling | software-design
 
   lane "Customer" {                // a swimlane: a department, an actor, a subsystem
     actor "Hungry customer" @1     // @column is where along the timeline it sits
@@ -91,10 +90,13 @@ and turning the second into the first is how a wall stops being honest.
 | \`ui\` | a screen somebody decides on | software design |
 
 **The levels are cumulative.** A process model is a big picture *with* commands
-and policies on it; a software design is a process model *with* aggregates on
-it. Raising the level never invalidates what is already on the wall. A card the
-declared level does not admit is an error, not a silent promotion — if a card
-needs a deeper level, say so and change the \`level\` line deliberately.
+and policies on it; a software design is a process model *with* aggregates on it.
+
+**There is no \`level\` line — never write one.** The level is discovered from the
+cards: a wall holding a \`command\` is a process model, and nothing has to say so.
+On the board it is a lens the reader chooses, which dims the notes a shallower
+level does not cover; it changes nothing in the text. So place whichever kind the
+wall actually needs, and let the level follow.
 
 Comments are \`//\` to end of line. Cards may be written before any lane, and are
 gathered into one unnamed lane.`;

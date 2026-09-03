@@ -90,7 +90,6 @@ export function toBoard(document: EventStormDocument): BoardState {
 	return {
 		...emptyBoard(document.title),
 		product: document.product,
-		level: document.level,
 		notes: [...document.notes],
 		laneOrder,
 		lanes,

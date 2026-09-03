@@ -29,6 +29,15 @@
  * never the only one. A screen reader gets the arithmetic — "9 of 41 notes" —
  * at the moment it changes, and every dimmed note says so in its own
  * accessible name besides.
+ *
+ * ## The count is of the wall, not of the tags
+ *
+ * `matching` arrives from `filtered`, which folds the level's lens in with the
+ * tags, so a board set to big picture with `legal` pressed reads "4 of 41" and
+ * not "9 of 41". That is the honest number — it is how many notes are actually
+ * reading — and the level's own line in the legend says where the other five
+ * went. Two controls that each reported only their own half would between them
+ * describe a wall that is not on screen.
  */
 
 import type { TagInUse } from '../../lib/board/state.ts';

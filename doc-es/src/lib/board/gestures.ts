@@ -1,5 +1,5 @@
 /**
- * The vocabulary of gestures, and the one query the level control needs.
+ * The vocabulary of gestures.
  *
  * This was `reducer.ts`, and it deliberately no longer holds a reducer. The
  * text is the source of truth now: a gesture is not folded into a `BoardState`,
@@ -11,8 +11,8 @@
  * did, and something else decides what that does to the text.
  */
 
-import { kindsFor, type CardKind, type Level } from '../eventstorm/model.ts';
-import type { BoardState, Card, CellKey, Id } from './state.ts';
+import type { CardKind } from '../eventstorm/model.ts';
+import type { CellKey, Id } from './state.ts';
 
 export type BoardAction =
 	| { type: 'import'; text: string }
@@ -21,16 +21,6 @@ export type BoardAction =
 	| { type: 'reset' }
 	| { type: 'setMapTitle'; title: string }
 	| { type: 'setProduct'; product: string | null }
-	/**
-	 * Change which workshop this is.
-	 *
-	 * Refused when the wall already carries notes the new level has no colour
-	 * for. The board must not hold a state the file cannot express, and a storm
-	 * whose level does not admit its own cards is exactly that — the parser
-	 * rejects one, so the board must not produce one. The picker disables those
-	 * levels with a reason rather than letting the click fail silently.
-	 */
-	| { type: 'setLevel'; level: Level }
 	| { type: 'addLane'; index: number }
 	| { type: 'retitleLane'; id: Id; title: string }
 	| { type: 'setLaneNotes'; id: Id; text: string }
@@ -67,14 +57,3 @@ export function resetsHistory(action: BoardAction): boolean {
 	return action.type === 'import' || action.type === 'reset';
 }
 
-/**
- * The notes a level would leave without a colour.
- *
- * Exported so the picker can say *why* a level is unavailable and how many cards
- * stand in the way, rather than showing a control that does nothing. The reducer
- * refuses the change either way — this is the explanation, not the guard.
- */
-export function orphanedBy(board: BoardState, level: Level): readonly Card[] {
-	const allowed = new Set(kindsFor(level));
-	return Object.values(board.cards).filter((card) => !allowed.has(card.kind));
-}

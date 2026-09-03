@@ -25,14 +25,43 @@
  */
 
 /**
- * Which level of the practice this storm is being run at.
+ * Which level of the practice a wall is being looked at through.
  *
  * Event storming is not one workshop but three, and each **adds** to the one
  * before it rather than replacing it. That containment is the whole reason this
  * is one board with a setting rather than three boards: a process model is a big
  * picture with commands and policies on it, and a software design is a process
- * model with aggregates on it. Raising the level never invalidates what is
- * already on the wall.
+ * model with aggregates on it.
+ *
+ * ## The level is a lens, and it is not in the file
+ *
+ * It was a declared line once — `level process-modelling` at the top of the
+ * storm — and it is not any more. Two things were wrong with that.
+ *
+ * The first is that it was **derivable**. A wall with a command on it is a
+ * process model; there is no second fact for a line to carry, and the old
+ * parser proved it by refusing every file where the line and the cards
+ * disagreed. A declaration that may only ever say what the content already says
+ * is not a statement of intent, it is a duplicate — and the duplicate is what
+ * drifts, what has to be validated, and what makes a hand-written file wrong
+ * for a reason its author cannot see. So the level is *discovered*:
+ * `deepestLevel` in the board model reads it off the wall.
+ *
+ * The second is that it was doing two jobs. Which workshop this is, and which
+ * of it you want to look at right now, are different questions — and the second
+ * one is per-visitor, per-moment, and nobody else's business. Because the
+ * notation is cumulative, a wall carrying commands and policies still contains
+ * a perfectly good big picture, and "show me this as a big picture" is a thing
+ * to ask of a board rather than an edit to make to a document. Asking it now
+ * changes nothing in the text: the cards the level does not offer stay in the
+ * file, stay in their squares, and the board turns them down — the same dimming
+ * the tag filter uses, argued once beside the dimmed note in BoardGrid. A storm
+ * modelled all the way to software design can be shown to a room as a big
+ * picture and handed back with the file byte-identical.
+ *
+ * `kindsFor` is what draws that line: it is the notation *offered* at a level —
+ * the legend, the `+` palette, the re-colour menu — and by the same token it is
+ * what the wall dims outside of. It never decides what a file may contain.
  *
  *   - **Big picture** — explore a domain nobody has agreed on yet. The output is
  *     a shared understanding and a set of seams.
@@ -57,10 +86,6 @@ export const levelMeaning: Record<Level, string> = {
 	'process-modelling': 'One process end to end: what triggers what, and who decides.',
 	'software-design': 'Inside one context: the components, and what each is responsible for.',
 };
-
-export function isLevel(value: unknown): value is Level {
-	return typeof value === 'string' && (LEVELS as readonly string[]).includes(value);
-}
 
 /**
  * The notation, level by level. Ten kinds, and Brandolini's own.
@@ -172,28 +197,14 @@ export const CARD_KINDS: readonly CardKind[] = [
  *
  * Cumulative because the practice is. A process model still has domain events
  * and hotspots on it — it has *more* than a big picture, never different.
+ *
+ * "Available" means offered and shown, not permitted: see `Level`. A wall may
+ * hold kinds this does not list, and when it does they are dimmed rather than
+ * refused.
  */
 export function kindsFor(level: Level): readonly CardKind[] {
 	const depth = LEVELS.indexOf(level);
 	return CARD_KINDS.filter((kind) => LEVELS.indexOf(levelOfKind[kind]) <= depth);
-}
-
-/**
- * The shallowest level that admits everything on this wall.
- *
- * What "can this storm be a big picture?" means. Used to refuse a level change
- * that would leave notes the notation no longer has a colour for, and to check a
- * file's declared level against what it actually contains.
- */
-export function minimumLevel(document: { lanes: readonly LaneNode[] }): Level {
-	let deepest = 0;
-	for (const lane of document.lanes) {
-		for (const card of lane.cards) {
-			const depth = LEVELS.indexOf(levelOfKind[card.kind]);
-			if (depth > deepest) deepest = depth;
-		}
-	}
-	return LEVELS[deepest] ?? 'big-picture';
 }
 
 export const cardLabel: Record<CardKind, string> = {
@@ -443,22 +454,6 @@ export interface EventStormDocument {
 	 * where the work is cut.
 	 */
 	readonly product: string | null;
-	/**
-	 * Which of the three workshops this is, and therefore which colours the board
-	 * offers.
-	 *
-	 * Stored rather than derived from what is on the wall, because it is a
-	 * statement of intent: a session that has decided it is modelling a process
-	 * has decided that before it has placed its first command. Deriving it would
-	 * mean the level changed under the room the moment somebody added a card, and
-	 * a facilitator could never set it up in advance.
-	 *
-	 * It is checked against the wall rather than ignored — a card whose kind the
-	 * declared level does not admit is a parse error, and the board will not let
-	 * the level be lowered past the notes already on it. So the two cannot
-	 * disagree, and the one that is *declared* is the one that wins.
-	 */
-	readonly level: Level;
 	readonly notes: readonly string[];
 	/**
 	 * The swimlanes, top to bottom.
@@ -485,8 +480,6 @@ export interface EventStormDocument {
 	 * than a zero-width position.
 	 */
 	readonly productSpan: Span | null;
-	/** The whole `level …` line, or null when the file leaves it default. */
-	readonly levelSpan: Span | null;
 	/** The `{` that opens the storm, so a first lane knows where to land. */
 	readonly openBrace: number;
 	readonly notesSpan: Span | null;
@@ -508,15 +501,11 @@ export const UNNAMED_LANE = 'The wall';
 export const NOWHERE: Span = { start: 0, end: 0, line: 1, column: 1 };
 
 export function emptyDocument(title = 'Untitled event storm'): EventStormDocument {
-	// Big picture, because that is where the practice starts and where a board
-	// opened by somebody who has not chosen yet should be.
 	return {
 		title,
 		titleSpan: NOWHERE,
 		product: null,
 		productSpan: null,
-		level: 'big-picture',
-		levelSpan: null,
 		notes: [],
 		notesSpan: null,
 		lanes: [],

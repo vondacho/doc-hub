@@ -32,7 +32,6 @@ import {
 	type CardNode,
 	type EventStormDocument,
 	type LaneNode,
-	type Level,
 	type Span,
 } from '../eventstorm/model.ts';
 import {
@@ -103,34 +102,13 @@ export function setProduct(
 }
 
 /**
- * `level …`, which is written only when it is not the default.
- *
- * Big picture is what a storm is unless somebody says otherwise, so setting it
- * back to big picture removes the line rather than spelling out the default.
- * The two parse to the same document, and the shorter one is the one the
- * serializer has always written.
- */
-export function setLevel(source: string, document: EventStormDocument, level: Level): string {
-	if (unwritable(document)) return source;
-
-	if (level === 'big-picture') {
-		if (document.levelSpan === null) return source;
-		return splice(source, lineRegion(source, document.levelSpan), '');
-	}
-
-	const line = `level ${level}`;
-	if (document.levelSpan !== null) return splice(source, document.levelSpan, line);
-
-	return insertAtTopOfStorm(source, document, line);
-}
-
-/**
  * A line at the top of the storm's block, under any that are already there.
  *
- * `product` and `level` belong above the lanes and below the title, which is
- * where both the sample and the serializer put them. Anchored on whichever of
- * the two is already present so that adding the second does not jump over the
- * first.
+ * `product` is the only such line left — the level used to be the other, and is
+ * now discovered from the cards rather than written down (see `Level`). The
+ * anchoring is kept general because the shape of the problem is: a line that
+ * belongs above the lanes and below the title has to land after whichever of
+ * its siblings is already there rather than jumping over it.
  */
 function insertAtTopOfStorm(
 	source: string,
@@ -139,7 +117,7 @@ function insertAtTopOfStorm(
 ): string {
 	const indent = indentInside(source, document.openBrace);
 
-	const existing = [document.productSpan, document.levelSpan].filter((span) => span !== null);
+	const existing = [document.productSpan].filter((span) => span !== null);
 	if (existing.length > 0) {
 		const last = existing.reduce((a, b) => (a.end > b.end ? a : b));
 		const region = lineRegion(source, last);

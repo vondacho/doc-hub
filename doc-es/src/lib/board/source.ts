@@ -205,3 +205,36 @@ export function lineIndent(source: string, at: number): string {
 	const start = source.lastIndexOf('\n', Math.max(0, at - 1)) + 1;
 	return spaces(/^[ \t]*/.exec(source.slice(start))?.[0] ?? '');
 }
+
+/**
+ * Delete a `level …` line left by the version that declared one.
+ *
+ * The level is discovered from the cards now and is never written down — see
+ * `Level` in the document model. The parser tolerates the old line so a storm
+ * somebody saved last week still opens; this is what makes it *go away* rather
+ * than sit there for ever being tolerated, and it runs on every text that
+ * enters the board.
+ *
+ * ## Why a line match rather than the lexer
+ *
+ * Everything else in this module is byte surgery on a span the parser found,
+ * and that is the right instinct. It is the wrong tool here, because the point
+ * of this function is to run on text *before* anybody has decided whether it
+ * parses — a file with one broken card still deserves to lose its dead level
+ * line, and asking the parser first would make the migration conditional on the
+ * document being well-formed.
+ *
+ * The match is exact rather than approximate, and it cannot reach anything it
+ * should not. A whole line consisting of `level`, one of the three ordinals,
+ * and nothing but an optional comment is unreachable inside a string: a string
+ * that had not closed by the end of the line would need a trailing `\` or a
+ * closing `"`, and either one is on the line and neither is allowed by the
+ * pattern. A line beginning `//` does not match, so the same words in a comment
+ * are somebody's prose and are left alone.
+ *
+ * The whole line goes, including its newline and its indentation — a blank line
+ * where a declaration used to be is a different diff from no line at all.
+ */
+export function withoutLegacyLevel(source: string): string {
+	return source.replace(/^[ \t]*level[ \t]+(?:big-picture|process-modelling|software-design)[ \t]*(?:\/\/[^\n]*)?(?:\n|$)/gm, '');
+}
