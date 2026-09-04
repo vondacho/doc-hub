@@ -33,6 +33,21 @@ interface Props {
 	/** Rendered as the section's accessible name. */
 	label: string;
 	/**
+	 * Show `label` as a real heading, with an optional line under it.
+	 *
+	 * Off by default, which is right for the three places this component was
+	 * built for: there the page's own hero has already said what the grid is, and
+	 * a second visible heading over it would be the same sentence twice.
+	 *
+	 * /hub is the case that needed it. That page is several grids rather than
+	 * one — a hub, then its portal and tools, then the next hub — and a reader
+	 * has to be able to tell which cards belong to which hub. The heading is not
+	 * decoration there; it is the only thing carrying that grouping.
+	 */
+	heading?: boolean;
+	/** One line under the heading. Ignored unless `heading` is set. */
+	lead?: string;
+	/**
 	 * Columns at the `lg` breakpoint. Two suits the pair of landscapes, three the
 	 * three areas of the hub, four the eight product perspectives (4 + 4). Below
 	 * `lg` they all fall back to the same two-column and single-column layouts.
@@ -40,7 +55,7 @@ interface Props {
 	columns?: 2 | 3 | 4;
 }
 
-const { panels, label, columns = 3 } = Astro.props;
+const { panels, label, columns = 3, heading = false, lead } = Astro.props;
 
 // Written out in full rather than interpolated: Tailwind scans the source for
 // class names and cannot see one assembled at runtime, so `lg:grid-cols-${n}`
@@ -61,9 +76,13 @@ const id = `panels-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
 ---
 
 <section aria-labelledby={id} class="mx-auto w-full max-w-5xl px-6 py-16 sm:py-20">
-	<h2 id={id} class="sr-only">{label}</h2>
+	{/* Same element and same id either way, so the section keeps its accessible
+	    name whether or not the heading is drawn. A page that hides it is saying
+	    the name is already on screen, not that it has none. */}
+	<h2 id={id} class={heading ? 'text-2xl font-bold sm:text-3xl' : 'sr-only'}>{label}</h2>
+	{heading && lead && <p class="mt-3 max-w-3xl text-ink-muted dark:text-slate-400">{lead}</p>}
 
-	<ul class={gridClass}>
+	<ul class={`${gridClass}${heading ? ' mt-8' : ''}`}>
 		{
 			panels.map(({ title, description, href, cta, status, icon, external }) => (
 				<li class="h-full">

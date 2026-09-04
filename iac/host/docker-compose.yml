@@ -61,9 +61,21 @@ services:
       HOST: 0.0.0.0
       PORT: 4321
       NODE_ENV: production
+      # This portal's own public address, and its three boards. Needed by /hub,
+      # which is served under hub.obya.ch — a relative link to `/` there would
+      # point the estate's front door back at itself rather than at the
+      # catalogue.
+      DOC_PORTAL_URL: https://doc-portal.obya.ch
+      STORY_MAPPER_URL: https://doc-sm.obya.ch
+      EXAMPLE_MAPPER_URL: https://doc-em.obya.ch
+      EVENT_STORMER_URL: https://doc-es.obya.ch
       # Browser-facing links to the neighbouring hubs. They point at names that
       # only resolve once those hubs are deployed; until then they are dead
-      # links, exactly as an unset value would be.
+      # links, exactly as an unset value would be. /hub marks the ones that are
+      # not up yet rather than offering them as working links.
+      # ba-hub's context mapper, which replaced ba-ddd-mapper. Its hub has no
+      # portal to link, so this is the whole of ba-hub on /hub.
+      BA_CM_URL: https://ba-cm.obya.ch
       API_PORTAL_URL: https://api-portal.obya.ch
       MODEL_PORTAL_URL: https://arch-portal.obya.ch
       MODEL_C4_URL: https://arch-c4.obya.ch

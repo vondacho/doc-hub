@@ -5,9 +5,14 @@ metadata:
   labels:
     {{- include "doc-portal.labels" . | nindent 4 }}
 data:
-  # All read by src/lib/links.ts through process.env at call time — by
+  # All read by src/lib/links.ts through process.env at call time — by /hub, by
   # /landscape, by the C4 and Events panels of every product view, by the
   # footer, and by the /go/[target] redirects.
+  DOC_PORTAL_URL: {{ .Values.app.docPortalUrl | quote }}
+  STORY_MAPPER_URL: {{ .Values.app.storyMapperUrl | quote }}
+  EXAMPLE_MAPPER_URL: {{ .Values.app.exampleMapperUrl | quote }}
+  EVENT_STORMER_URL: {{ .Values.app.eventStormerUrl | quote }}
+  BA_CM_URL: {{ .Values.app.baCmUrl | quote }}
   API_PORTAL_URL: {{ .Values.app.apiPortalUrl | quote }}
   MODEL_PORTAL_URL: {{ .Values.app.modelPortalUrl | quote }}
   MODEL_C4_URL: {{ .Values.app.modelC4Url | quote }}

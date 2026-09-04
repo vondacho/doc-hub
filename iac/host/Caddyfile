@@ -4,9 +4,30 @@
 #
 # doc-registry-db has no block: PostgreSQL is not an HTTP service and is
 # reachable on the compose network only.
+#
+# There are six blocks for five containers: hub.obya.ch and doc-portal.obya.ch
+# are the same application answering on two names.
 
 {
 	email {$ACME_EMAIL}
+}
+
+# The estate's front door. Same container as doc-portal.obya.ch below — this is
+# a second name on one application, not a sixth deployment.
+#
+# Only `/` is rewritten. Everything else is proxied untouched, which is what
+# keeps the page working: Astro emits absolute asset paths like /_astro/x.css,
+# and they have to resolve under whichever host the page was served from.
+#
+# The consequence is that the whole portal answers here too — hub.obya.ch/catalog
+# is doc-portal's catalogue. That is accepted rather than worked around: hiding
+# it would mean listing every path Astro might ask for, and the day that list is
+# wrong is the day the front door loses its stylesheet.
+hub.obya.ch {
+	encode zstd gzip
+	@root path /
+	rewrite @root /hub
+	reverse_proxy doc-portal:4321
 }
 
 doc-portal.obya.ch {

@@ -37,12 +37,22 @@
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useDroppable } from '@dnd-kit/core';
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { cardLabel, cardMeaning, kindsFor, levelLabel, type CardKind, type Level } from '../../lib/eventstorm/model.ts';
 import { cardClass } from '../../lib/board/kinds.ts';
 import type { BoardAction } from '../../lib/board/gestures.ts';
-import { cardsAt, cellKey, columnCount, type BoardState, type Id } from '../../lib/board/state.ts';
+import {
+	cardsAt,
+	cellKey,
+	cellOfCard,
+	columnCount,
+	splitCellKey,
+	type BoardState,
+	type CellKey,
+	type Id,
+} from '../../lib/board/state.ts';
+import { DIRECTIONS, neighbour } from '../../lib/board/navigate.ts';
 import { CardMenu, type CardMenuAction } from './CardMenu.tsx';
 import { newTag, Tags } from './Tags.tsx';
 import { EDGE, GAP, KindPalette } from './KindPalette.tsx';
@@ -101,7 +111,13 @@ export function BoardGrid({
 	onToggleDetail: (id: Id) => void;
 	/** The card whose text the source pane is emphasising, if any. */
 	selected: { kind: 'lane' | 'card'; id: Id } | null;
-	onSelect: (pick: { kind: 'lane' | 'card'; id: Id }) => void;
+	/**
+	 * Say what the source pane should emphasise, or `null` for nothing.
+	 *
+	 * The null is what the keyboard cursor needs: walking off a note has to be
+	 * able to *unsay* the selection, not merely decline to make a new one.
+	 */
+	onSelect: (pick: { kind: 'lane' | 'card'; id: Id } | null) => void;
 	/**
 	 * The notes the tag filter is pointing at, or `null` when it is off.
 	 *
@@ -131,6 +147,158 @@ export function BoardGrid({
 	useLayoutEffect(() => {
 		scroller.current?.scrollTo({ left: 0, top: 0 });
 	}, [documentKey]);
+
+	/**
+	 * Where the keyboard cursor should land once the text has been re-read.
+	 *
+	 * **Ids are positional**, minted by `toBoard` as it walks the document — so
+	 * deleting a note renames every note written after it. Holding the id of the
+	 * one the cursor should land on would mean landing on whatever note has since
+	 * inherited that name.
+	 *
+	 * A square and a depth survive the round trip where an id does not. So the
+	 * deletion records the depth the cursor should end up at and the effect below
+	 * picks it up again from there, once the text has been read back.
+	 *
+	 * A ref rather than state, because nothing renders differently for holding
+	 * one, and because it must be readable and clearable inside the effect
+	 * without scheduling another pass.
+	 */
+	const pending = useRef<{ cell: CellKey; index: number } | null>(null);
+
+	const focusCard = useCallback((id: Id) => {
+		scroller.current?.querySelector<HTMLElement>(`[data-card="${id}"]`)?.focus();
+	}, []);
+
+	/*
+	 * Guarded on `pending`, which only a key press sets, so this never steals
+	 * focus. The board re-parses on every keystroke in the source pane and after
+	 * every drag; an effect that focused something on each of those would fight
+	 * the person typing.
+	 */
+	useEffect(() => {
+		const want = pending.current;
+		if (want === null) return;
+		pending.current = null;
+
+		const { laneId, column } = splitCellKey(want.cell);
+		const stack = cardsAt(board, laneId, column);
+		// Clamped, because deletion is one of the callers: the depth it recorded
+		// may be past the end of a square that has just lost a note.
+		const id = stack[Math.min(want.index, stack.length - 1)];
+		if (id === undefined) return;
+
+		// The same rule as an arrow: the cursor has moved to another note, so
+		// whatever was selected is no longer what is being worked on. Doubly so
+		// here — ids are positional, and the id the selection is holding may now
+		// name a different note entirely.
+		onSelect(null);
+		focusCard(id);
+	}, [board, onSelect, focusCard]);
+
+	/**
+	 * Every key the wall answers when a note has focus.
+	 *
+	 * It lives here rather than on the note because it is a question about the
+	 * *board* — where is the note to the left, which square does this one move
+	 * into — and because the answer to two of the four needs the ref above, which
+	 * only this component holds. The note keeps `Enter`, which is the one key
+	 * whose whole effect is local to it.
+	 *
+	 * Returns whether it took the key, so the caller knows whether to pass it on
+	 * to dnd-kit.
+	 */
+	const cardKey = useCallback(
+		(event: KeyboardEvent<HTMLElement>, id: Id): boolean => {
+			const direction = DIRECTIONS[event.key];
+			if (direction !== undefined) {
+				// Taken whether or not there is anywhere to go: an arrow that fell
+				// through to the browser would scroll the wall out from under a
+				// cursor that had simply reached the edge of it.
+				event.preventDefault();
+
+				const next = neighbour(board, id, direction);
+				if (next === null) return true;
+
+				/*
+				 * Leaving a note clears the selection, and arriving does not make a
+				 * new one.
+				 *
+				 * Selecting is a statement — this is the note I am working on — and
+				 * the source pane answers it by scrolling to the declaration and
+				 * lighting it up. Walking the cursor across the wall to find
+				 * something is not that statement, and making it one would drag the
+				 * pane through forty scroll positions on the way past.
+				 *
+				 * But declining to *set* the selection is not enough, and that was
+				 * the bug: a click anywhere on a note selects it — including a click
+				 * on its notes caret, which bubbles — and nothing ever took that
+				 * back. So the ring sat on a note the cursor had long since left,
+				 * claiming to be the thing being worked on while the work happened
+				 * three squares away. Two marks on a wall that mean different things
+				 * are only readable while both are true.
+				 *
+				 * So the cursor unsays it on the way out, and where the cursor *is*
+				 * shows as focus — drawn by the note itself, see the
+				 * `has-[:focus-visible]` ring on the sticky.
+				 */
+				onSelect(null);
+				focusCard(next);
+				return true;
+			}
+
+			if (event.key === 'Backspace' || event.key === 'Delete') {
+				// Backspace on a focused button is "go back" in some browsers, which
+				// would take the whole storm off screen. It is not a key to let past.
+				event.preventDefault();
+
+				/*
+				 * Where the cursor goes once the note is gone.
+				 *
+				 * Recorded as a square and a depth, like a move, and for a sharper
+				 * reason: a deletion renames *every* note written after it, so the id
+				 * of the note the cursor should land on is not the id it has now. Its
+				 * square and its depth, on the other hand, do not move — taking a
+				 * note out of one square leaves every other square exactly as it was.
+				 *
+				 * Preferring the note that takes its place in the same square, and
+				 * falling out to the nearest neighbour when this was the last one in
+				 * it. Clearing a bad idea off the wall is several deletions in a row,
+				 * and a cursor that fell to the page after the first would make the
+				 * second a matter of tabbing back in.
+				 */
+				const cell = cellOfCard(board, id);
+				if (cell !== undefined) {
+					const { laneId, column } = splitCellKey(cell);
+					const stack = cardsAt(board, laneId, column);
+
+					if (stack.length > 1) pending.current = { cell, index: stack.indexOf(id) };
+					else {
+						const away =
+							neighbour(board, id, 'left') ??
+							neighbour(board, id, 'right') ??
+							neighbour(board, id, 'up') ??
+							neighbour(board, id, 'down');
+						const at = away === null ? undefined : cellOfCard(board, away);
+						if (away !== null && at !== undefined) {
+							const there = splitCellKey(at);
+							pending.current = { cell: at, index: cardsAt(board, there.laneId, there.column).indexOf(away) };
+						}
+					}
+				}
+
+				// No confirmation. Every gesture on this board is a splice into text
+				// that undo takes back, and the note's words are still in the source
+				// pane a moment later — a dialogue here would be protecting somebody
+				// from something that has not happened yet.
+				dispatch({ type: 'removeCard', id });
+				return true;
+			}
+
+			return false;
+		},
+		[board, dispatch, onSelect, focusCard],
+	);
 
 	const columns = columnCount(board);
 
@@ -234,6 +402,7 @@ export function BoardGrid({
 								onSelect={onSelect}
 								matching={matching}
 								level={level}
+								onCardKey={cardKey}
 							/>
 						)),
 					)}
@@ -406,6 +575,7 @@ function Square({
 	onSelect,
 	matching,
 	level,
+	onCardKey,
 }: {
 	board: BoardState;
 	dispatch: (action: BoardAction) => void;
@@ -418,9 +588,11 @@ function Square({
 	matching: ReadonlySet<Id> | null;
 	/** Passed through to the notes: a square is not itself selectable. */
 	selected: { kind: 'lane' | 'card'; id: Id } | null;
-	onSelect: (pick: { kind: 'lane' | 'card'; id: Id }) => void;
+	onSelect: (pick: { kind: 'lane' | 'card'; id: Id } | null) => void;
 	/** The notation on offer here: the `+` strip, and each note's menu. */
 	level: Level;
+	/** Passed through to the notes: a square takes no keys of its own. */
+	onCardKey: (event: KeyboardEvent<HTMLElement>, id: Id) => boolean;
 }) {
 	const key = cellKey(laneId, column);
 	const { setNodeRef, isOver } = useDroppable({ id: `square:${key}`, data: { accepts: 'card', cell: key } });
@@ -506,6 +678,7 @@ function Square({
 									onSelect={() => onSelect({ kind: 'card', id })}
 									matching={matching}
 									level={level}
+									onCardKey={onCardKey}
 								/>
 							</li>
 						);
@@ -670,6 +843,7 @@ function StickyNote({
 	onSelect,
 	matching,
 	level,
+	onCardKey,
 }: {
 	id: Id;
 	board: BoardState;
@@ -685,6 +859,8 @@ function StickyNote({
 	matching: ReadonlySet<Id> | null;
 	/** The lens: what the menu may re-colour to, and why this note may be dim. */
 	level: Level;
+	/** The wall's answer to arrows and deletion. See `cardKey` in `BoardGrid`. */
+	onCardKey: (event: KeyboardEvent<HTMLElement>, id: Id) => boolean;
 }) {
 	const card = board.cards[id];
 	const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
@@ -693,14 +869,42 @@ function StickyNote({
 	});
 	const [editing, setEditing] = useState(false);
 	const input = useRef<HTMLTextAreaElement>(null);
+	const button = useRef<HTMLButtonElement>(null);
 	/** Where the taxonomy caption is anchored, or null when it is not shown. */
 	const [tip, setTip] = useState<Anchor | null>(null);
+	/**
+	 * Set when the editor is being closed *by a key*, so focus can come home.
+	 *
+	 * A flag rather than "always refocus on close", because the editor also
+	 * closes on blur — and blur is what happens when somebody clicks another
+	 * note. Refocusing unconditionally would snatch the click back to the note
+	 * they had just left, every time. Enter and Escape are the two closes that
+	 * were a decision to stop editing *this* note, and they are the two that
+	 * should hand the cursor back to it.
+	 */
+	const returning = useRef(false);
+	/**
+	 * Whether Shift has been held on its own since it went down.
+	 *
+	 * Shift toggles this note's notes, and Shift is a modifier — so the press has
+	 * to be read as a *tap*: down, up, nothing in between. Firing on the way down
+	 * would mean Shift-Tab opened the notes on the note it was leaving, and
+	 * Shift-anything-else would do the same on the way past.
+	 *
+	 * So the flag goes up on the Shift key alone, comes down the moment any other
+	 * key joins it, and only a keyup that still finds it up counts as a tap.
+	 */
+	const shiftAlone = useRef(false);
 
 	useEffect(() => {
 		if (editing) {
 			input.current?.focus();
 			input.current?.select();
+			return;
 		}
+		if (!returning.current) return;
+		returning.current = false;
+		button.current?.focus();
 	}, [editing]);
 
 	if (!card) return null;
@@ -774,8 +978,21 @@ function StickyNote({
 			 * immediate is the right feel for a control you toggle to look at
 			 * something.
 			 */
-			className={`relative rounded-[0.2em] border px-[0.55em] py-[0.4em] text-[0.6em] leading-tight shadow-sm ${
-				selected ? 'ring-2 ring-brand ring-inset dark:ring-sky-400' : ''
+			/*
+			 * One ring, two reasons to draw it: the source pane is emphasising this
+			 * note, or the keyboard cursor is standing on it. They are the same
+			 * claim — *this* note — so they are the same mark, and a wall that drew
+			 * them differently would be asking the reader to tell two kinds of
+			 * attention apart for no gain.
+			 *
+			 * `has-[:focus-visible]` rather than a piece of React state: focus is a
+			 * fact the browser already knows, and asking CSS is both shorter and
+			 * right about the case a `focused` boolean would get wrong — the caret
+			 * and the menu are inside this note too, and focus on either of them is
+			 * still focus on this note.
+			 */
+			className={`relative rounded-[0.2em] border px-[0.55em] py-[0.4em] text-[0.6em] leading-tight shadow-sm ring-brand has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-inset dark:ring-sky-400 ${
+				selected ? 'ring-2 ring-inset' : ''
 			} ${dimmed ? 'opacity-25' : ''} ${cardClass[card.kind]}`}
 		>
 			{editing ? (
@@ -792,10 +1009,12 @@ function StickyNote({
 						// One note, one line of words: Enter is a verdict, not a break.
 						if (event.key === 'Enter') {
 							event.preventDefault();
+							returning.current = true;
 							event.currentTarget.blur();
 						}
 						if (event.key === 'Escape') {
 							event.preventDefault();
+							returning.current = true;
 							setEditing(false);
 						}
 					}}
@@ -804,10 +1023,64 @@ function StickyNote({
 			) : (
 				<div className="flex items-start gap-[0.1em]">
 					<button
+						ref={button}
 						type="button"
+						/* How `focusCard` finds a note it has never rendered a ref for. */
+						data-card={id}
 						{...attributes}
 						{...listeners}
 						onClick={() => setEditing(true)}
+						/*
+						 * The wall's keys, and dnd-kit's, on one control.
+						 *
+						 * Order matters, and so does the composition: `{...listeners}`
+						 * above puts dnd-kit's `onKeyDown` here — the sensor's activator
+						 * — and a handler written after a spread *replaces* what the
+						 * spread put there. That is exactly the trap `onPointerDown`
+						 * below fell into, and it is worth stating twice: the sensor goes
+						 * quiet, nothing errors, and the loss shows up much later as a
+						 * control that simply stopped answering.
+						 *
+						 * So the wall answers first and hands on anything it did not
+						 * take. `Enter` is the note's own — the only key here whose whole
+						 * effect is local to it — and `Space` falls through to dnd-kit,
+						 * which is now the only key that lifts a note for a keyboard
+						 * drag. See the sensor in `EventStormBoard`.
+						 */
+						onKeyDown={(event) => {
+							if (event.key === 'Shift') {
+								// `repeat` because a held modifier re-fires: the tap is the
+								// first press, and the rest are the same press still going.
+								if (!event.repeat) shiftAlone.current = true;
+								return;
+							}
+							shiftAlone.current = false;
+
+							if (event.key === 'Enter') {
+								event.preventDefault();
+								setEditing(true);
+								return;
+							}
+							if (onCardKey(event, id)) return;
+							listeners?.onKeyDown?.(event);
+						}}
+						/*
+						 * The other half of the Shift tap. Nothing to forward here —
+						 * `useSortable` hands back `onPointerDown` and `onKeyDown`, and no
+						 * keyup — so unlike the two above, this one is ours alone.
+						 *
+						 * A note with nothing written on it has nothing to show, and the
+						 * caret that would reveal it is not drawn either. Silence is the
+						 * honest answer: a toggle that flickered an empty panel would be
+						 * worse than a key that does nothing on a note it cannot help.
+						 */
+						onKeyUp={(event) => {
+							if (event.key !== 'Shift' || !shiftAlone.current) return;
+							shiftAlone.current = false;
+							if (card.notes.length === 0) return;
+							event.preventDefault();
+							onToggleDetail(id);
+						}}
 						/*
 						 * No caption on a note the filter has turned down.
 						 *
@@ -854,7 +1127,16 @@ function StickyNote({
 							listeners?.onPointerDown?.(event);
 						}}
 						aria-label={label}
-						className="line-clamp-4 min-w-0 flex-1 cursor-grab text-left break-words hyphens-auto focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand active:cursor-grabbing"
+						/*
+						 * No outline of its own. The sticky draws the focus ring for it —
+						 * see `has-[:focus-visible]` on the note — because a box drawn
+						 * tight around the words *inside* a note that is itself a box
+						 * reads as a second border rather than as a cursor, and the wall
+						 * is already made of borders. Focus is not lost by this: it is
+						 * marked one element out, at the size of the thing that actually
+						 * has it.
+						 */
+						className="line-clamp-4 min-w-0 flex-1 cursor-grab text-left break-words hyphens-auto focus-visible:outline-none active:cursor-grabbing"
 					>
 						{card.title}
 					</button>

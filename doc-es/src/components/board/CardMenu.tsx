@@ -32,9 +32,33 @@
  * The portal target is the fullscreen element when there is one, and the body
  * otherwise: content outside the fullscreen element is not painted at all, so a
  * menu portalled to the body would vanish the moment somebody went fullscreen.
+ *
+ * ## The portal is why the menu needs its own arrow keys
+ *
+ * Being rendered into the body puts the menu at the end of the document, and
+ * the tab sequence follows the document. So Tab from the button did not step
+ * into the menu it had just opened — it stepped to the next note on the wall,
+ * leaving an open menu behind that nothing could reach. A menu that exists so
+ * that every move works without a mouse was, once open, the one thing on the
+ * board a keyboard could not use.
+ *
+ * The fix is the pattern menus are supposed to use anyway, and the portal only
+ * makes it compulsory: focus moves *into* the menu when it opens from the
+ * keyboard, the arrows walk it, and Escape puts focus back on the button it
+ * came from. Tab closes rather than tabbing through the items, because a menu
+ * is one stop in the tab sequence and its contents are reached with the arrows.
+ *
+ * ## Disabled items stay focusable
+ *
+ * `aria-disabled`, not the `disabled` attribute. A disabled button cannot be
+ * focused, so the arrows would have to step over it — and then the reason it
+ * carries would be unreachable by exactly the person the note above says it is
+ * there for. The item is skipped as a *target* by nothing and refused as an
+ * *action* by the click handler, which is the arrangement that lets somebody
+ * arrow onto "Move up", hear that it is already first, and move on.
  */
 
-import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
 export interface CardMenuAction {
@@ -81,6 +105,30 @@ export function CardMenu({ label, actions }: { label: string; actions: readonly 
 	const button = useRef<HTMLButtonElement>(null);
 	const menu = useRef<HTMLUListElement>(null);
 	const menuId = useId();
+	/**
+	 * Which end to enter from, or `null` when a pointer opened the menu.
+	 *
+	 * A mouse leaves focus where it was — the pointer is the thing doing the
+	 * pointing, and dragging focus about behind it helps nobody. A key press has
+	 * nowhere else to be, so it goes in at the top, or at the bottom for the
+	 * up-arrow, which is what makes "open it and press up" reach the last item in
+	 * two keys rather than nine.
+	 */
+	const entering = useRef<'first' | 'last' | null>(null);
+
+	/** The items, in order. All of them: a disabled one is still a stop. */
+	const items = useCallback(
+		() => [...(menu.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]') ?? [])],
+		[],
+	);
+
+	/** Close, and put focus back where the menu was opened from. */
+	const close = useCallback(() => {
+		setOpen(false);
+		// Optional, and not always there: an action may have just removed the very
+		// card this button belongs to.
+		button.current?.focus();
+	}, []);
 
 	/*
 	 * Place the whole menu on the screen.
@@ -149,6 +197,20 @@ export function CardMenu({ label, actions }: { label: string; actions: readonly 
 		place(measured);
 	}, [open, at, height]);
 
+	/*
+	 * Step into the menu, once it exists and has been put somewhere.
+	 *
+	 * After `at` rather than after `open`, because the menu is not rendered until
+	 * it has a position — focusing an item before that would be focusing nothing.
+	 */
+	useLayoutEffect(() => {
+		if (!open || at === null || entering.current === null) return;
+		const list = items();
+		const target = entering.current === 'first' ? list[0] : list[list.length - 1];
+		entering.current = null;
+		target?.focus();
+	}, [open, at, items]);
+
 	useEffect(() => {
 		if (!open) return;
 
@@ -159,8 +221,10 @@ export function CardMenu({ label, actions }: { label: string; actions: readonly 
 			if (button.current?.contains(target) || menu.current?.contains(target)) return;
 			setOpen(false);
 		};
+		// On the document, so it answers wherever focus happens to be — on an item,
+		// on the button, or nowhere in particular after a pointer opened it.
 		const onKey = (event: globalThis.KeyboardEvent) => {
-			if (event.key === 'Escape') setOpen(false);
+			if (event.key === 'Escape') close();
 		};
 		// A fixed menu does not travel with the card, so it is dismissed rather
 		// than left hanging beside whatever scrolled into its place — but never
@@ -180,7 +244,7 @@ export function CardMenu({ label, actions }: { label: string; actions: readonly 
 			window.removeEventListener('resize', onMove);
 			window.removeEventListener('scroll', onMove, true);
 		};
-	}, [open]);
+	}, [open, close]);
 
 	return (
 		<>
@@ -192,6 +256,29 @@ export function CardMenu({ label, actions }: { label: string; actions: readonly 
 				aria-controls={open ? menuId : undefined}
 				aria-label={`Actions for ${label}`}
 				onClick={() => setOpen((was) => !was)}
+				/*
+				 * Enter, Space and the arrows open it *and* step inside.
+				 *
+				 * `preventDefault` on Enter and Space matters for more than scrolling:
+				 * both synthesise a click on a button, so without it this would open
+				 * the menu and the click would immediately toggle it shut again.
+				 *
+				 * Down enters at the top and Up at the bottom, which is the ordinary
+				 * menu-button bargain and is worth keeping for the last item — "Remove
+				 * this note" sits at the end of every one of these menus.
+				 */
+				onKeyDown={(event) => {
+					const opening =
+						event.key === 'Enter' || event.key === ' ' || event.key === 'ArrowDown' || event.key === 'ArrowUp';
+					if (!opening) return;
+					event.preventDefault();
+					if (open) {
+						close();
+						return;
+					}
+					entering.current = event.key === 'ArrowUp' ? 'last' : 'first';
+					setOpen(true);
+				}}
 				// Always reachable by keyboard; only revealed on hover for pointers,
 				// so a dense board is not a field of dots.
 				className="shrink-0 rounded-sm px-[0.15em] leading-none opacity-0 transition group-hover:opacity-70 hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand motion-reduce:transition-none"
@@ -231,6 +318,52 @@ export function CardMenu({ label, actions }: { label: string; actions: readonly 
 					// rather than the board. A menu opened from a board pinned to
 					// daylight on a dark machine would otherwise be near-white on white.
 					className="z-[1000] rounded-lg border border-slate-200 bg-white py-1 text-left text-sm text-ink shadow-lg dark:border-slate-700 dark:bg-night-raised dark:text-slate-100"
+					/*
+					 * On the list, not on each item: the keys mean the same thing
+					 * wherever in the menu they are pressed, and one handler that reads
+					 * the current item off `document.activeElement` cannot fall out of
+					 * step with a list that has just been rebuilt.
+					 *
+					 * The walk wraps. A menu is a ring of a handful of items with both
+					 * ends in view, so there is no "off the end" to be lost at — and
+					 * wrapping is what makes Up the shortest way to the last item.
+					 *
+					 * Escape is not here. It is on the document, because it has to work
+					 * when a pointer opened the menu and focus never came inside.
+					 */
+					onKeyDown={(event) => {
+						const list = items();
+						if (list.length === 0) return;
+						const here = list.indexOf(document.activeElement as HTMLButtonElement);
+
+						if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+							event.preventDefault();
+							const by = event.key === 'ArrowDown' ? 1 : -1;
+							// From nowhere, the two arrows mean the two ends.
+							const next = here < 0 ? (by === 1 ? 0 : list.length - 1) : (here + by + list.length) % list.length;
+							list[next]?.focus();
+							return;
+						}
+						if (event.key === 'Home' || event.key === 'End') {
+							event.preventDefault();
+							(event.key === 'Home' ? list[0] : list[list.length - 1])?.focus();
+							return;
+						}
+						/*
+						 * Tab closes and comes back to the button rather than walking the
+						 * items, because a menu is one stop in the tab sequence.
+						 *
+						 * The strictly correct thing is to move on to whatever follows the
+						 * button, and it is not worth what it costs here: the menu lives in
+						 * a portal at the end of the document, so "whatever follows" would
+						 * have to be worked out by hand across two trees. Landing on the
+						 * button costs one more Tab and cannot land nowhere.
+						 */
+						if (event.key === 'Tab') {
+							event.preventDefault();
+							close();
+						}
+					}}
 				>
 					{actions.map((action, index) => {
 						const reasonId = `${menuId}-r${index}`;
@@ -244,13 +377,16 @@ export function CardMenu({ label, actions }: { label: string; actions: readonly 
 								<button
 									type="button"
 									role="menuitem"
-									disabled={disabled}
+									// `aria-disabled`, so the arrows can still land here and the
+									// reason below can still be read out. See the note at the top.
+									aria-disabled={disabled || undefined}
 									aria-describedby={disabled ? reasonId : undefined}
 									onClick={() => {
-										setOpen(false);
+										if (disabled) return;
+										close();
 										action.run?.();
 									}}
-									className="block w-full px-3 py-1.5 text-left hover:bg-slate-100 focus-visible:bg-slate-100 focus-visible:outline-none disabled:cursor-not-allowed disabled:text-ink-muted disabled:hover:bg-transparent dark:hover:bg-white/10 dark:focus-visible:bg-white/10 dark:disabled:text-slate-500"
+									className="block w-full px-3 py-1.5 text-left hover:bg-slate-100 focus-visible:bg-slate-100 focus-visible:outline-none aria-disabled:cursor-not-allowed aria-disabled:text-ink-muted aria-disabled:hover:bg-transparent dark:hover:bg-white/10 dark:focus-visible:bg-white/10 dark:aria-disabled:text-slate-500"
 								>
 									{action.label}
 								</button>

@@ -19,6 +19,54 @@ function fromEnv(name: string, fallback: string): string {
   return process.env[name] ?? import.meta.env[name] ?? fallback;
 }
 
+/**
+ * This portal's own public address.
+ *
+ * A portal that never needed to know where it was until /hub, which is the
+ * estate's front door and is served under a second host name — so `/` there is
+ * the estate page, and doc-hub's own card has to name the portal absolutely or
+ * it would link the front door back to itself.
+ */
+export function docPortalUrl(): string {
+  return fromEnv('DOC_PORTAL_URL', 'http://doc-portal.localhost');
+}
+
+/**
+ * doc-hub's three boards.
+ *
+ * `STORY_MAPPER_URL` is the name doc-em and doc-es already use for the same
+ * address, and the other two follow it rather than inventing a second
+ * convention for the same kind of thing.
+ */
+export function storyMapperUrl(): string {
+  return fromEnv('STORY_MAPPER_URL', 'http://doc-sm.localhost');
+}
+
+export function exampleMapperUrl(): string {
+  return fromEnv('EXAMPLE_MAPPER_URL', 'http://doc-em.localhost');
+}
+
+export function eventStormerUrl(): string {
+  return fromEnv('EVENT_STORMER_URL', 'http://doc-es.localhost');
+}
+
+/**
+ * ba-hub's context mapper: bounded contexts, and the relationships between them.
+ *
+ * It **replaces ba-ddd-mapper**, which is the name the three boards in this
+ * repository still cite throughout their own comments — they were ported from
+ * it, and those references are to the predecessor rather than to a second tool
+ * that also exists.
+ *
+ * `BA_CM_URL` rather than `CONTEXT_MAPPER_URL`, which is the convention the
+ * three functions above follow. They are *this* hub's tools; a tool belonging
+ * to another hub is named for the hub that owns it, as `MODEL_C4_URL` and
+ * `BA_PORTAL_URL` already are.
+ */
+export function contextMapperUrl(): string {
+  return fromEnv('BA_CM_URL', 'http://ba-cm.localhost');
+}
+
 /** api-hub's portal: the API catalogue, its scorecards and its registry. */
 export function apiPortalUrl(): string {
   return fromEnv('API_PORTAL_URL', 'http://api-portal.localhost');

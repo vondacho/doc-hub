@@ -113,6 +113,22 @@ probes:
 # ever need to prove the wiring works.
 # ---------------------------------------------------------------------------
 app:
+  # This portal's own public address. Used by /hub, the estate's front door,
+  # which is served under a second host name — so doc-hub's own card there has
+  # to name the portal absolutely rather than linking to `/`, which on that host
+  # is /hub itself.
+  docPortalUrl: http://doc-portal.localhost
+
+  # doc-hub's three boards, listed on /hub. `storyMapperUrl` is the name doc-em
+  # and doc-es already give the same address in their own charts.
+  storyMapperUrl: http://doc-sm.localhost
+  exampleMapperUrl: http://doc-em.localhost
+  eventStormerUrl: http://doc-es.localhost
+
+  # ba-hub's context mapper, listed on /hub. The tool that replaced
+  # ba-ddd-mapper, and the one thing ba-hub publishes — it has no portal.
+  baCmUrl: http://ba-cm.localhost
+
   # api-hub's portal — the API perspective, linked from the footer. api-hub owns
   # the contracts, their scorecards and the registry end to end.
   apiPortalUrl: http://api-portal.localhost

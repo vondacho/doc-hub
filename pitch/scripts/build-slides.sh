@@ -15,7 +15,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-DECK="${DECK:-doc/slides/pitch.md}"
+DECK="${DECK:-doc/slides/pitch_unified_doc_20260904_v3.md}"
 MODE="${1:-html}"
 
 cd "$ROOT"

@@ -741,7 +741,28 @@ export default function EventStormBoard({
 		// 6px before a drag begins: a card is also the click target that opens its
 		// editor, and without a threshold every click starts a drag.
 		useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
-		useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+		/*
+		 * Space lifts a note; Enter no longer does.
+		 *
+		 * The sensor's own default is `['Space', 'Enter']` for both the lift and
+		 * the drop, and Enter had to be given up: on this board it opens the note
+		 * for editing, which is the more ordinary thing to want from a note the
+		 * cursor has just walked onto. Two keys for the rarer gesture and none for
+		 * the commoner one was the wrong way round.
+		 *
+		 * Space keeps the other half, and it is the *only* way a note moves by
+		 * keyboard. That is deliberate: a shift-arrow that nudged a note one
+		 * square was written and then taken out again, because this already
+		 * existed and did the same job better — a lift announces itself, can be
+		 * aimed anywhere on the wall rather than one square at a time, and can be
+		 * called off with Escape. The board's other keys are careful to leave this
+		 * one alone; see `BoardGrid`, where the arrows move a cursor and never a
+		 * note.
+		 */
+		useSensor(KeyboardSensor, {
+			coordinateGetter: sortableKeyboardCoordinates,
+			keyboardCodes: { start: ['Space'], cancel: ['Escape'], end: ['Space'] },
+		}),
 	);
 
 	const collisionDetection: CollisionDetection = useCallback((args) => {

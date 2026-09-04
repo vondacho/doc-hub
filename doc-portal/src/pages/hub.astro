@@ -1,0 +1,259 @@
+---
+import Layout from '../layouts/Layout.astro';
+import Hero from '../components/home/Hero.astro';
+import SectionPanels, { type Panel } from '../components/home/SectionPanels.astro';
+import SiteFooter from '../components/home/SiteFooter.astro';
+import {
+	apiPortalUrl,
+	contextMapperUrl,
+	devPortalUrl,
+	docPortalUrl,
+	eventStormerUrl,
+	exampleMapperUrl,
+	modelC4Url,
+	modelEventcatalogUrl,
+	modelPortalUrl,
+	qaPortalUrl,
+	storyMapperUrl,
+} from '../lib/links';
+
+/*
+ * The front door to the whole estate: every hub, its portal, and its tools.
+ *
+ * ## Why it lives in doc-portal
+ *
+ * Because a seventh deployment to introduce six others would be its own joke,
+ * and because this page is a handful of links whose addresses this portal
+ * already holds — `src/lib/links.ts` exists to answer exactly this question and
+ * was five entries short of answering all of it. Served under its own host name
+ * by Caddy, which rewrites `/` there to this route; see iac/host/Caddyfile.
+ *
+ * It is deliberately *not* doc-portal's own home page. `/` on
+ * doc-portal.obya.ch is the product catalogue and should stay that way: a
+ * visitor who came for a product should not have to pass through a directory of
+ * hubs to reach it.
+ *
+ * ## Every address is configuration, and is resolved per request
+ *
+ * Not one of these hostnames is written down on this page. They are read from
+ * the environment when the page is served, which is the rule the whole of
+ * `links.ts` keeps and the reason this portal is server-rendered — a build that
+ * baked `obya.ch` into the image would make the chart's values silently
+ * decorative.
+ *
+ * ## Status is what is deployed, not what is intended
+ *
+ * `soon` on a hub means its host name does not resolve yet. Every other panel
+ * on this page goes somewhere real. That distinction is the only thing keeping
+ * a directory honest: a front door that lists one door which is not there
+ * teaches people to distrust every other door on it, and this page has no
+ * second signal — no search, no catalogue — to earn that trust back with.
+ */
+
+const docHub: readonly Panel[] = [
+	{
+		title: 'Doc portal',
+		description:
+			'The product catalogue, the two landscapes that cross products, and the form that puts a new product in the registry.',
+		href: docPortalUrl(),
+		cta: 'Open doc-portal',
+		status: 'live',
+		external: true,
+		icon: 'M4 5.5A1.5 1.5 0 0 1 5.5 4H10v16H5.5A1.5 1.5 0 0 1 4 18.5v-13ZM10 4h8.5A1.5 1.5 0 0 1 20 5.5v13a1.5 1.5 0 0 1-1.5 1.5H10M13 8.5h4M13 12h4',
+	},
+	{
+		title: 'Story mapping',
+		description:
+			'A user’s journey across the top, the work that serves it underneath, and a release cut as a line through the middle rather than a list of tickets.',
+		href: storyMapperUrl(),
+		cta: 'Open doc-sm',
+		status: 'live',
+		external: true,
+		icon: 'M4 5h4v14H4V5Zm6 0h4v9h-4V5Zm6 0h4v6h-4V5Z',
+	},
+	{
+		title: 'Example mapping',
+		description:
+			'One story, its rules, an example for each rule, and the questions nobody in the room could answer — the half-hour that decides whether a story is ready.',
+		href: exampleMapperUrl(),
+		cta: 'Open doc-em',
+		status: 'live',
+		external: true,
+		icon: 'M5 4h14v16H5V4Zm3 4h8M8 12h8M8 16h4',
+	},
+	{
+		title: 'Event storming',
+		description:
+			'A domain on a wall in orange, at any of the three levels the practice is run at: the events, then the commands and policies that cause them, then the components inside one boundary.',
+		href: eventStormerUrl(),
+		cta: 'Open doc-es',
+		status: 'live',
+		external: true,
+		icon: 'M3 6h6v6H3V6Zm12 6h6v6h-6v-6ZM9 9h6M12 9v6',
+	},
+] as const;
+
+const baHub: readonly Panel[] = [
+	{
+		title: 'Context mapper',
+		description:
+			'Bounded contexts and what passes between them: which model each one speaks, and which of the DDD relationship patterns holds at every boundary.',
+		href: contextMapperUrl(),
+		cta: 'Open ba-cm',
+		status: 'live',
+		external: true,
+		icon: 'M4 5h6v6H4V5Zm10 8h6v6h-6v-6ZM10 8h3a1 1 0 0 1 1 1v4',
+	},
+] as const;
+
+const archHub: readonly Panel[] = [
+	{
+		title: 'Architecture portal',
+		description:
+			'The architecture perspective on a product: the decisions taken, what they cost, and which of them are still true.',
+		href: modelPortalUrl(),
+		cta: 'Open arch-portal',
+		status: 'live',
+		external: true,
+		icon: 'M4 20V9l8-5 8 5v11M9 20v-6h6v6',
+	},
+	{
+		title: 'C4 model',
+		description:
+			'Context, container, component and deployment views of the whole system, generated from one LikeC4 model — so the four zoom levels cannot contradict each other.',
+		href: modelC4Url(),
+		cta: 'Open arch-c4',
+		status: 'live',
+		external: true,
+		icon: 'M4 4h7v7H4V4Zm9 0h7v7h-7V4ZM4 13h7v7H4v-7Zm9 0h7v7h-7v-7Z',
+	},
+	{
+		title: 'Event catalogue',
+		description:
+			'Every message that crosses a product boundary: who publishes it, who consumes it, which schema version is in flight, and what breaks if it changes.',
+		href: modelEventcatalogUrl(),
+		cta: 'Open arch-eventcatalog',
+		status: 'live',
+		external: true,
+		icon: 'M13 3 4.5 13.5H11L10 21l8.5-10.5H12L13 3Z',
+	},
+] as const;
+
+const apiHub: readonly Panel[] = [
+	{
+		title: 'API portal',
+		description:
+			'The contracts themselves, their scorecards, and the registry that says which version is published and who is calling it.',
+		href: apiPortalUrl(),
+		cta: 'Open api-portal',
+		status: 'live',
+		external: true,
+		icon: 'M8 7 4 12l4 5M16 7l4 5-4 5M13.5 5l-3 14',
+	},
+] as const;
+
+const devHub: readonly Panel[] = [
+	{
+		title: 'Dev portal',
+		description:
+			'The practices this estate is built on — event storming and example mapping among them — with the code design, the stacks and the MCP servers that carry them into an editor.',
+		href: devPortalUrl(),
+		cta: 'Open dev-portal',
+		status: 'live',
+		external: true,
+		icon: 'M14.7 6.3a4 4 0 0 1-5.4 5.4L4 17v3h3l5.3-5.3a4 4 0 0 0 5.4-5.4l-2.3 2.3-2-2 2.3-2.3Z',
+	},
+] as const;
+
+const qaHub: readonly Panel[] = [
+	{
+		title: 'QA portal',
+		description:
+			'Campaigns and their results, the requirements they trace back to, and the non-functional ones that are usually discovered rather than agreed.',
+		href: qaPortalUrl(),
+		cta: 'Open qa-portal',
+		// The one address on this page that does not resolve yet.
+		status: 'soon',
+		external: true,
+		icon: 'M12 3 5 6v5c0 4.4 3 8.3 7 9.5 4-1.2 7-5.1 7-9.5V6l-7-3Zm-2.5 8.5 2 2 4-4',
+	},
+] as const;
+---
+
+<Layout
+	title="The hub — every portal and tool, in one place"
+	description="The way in to all six hubs: the product, business-analysis, architecture, contract, practice and quality perspectives, with the portal and the digital tools behind each one."
+>
+	<main id="main">
+		<Hero
+			kicker="The estate"
+			title="Six hubs, one system to describe."
+			lead="Each hub owns one perspective and publishes it as a portal, and some of them carry
+				tools you work in rather than pages you read. Nothing here is a copy of anything
+				else: a hub is the single place its own subject is written down, which is what
+				makes it safe for the others to link to it instead of restating it. This page
+				is only the way in."
+		/>
+
+		<SectionPanels
+			panels={docHub}
+			label="doc-hub"
+			heading
+			lead="The product perspective. What each product does, for whom, where it is going — and three
+				boards for the conversations that produce that answer in the first place."
+			columns={2}
+		/>
+
+		{/*
+			Second, and next to doc-hub rather than further down: doc-es ends a big
+			picture by finding the seams, and this is the board those seams are drawn
+			on. The order of the sections is the order the work actually travels in.
+		*/}
+		<SectionPanels
+			panels={baHub}
+			label="ba-hub"
+			heading
+			lead="The business-analysis perspective. Where a domain is cut into bounded contexts and the
+				relationships between them are made explicit — the seams an event storm finds, drawn as a
+				map instead of left in the room."
+			columns={2}
+		/>
+
+		<SectionPanels
+			panels={archHub}
+			label="arch-hub"
+			heading
+			lead="The architecture perspective. How the system is put together and what travels between its
+				parts, both generated from a model rather than drawn — which is why they are still true a
+				quarter after a diagram would have stopped being."
+			columns={2}
+		/>
+
+		<SectionPanels
+			panels={apiHub}
+			label="api-hub"
+			heading
+			lead="The contract perspective. What one product promises another, versioned and scored."
+			columns={2}
+		/>
+
+		<SectionPanels
+			panels={devHub}
+			label="dev-hub"
+			heading
+			lead="The practice perspective. How the work is done here, written down once so that the tools in
+				the other hubs can point at it rather than explain themselves."
+			columns={2}
+		/>
+
+		<SectionPanels
+			panels={qaHub}
+			label="qa-hub"
+			heading
+			lead="The quality perspective. What was tested, what it found, and which requirement each answer
+				belongs to."
+			columns={2}
+		/>
+	</main>
+	<SiteFooter />
+</Layout>
