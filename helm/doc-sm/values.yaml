@@ -122,6 +122,12 @@ app:
   # Linked from the board's footer.
   docPortalUrl: http://doc-portal.localhost
 
+  # The practice this board implements, written up in dev-hub.
+  practiceUrl: http://dev-portal.localhost/doc/practices/story-mapping/
+
+  # ba-portal's prompt page, linked from the assistant panel.
+  baPortalUrl: http://ba-portal.localhost
+
   # The registry's admin UI, as the browser sees it — where somebody goes to
   # register a product that is missing from the picker.
   registryUrl: http://doc-registry.localhost

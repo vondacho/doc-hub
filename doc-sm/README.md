@@ -574,7 +574,7 @@ untouched.
 
 ## Configuration
 
-Two browser-facing links and one in-cluster call. The split is the one
+Four browser-facing links and two in-cluster calls. The split is the one
 `doc-portal` already draws: a link is resolved by the visitor's browser and must
 be an address the browser can reach; a call is made by this server and must not
 be, or it leaves the cluster to come back in to a Service one DNS name away.
@@ -582,6 +582,7 @@ be, or it leaves the cluster to come back in to a Service one DNS name away.
 | Variable | Default | Used by |
 |---|---|---|
 | `DOC_PORTAL_URL` | `http://doc-portal.localhost` | the board's footer |
+| `PRACTICE_URL` | `http://dev-portal.localhost/doc/practices/story-mapping/` | the header and `/dsl` |
 | `REGISTRY_URL` | `http://doc-registry.localhost` | the footer, and the picker's "register one" link |
 | `REGISTRY_API_URL` | `http://localhost:1337` | **in-cluster**: the product picker's list |
 | `TICKETING_API_URL` | *(empty)* | **in-cluster**: raising tickets. Empty is a working state |

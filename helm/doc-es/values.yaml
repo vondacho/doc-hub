@@ -143,6 +143,9 @@ app:
   # which is why the link points that way and not the reverse.
   storyMapperUrl: http://doc-sm.localhost
 
+  # ba-portal's prompt page, linked from the assistant panel.
+  baPortalUrl: http://ba-portal.localhost
+
   # Arbitrary extra entries, merged verbatim into the same ConfigMap and so
   # injected as env vars too:
   #   extraConfig:

@@ -40,6 +40,8 @@ ingress:
 # picker falls back to a text box — the board does not wait for it.
 app:
   docPortalUrl: http://doc-portal.localhost
+  practiceUrl: http://dev-portal.localhost/doc/practices/story-mapping/
+  baPortalUrl: http://ba-portal.localhost
   registryUrl: http://doc-registry.localhost
   registryApiUrl: http://doc-registry:1337
   # No ticketing adapter runs on the local cluster, so stories stay unlinked and

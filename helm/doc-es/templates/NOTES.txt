@@ -7,6 +7,7 @@ configuration; its island runs in the browser.
 Outbound links (browser-facing, resolved per request):
   Documentation hub  -> {{ .Values.app.docPortalUrl }}
   The practice       -> {{ .Values.app.practiceUrl }}
+  The prompt set     -> {{ .Values.app.baPortalUrl }}/doc/tooling/prompts/
   Story mapper       -> {{ .Values.app.storyMapperUrl }}
 
 Read by this server (in-cluster), to fill the board's product picker:

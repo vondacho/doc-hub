@@ -5,10 +5,13 @@ metadata:
   labels:
     {{- include "doc-sm.labels" . | nindent 4 }}
 data:
-  # Read by src/lib/links.ts through process.env at call time. The first two are
+  # Read by src/lib/links.ts through process.env at call time. These four are
   # **browser-facing links** — the visitor's browser resolves them, so an
-  # in-cluster address would be wrong.
+  # in-cluster address would be wrong. BA_PORTAL_URL is the assistant panel's
+  # way out to the canonical prompt set.
+  BA_PORTAL_URL: {{ .Values.app.baPortalUrl | quote }}
   DOC_PORTAL_URL: {{ .Values.app.docPortalUrl | quote }}
+  PRACTICE_URL: {{ .Values.app.practiceUrl | quote }}
   REGISTRY_URL: {{ .Values.app.registryUrl | quote }}
 
   # The one address here the *server* resolves rather than the visitor's

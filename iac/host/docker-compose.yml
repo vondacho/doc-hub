@@ -104,7 +104,15 @@ services:
       HOST: 0.0.0.0
       PORT: 4322
       NODE_ENV: production
+      # ba-hub's prompt page, linked from the assistant panel. It resolves only
+      # once ba-hub is deployed, and until then it is a dead link on the right
+      # host name — which is the same trade /hub already takes for the hubs that
+      # are not up yet. A .localhost default here could never resolve at all.
+      BA_PORTAL_URL: https://ba-portal.obya.ch
       DOC_PORTAL_URL: https://doc-portal.obya.ch
+      # The practice this board implements, written up in dev-hub. doc-em and
+      # doc-es carry the same link to their own practice page.
+      PRACTICE_URL: https://dev-portal.obya.ch/doc/practices/story-mapping/
       REGISTRY_URL: https://doc-registry.obya.ch
       REGISTRY_API_URL: http://doc-registry:1337
       # No ticketing system wired up. Empty is the chart's default too, and the
@@ -127,6 +135,11 @@ services:
       HOST: 0.0.0.0
       PORT: 4323
       NODE_ENV: production
+      # ba-hub's prompt page, linked from the assistant panel. It resolves only
+      # once ba-hub is deployed, and until then it is a dead link on the right
+      # host name — which is the same trade /hub already takes for the hubs that
+      # are not up yet. A .localhost default here could never resolve at all.
+      BA_PORTAL_URL: https://ba-portal.obya.ch
       DOC_PORTAL_URL: https://doc-portal.obya.ch
       # The practice this board implements, written up in dev-hub.
       PRACTICE_URL: https://dev-portal.obya.ch/doc/practices/example-mapping/
@@ -150,6 +163,11 @@ services:
       HOST: 0.0.0.0
       PORT: 4324
       NODE_ENV: production
+      # ba-hub's prompt page, linked from the assistant panel. It resolves only
+      # once ba-hub is deployed, and until then it is a dead link on the right
+      # host name — which is the same trade /hub already takes for the hubs that
+      # are not up yet. A .localhost default here could never resolve at all.
+      BA_PORTAL_URL: https://ba-portal.obya.ch
       DOC_PORTAL_URL: https://doc-portal.obya.ch
       PRACTICE_URL: https://dev-portal.obya.ch/doc/practices/event-storming/
       REGISTRY_URL: https://doc-registry.obya.ch

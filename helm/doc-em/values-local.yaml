@@ -42,6 +42,7 @@ app:
   registryUrl: http://doc-registry.localhost
   registryApiUrl: http://doc-registry:1337
   storyMapperUrl: http://doc-sm.localhost
+  baPortalUrl: http://ba-portal.localhost
 
 resources:
   requests:
