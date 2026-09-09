@@ -311,6 +311,25 @@ export function filtered(board: BoardState, keys: ReadonlySet<string>): Readonly
 }
 
 /**
+ * How many cards the filter is choosing among — activities, steps and stories.
+ *
+ * The denominator for "3 of 47 cards are showing", and it has to count exactly
+ * the universe `filtered` draws its answer from or the fraction is a lie. So it
+ * lives here, immediately below that function, and counts the same three
+ * records: a count assembled at a call site is one that stays right until
+ * somebody makes the filter match a fourth thing.
+ *
+ * Deliveries are not cards and are not counted. A band carries no tags — the
+ * parser refuses one — so it can never be filtered in or out, and including it
+ * in the total would make a fully-matching board report less than everything.
+ */
+export function cardCount(board: BoardState): number {
+	return (
+		board.activityOrder.length + Object.keys(board.steps).length + Object.keys(board.stories).length
+	);
+}
+
+/**
  * The stories with no ticket, in board order — what publishing would raise.
  *
  * Board order, not store order: the list a person confirms has to read in the

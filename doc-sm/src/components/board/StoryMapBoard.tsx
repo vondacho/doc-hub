@@ -40,7 +40,9 @@ import {
 } from '@dnd-kit/core';
 import { sortableKeyboardCoordinates } from '@dnd-kit/sortable';
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
-import { clearFileInput, downloadText, filenameFor, readTextFile } from '../../lib/files.ts';
+import { clearFileInput, downloadBlob, readTextFile } from '../../lib/files.ts';
+import { produce, type DestinationId } from '../../lib/board/export.ts';
+import { ExportDialog } from './ExportDialog.tsx';
 import { AgentPanel } from '../agent/AgentPanel.tsx';
 import * as storage from '../../lib/storage.ts';
 import { format as formatSource } from '../../lib/format.ts';
@@ -65,6 +67,7 @@ import { cardClass, kindLabel } from '../../lib/board/kinds.ts';
 import { resetsHistory, type BoardAction } from '../../lib/board/gestures.ts';
 import {
 	bandOrder,
+	cardCount,
 	filtered,
 	tagsInUse,
 	unboundStories,
@@ -285,6 +288,8 @@ export default function StoryMapBoard({
 	/** What the browser's copy last said, or why it could not be written. */
 	const [stored, setStored] = useState<{ at: number } | { error: string } | null>(null);
 	const [opening, setOpening] = useState(false);
+	/** Whether the export dialog is up. Its selection lives in the dialog. */
+	const [exporting, setExporting] = useState(false);
 	/**
 	 * One message at a time, said out loud and then dismissed.
 	 *
@@ -458,18 +463,6 @@ export default function StoryMapBoard({
 		setDocumentKey((n) => n + 1);
 		setDirty(false);
 	}, []);
-
-	/**
-	 * The file, exported exactly as it sits in the pane.
-	 *
-	 * No serialisation step. What you have been editing is what lands on disk —
-	 * comments, blank lines, your own alignment and all — which is the thing the
-	 * old export could not promise.
-	 */
-	const exportFile = useCallback(() => {
-		downloadText(filenameFor(board.product, board.title), source);
-		setDirty(false);
-	}, [board.product, board.title, source]);
 
 	/* ---- tickets ----------------------------------------------------------- */
 
@@ -656,6 +649,57 @@ export default function StoryMapBoard({
 		setBoardTheme(next);
 		storage.saveTheme(next);
 	}, [boardIsDark]);
+
+	/**
+	 * The exports, run in the order the dialog lists them.
+	 *
+	 * ## The source is still the source, byte for byte
+	 *
+	 * There is no serialisation step on the way out of the `.storymap`
+	 * destination. What you have been editing is what lands on disk — comments,
+	 * blank lines, your own alignment and all — which is the thing the old
+	 * export could not promise, and which the pictures beside it cannot promise
+	 * either. That is why it is the one destination the filter may not narrow;
+	 * see `lensApplies` in the catalogue.
+	 *
+	 * ## One at a time, and awaited
+	 *
+	 * `for … of` with an `await` in it, rather than `Promise.all`. Two reasons,
+	 * and the second is the load-bearing one. A browser asked to start several
+	 * downloads at once shows a permission prompt, and several *simultaneous*
+	 * anchor clicks are what makes it think the page is doing something it
+	 * should be asked about; spaced by the time it takes to render a picture,
+	 * they arrive as a sequence. And the PNG path rasters through a canvas — two
+	 * of those racing would be two large bitmaps alive at once for no gain,
+	 * since the work is a single main-thread paint either way.
+	 *
+	 * The first failure stops the run and is reported by the dialog. Continuing
+	 * would produce a downloads folder holding some of what was asked for, with
+	 * no indication of which part is missing.
+	 *
+	 * ## `dirty` clears only when the document did
+	 *
+	 * "Unexported changes" is a claim about the *file* — whether the thing that
+	 * outlives this browser matches what is on screen. Exporting a picture does
+	 * not make that true: a PNG cannot be opened back into a board. So the flag
+	 * clears when the source is among the destinations, and not otherwise.
+	 */
+	const runExport = useCallback(
+		async (picks: readonly DestinationId[], onlyShowing: boolean) => {
+			for (const pick of picks) {
+				const file = await produce(pick, {
+					board,
+					source,
+					matching,
+					onlyShowing,
+					dark: boardIsDark,
+				});
+				downloadBlob(file.filename, file.blob);
+			}
+			if (picks.includes('source')) setDirty(false);
+		},
+		[board, source, matching, boardIsDark],
+	);
 
 	const toggleFullscreen = useCallback(() => {
 		const element = stage.current;
@@ -1097,7 +1141,7 @@ export default function StoryMapBoard({
 				}}
 				onFormat={reformat}
 				onNew={startFresh}
-				onExport={exportFile}
+				onExport={() => setExporting(true)}
 				panes={panes}
 				onPanes={(next) => {
 					setPanes(next);
@@ -1216,6 +1260,21 @@ export default function StoryMapBoard({
 				progress={progress}
 				onPublish={publish}
 				onClose={() => setPublishing(false)}
+			/>
+
+			<ExportDialog
+				open={exporting}
+				dark={boardIsDark}
+				filtered={
+					matching === null
+						? null
+						: {
+								hidden: cardCount(board) - matching.size,
+								total: cardCount(board),
+							}
+				}
+				onExport={runExport}
+				onClose={() => setExporting(false)}
 			/>
 
 			<StoreState

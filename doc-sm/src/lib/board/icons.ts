@@ -44,6 +44,32 @@ export const icons = {
 	/** Arrow up out of a tray. */
 	exportFile: 'M12 14V4m0 0 4 4m-4-4-4 4M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3',
 
+	/*
+	 * The three shapes a map leaves this tab in, beside `exportFile`'s tray.
+	 *
+	 * Each draws what the file *is* rather than what the format is called, since
+	 * "SVG" and "PNG" are the two strings a glyph conveys worst: a framed
+	 * photograph for the raster, a curve between two anchor handles for the
+	 * vector, a bulleted list for the outline. The row in the export dialog names
+	 * every one of them in words as well — these only have to keep three rows
+	 * apart at a glance.
+	 */
+	picture: 'M4 5h16v14H4zM4 16l4.5-4.5L13 16l3-3 4 4M15 9.5a1.25 1.25 0 1 0 0-2.5 1.25 1.25 0 0 0 0 2.5Z',
+	vector: 'M4 20c0-8 5-13 13-13M2 22h4v-4H2zM18 9h4V5h-4z',
+	outline: 'M4 6h2M4 12h2M4 18h2M9 6h11M9 12h11M9 18h7',
+
+	/*
+	 * The two reference documents, drawn as what they teach.
+	 *
+	 * A pair of braces for the notation — the one shape that says "this is a
+	 * syntax" without a word of English in it — and an open book for the
+	 * doctrine. They sit apart from the three above because what they carry is
+	 * not this map: the dialog groups them under their own heading for the same
+	 * reason.
+	 */
+	notation: 'M9 4H7a2 2 0 0 0-2 2v3a2 2 0 0 1-2 2 2 2 0 0 1 2 2v3a2 2 0 0 0 2 2h2M15 4h2a2 2 0 0 1 2 2v3a2 2 0 0 0 2 2 2 2 0 0 0-2 2v3a2 2 0 0 1-2 2h-2',
+	doctrine: 'M12 7C10.5 5.5 8 5 4 5v13c4 0 6.5.5 8 2 1.5-1.5 4-2 8-2V5c-4 0-6.5.5-8 2ZM12 7v13',
+
 	/** An eye — look at the file without producing one. */
 	preview: 'M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7ZM15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z',
 

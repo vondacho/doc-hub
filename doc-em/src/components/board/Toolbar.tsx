@@ -101,6 +101,7 @@ export function Toolbar({
 	/** Reformat the source: indentation only. */
 	onFormat: () => void;
 	onNew: () => void;
+	/** Opens the export dialog. This button no longer writes a file itself. */
 	onExport: () => void;
 	onExportGherkin: () => void;
 	onLoadSample: () => void;
@@ -292,7 +293,17 @@ export function Toolbar({
 							if (file) onPickFile(file, event.target);
 						}}
 					/>
-					<IconButton icon="exportFile" label="Export the .examplemap file" onClick={onExport} />
+					{/*
+					 * It opens a dialog rather than writing a file, which is why the
+					 * label ends in an ellipsis — the usual signal that a control asks
+					 * before it acts. What the dialog offers is in
+					 * src/lib/board/export.ts, and the argument for cumulating the
+					 * destinations under one button rather than growing this row is at
+					 * the top of ExportDialog. The Gherkin button below stays: it
+					 * *shows* the feature file, which is a different gesture from
+					 * taking it.
+					 */}
+					<IconButton icon="exportFile" label="Export this map…" onClick={onExport} />
 					{/* No Save button. The board writes itself to this browser a second
 					    after it stops changing, as ba-ddd-mapper's editors do. What is
 					    left here is the way to *see* what was written. */}

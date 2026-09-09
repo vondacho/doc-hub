@@ -26,7 +26,9 @@ import {
 } from '@dnd-kit/core';
 import { sortableKeyboardCoordinates } from '@dnd-kit/sortable';
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
-import { clearFileInput, downloadText, filenameFor, readTextFile } from '../../lib/files.ts';
+import { clearFileInput, downloadBlob, readTextFile } from '../../lib/files.ts';
+import { produce, type DestinationId } from '../../lib/board/export.ts';
+import { ExportDialog } from './ExportDialog.tsx';
 import { AgentPanel } from '../agent/AgentPanel.tsx';
 import * as storage from '../../lib/storage.ts';
 import { format as formatSource } from '../../lib/format.ts';
@@ -168,6 +170,19 @@ export default function ExampleMapBoard({
 		[parsed.document],
 	);
 
+	/**
+	 * How many questions the feature file cannot carry.
+	 *
+	 * Stated in two places now — under the preview, and on the export dialog's
+	 * feature-file row — which is why it is a value here rather than a call at
+	 * each site. Both are saying the same thing at the two moments somebody can
+	 * act on it: before reading the file, and before writing it.
+	 */
+	const unwritable = useMemo(
+		() => (parsed.document === null ? 0 : unwritableQuestions(parsed.document)),
+		[parsed.document],
+	);
+
 	/** Which panels are showing, and how the width is divided between them. */
 	const [panes, setPanes] = useState<storage.Panes>('both');
 	const [split, setSplit] = useState(42);
@@ -225,6 +240,8 @@ export default function ExampleMapBoard({
 	/** What the browser's copy last said, or why it could not be written. */
 	const [stored, setStored] = useState<{ at: number } | { error: string } | null>(null);
 	const [opening, setOpening] = useState(false);
+	/** Whether the export dialog is up. Its selection lives in the dialog. */
+	const [exporting, setExporting] = useState(false);
 	/**
 	 * One message at a time, said out loud and then dismissed.
 	 *
@@ -382,17 +399,6 @@ export default function ExampleMapBoard({
 		setDocumentKey((n) => n + 1);
 		setDirty(false);
 	}, []);
-
-	/**
-	 * The file, exported exactly as it sits in the pane.
-	 *
-	 * No serialisation step: what you have been editing is what lands on disk,
-	 * comments and all.
-	 */
-	const exportFile = useCallback(() => {
-		downloadText(filenameFor(board.product, board.title), source);
-		setDirty(false);
-	}, [board.product, board.title, source]);
 
 	/**
 	 * Write the feature file.
@@ -713,6 +719,58 @@ export default function ExampleMapBoard({
 		storage.saveTheme(next);
 	}, [boardIsDark]);
 
+	/**
+	 * The exports, run in the order the dialog lists them.
+	 *
+	 * ## The source is still the source, byte for byte
+	 *
+	 * There is no serialisation step on the way out of the `.examplemap`
+	 * destination. What you have been editing is what lands on disk — comments,
+	 * blank lines, your own alignment and all. That is why it is one of the two
+	 * destinations the filter may not narrow; the feature file is the other, and
+	 * for a sharper reason. See `lensApplies` in the catalogue.
+	 *
+	 * ## One at a time, and awaited
+	 *
+	 * `for … of` with an `await` in it, rather than `Promise.all`. Two reasons,
+	 * and the second is the load-bearing one. A browser asked to start several
+	 * downloads at once shows a permission prompt, and several *simultaneous*
+	 * anchor clicks are what makes it think the page is doing something it
+	 * should be asked about; spaced by the time it takes to render a picture,
+	 * they arrive as a sequence. And the PNG path rasters through a canvas — two
+	 * of those racing would be two large bitmaps alive at once for no gain.
+	 *
+	 * The first failure stops the run and is reported by the dialog. Continuing
+	 * would produce a downloads folder holding some of what was asked for, with
+	 * no indication of which part is missing.
+	 *
+	 * ## `dirty` clears only when the document did
+	 *
+	 * "Unexported changes" is a claim about the *file* — whether the thing that
+	 * outlives this browser matches what is on screen. Neither a picture nor a
+	 * feature file makes that true: the Gherkin is what the map produced, not
+	 * the map, and a session that has written its feature file has still not
+	 * saved its red cards. So the flag clears when the source is among the
+	 * destinations, and not otherwise.
+	 */
+	const runExport = useCallback(
+		async (picks: readonly DestinationId[], onlyShowing: boolean) => {
+			for (const pick of picks) {
+				const file = await produce(pick, {
+					board,
+					source,
+					document: parsed.document,
+					matching,
+					onlyShowing,
+					dark: boardIsDark,
+				});
+				downloadBlob(file.filename, file.blob);
+			}
+			if (picks.includes('source')) setDirty(false);
+		},
+		[board, source, parsed.document, matching, boardIsDark],
+	);
+
 	const toggleFullscreen = useCallback(() => {
 		const element = stage.current;
 		if (!element) return;
@@ -888,7 +946,7 @@ export default function ExampleMapBoard({
 				}}
 				onFormat={reformat}
 				onNew={startFresh}
-				onExport={exportFile}
+				onExport={() => setExporting(true)}
 				onExportGherkin={() => setPreviewingGherkin(true)}
 				panes={panes}
 				onPanes={(next) => {
@@ -947,12 +1005,7 @@ export default function ExampleMapBoard({
 				onToggle={toggleTag}
 				onClear={() => setTagFilter(new Set())}
 				matching={matching?.size ?? 0}
-				total={
-					(board.story === null ? 0 : 1) +
-					Object.keys(board.rules).length +
-					Object.keys(board.examples).length +
-					Object.keys(board.questions).length
-				}
+				total={cardTotal(board)}
 			/>
 
 			{note && (
@@ -997,9 +1050,31 @@ export default function ExampleMapBoard({
 				open={previewingGherkin}
 				filename={parsed.document === null ? 'no feature file' : featureFilename(parsed.document)}
 				text={gherkin}
-				unwritable={parsed.document === null ? 0 : unwritableQuestions(parsed.document)}
+				unwritable={unwritable}
 				textSize={textSize}
 				onClose={() => setPreviewingGherkin(false)}
+			/>
+
+			<ExportDialog
+				open={exporting}
+				dark={boardIsDark}
+				filtered={
+					matching === null ? null : { hidden: cardTotal(board) - matching.size, total: cardTotal(board) }
+				}
+				caveats={
+					unwritable === 0
+						? {}
+						: {
+								gherkin: `${unwritable} open ${unwritable === 1 ? 'question has' : 'questions have'} no Gherkin and will not be in the file.`,
+							}
+				}
+				unavailable={
+					parsed.document === null
+						? { gherkin: 'The source does not parse, so there is no feature file to write.' }
+						: {}
+				}
+				onExport={runExport}
+				onClose={() => setExporting(false)}
 			/>
 
 			<StoreState
@@ -1217,6 +1292,27 @@ function problemsIn(text: string): readonly Problem[] {
 		if (!(error instanceof ExampleMapParseError)) throw error;
 		return error.problems;
 	}
+}
+
+/**
+ * How many cards the filter is choosing among — story, rules, examples, questions.
+ *
+ * The denominator for "3 of 12 cards are showing", and it has to count exactly
+ * the universe `filtered` draws its answer from or the fraction is a lie. Two
+ * callers now — the tag row and the export dialog — which is why it is a
+ * function rather than the sum that used to be written inline in the markup.
+ *
+ * Deliveries are not cards and are not counted. A band carries no tags, so it
+ * can never be filtered in or out, and including it in the total would make a
+ * fully-matching board report less than everything.
+ */
+function cardTotal(board: BoardState): number {
+	return (
+		(board.story === null ? 0 : 1) +
+		Object.keys(board.rules).length +
+		Object.keys(board.examples).length +
+		Object.keys(board.questions).length
+	);
 }
 
 /** Where this board belongs in storage. One derivation, three callers. */

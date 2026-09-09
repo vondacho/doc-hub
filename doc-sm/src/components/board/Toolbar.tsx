@@ -103,6 +103,7 @@ export function Toolbar({
 	/** Reformat the source: indentation only. */
 	onFormat: () => void;
 	onNew: () => void;
+	/** Opens the export dialog. This button no longer writes a file itself. */
 	onExport: () => void;
 	onPublish: () => void;
 	/** How many stories publishing would raise a ticket for. */
@@ -320,9 +321,18 @@ export function Toolbar({
 							if (file) onPickFile(file, event.target);
 						}}
 					/>
+					{/*
+					 * It opens a dialog rather than writing a file, which is why the
+					 * label ends in an ellipsis — the usual signal that a control asks
+					 * before it acts, and the difference between a press that costs you
+					 * a keystroke and one that costs you a file in your downloads
+					 * folder. What the dialog offers is in src/lib/board/export.ts, and
+					 * the argument for cumulating the destinations under one button
+					 * rather than growing this row is at the top of ExportDialog.
+					 */}
 					<IconButton
 						icon="exportFile"
-						label="Export the .storymap file"
+						label="Export this map…"
 						onClick={onExport}
 					/>
 
