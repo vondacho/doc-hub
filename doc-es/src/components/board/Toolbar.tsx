@@ -1,11 +1,17 @@
 /**
  * The controls above the board.
  *
- * doc-sm's rows, with doc-es's verbs. One export button, where doc-em has two:
- * an event storm has one artefact. Its output is a shared picture and a set of
- * seams, and what the workshop leads to — a C4 model, a set of registered
- * events, a story map — is built in another tool by a person rather than
- * generated from here.
+ * doc-sm's rows, with doc-es's verbs. One export button, where doc-em has two —
+ * and it stays one however many shapes a wall can leave in. The destinations
+ * live behind it in a dialog (see ExportDialog), because a row of format
+ * buttons is a row that grows every time somebody wants a new one, and because
+ * a 36px square has nowhere to say which of them you want.
+ *
+ * That is a claim about the *files*, not about the workshop. An event storm
+ * still has one artefact: its output is a shared picture and a set of seams,
+ * and what the workshop leads to — a C4 model, a set of registered events, a
+ * story map — is built in another tool by a person rather than generated from
+ * here. Nothing behind the Export button generates any of those.
  *
  * Two rows, not one. What the storm is *about* — the product — sits above what
  * it is *called* and what you can do to it, because it is the larger claim and
@@ -99,6 +105,7 @@ export function Toolbar({
 	/** Reformat the source: indentation only. */
 	onFormat: () => void;
 	onNew: () => void;
+	/** Opens the export dialog. This button no longer writes a file itself. */
 	onExport: () => void;
 	onLoadSample: () => void;
 	onOpenStore: () => void;
@@ -293,8 +300,16 @@ export function Toolbar({
 					 * second after it stops changing, and the store panel says what it
 					 * holds. Export is now one file gesture among four, and a filled
 					 * button claiming otherwise would be pointing at the wrong thing.
+					 *
+					 * It opens a dialog rather than writing a file, which is why the
+					 * label ends in an ellipsis — the usual signal that a control asks
+					 * before it acts, and the difference between a press that costs you
+					 * a keystroke and one that costs you a file in your downloads
+					 * folder. What the dialog offers is in src/lib/board/export.ts, and
+					 * the argument for cumulating the destinations under one button
+					 * rather than growing this row is at the top of ExportDialog.
 					 */}
-					<IconButton icon="exportFile" label="Export the .eventstorm file" onClick={onExport} />
+					<IconButton icon="exportFile" label="Export this wall…" onClick={onExport} />
 
 					{/* No Save button. The board writes itself to this browser a second
 					    after it stops changing, as ba-ddd-mapper's editors do — see the

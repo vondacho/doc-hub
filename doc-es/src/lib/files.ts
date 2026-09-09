@@ -41,7 +41,19 @@ export function clearFileInput(input: HTMLInputElement | null): void {
 export function downloadText(filename: string, text: string): void {
 	// `text/plain` so the browser offers to save it rather than trying to render
 	// it, and an explicit charset because the titles are not necessarily ASCII.
-	const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+	downloadBlob(filename, new Blob([text], { type: 'text/plain;charset=utf-8' }));
+}
+
+/**
+ * The same gesture, for a file that is not text.
+ *
+ * Split out of `downloadText` when the export grew a picture: an SVG is text and
+ * a PNG is not, and both have to reach the disk the same way. Everything below
+ * the type is the anchor dance, and every line of it is load-bearing — which is
+ * the whole reason this is one function with four callers rather than four
+ * hand-copied blocks that will lose a different line each.
+ */
+export function downloadBlob(filename: string, blob: Blob): void {
 	const url = URL.createObjectURL(blob);
 
 	const anchor = document.createElement('a');
@@ -72,7 +84,17 @@ export function downloadText(filename: string, text: string): void {
  * Composed here rather than duplicated: a title with a slash in it produces a
  * download the browser silently refuses, and that hazard and the key's are the
  * same hazard.
+ *
+ * The extension is a parameter because one wall now leaves this tab in four
+ * shapes — see src/lib/board/export.ts — and all four should land in the
+ * downloads folder under one recognisable stem. `board.svg` beside
+ * `board.eventstorm` is one thing exported twice; `board.svg` beside a name
+ * assembled somewhere else is two files somebody has to match up by eye.
  */
-export function filenameFor(product: string | null, title: string): string {
-	return `${storageKey(product, title)}${EVENTSTORM_EXTENSION}`;
+export function filenameFor(
+	product: string | null,
+	title: string,
+	extension: string = EVENTSTORM_EXTENSION,
+): string {
+	return `${storageKey(product, title)}${extension}`;
 }
