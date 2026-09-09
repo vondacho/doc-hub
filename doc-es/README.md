@@ -146,6 +146,24 @@ is: half of what a wall does in its second hour is discovering that a note is th
 wrong colour. On paper you rewrite it on a different sticky; here it keeps its
 words and its square.
 
+
+**Zoom is also ctrl and the wheel**, anywhere over the board. The buttons at the
+top of the frame were the only way to it, which is a journey out of the wall and
+back for every stop when the thing you want to look at is at the bottom of a long
+scroller. On a Mac trackpad it arrives as pinch-to-zoom for nothing: a pinch is
+delivered as a wheel event with `ctrlKey` set.
+
+Three things it has to do, and each of them is a bug if it is skipped. The
+listener is **native and non-passive**, because React registers `onWheel` as
+passive and `preventDefault` from a React handler does nothing — without it, one
+gesture zooms the board *and* the browser window. The deltas **accumulate to a
+threshold**, because the board zooms in eight fixed stops and one flick of a trackpad is
+a dozen small deltas that would otherwise cross the whole range. And the point
+**under the pointer stays under the pointer**: the board is a scroller sized in
+`em`, so a stop multiplies every distance in it including the scroll offset, and
+left alone a zoom aimed at a card two screens to the right sends that card off
+the edge.
+
 ## Light or dark, for the board alone
 
 The page follows your operating system, as every page in the hub does. The board

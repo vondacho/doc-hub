@@ -74,15 +74,38 @@ const HISTORY_LIMIT = 100;
 /** How long the board must be still before autosave writes. See the effect. */
 const AUTOSAVE_DELAY_MS = 1_000;
 /**
- * 100% to 160%, in five stops, and 100% is where the board opens.
+ * 55% to 160%, in eight stops of fifteen points, and 100% is where the board
+ * opens.
  *
- * What 100% *is* in pixels is `BASE_FONT` in BoardGrid, which was raised so that
- * this board's natural size is its smallest — the stops here are unchanged, and
- * deliberately so: the toolbar prints these numbers, and they should keep
- * meaning "relative to how this board is meant to be read".
+ * What 100% *is* in pixels is `BASE_FONT` in BoardGrid: the size this board is
+ * meant to be read at, whatever that happens to be. The percentages the toolbar
+ * prints are relative to that and always have been.
+ *
+ * ## Why it goes below 100% again
+ *
+ * It used to, and the range was cut on the argument that the small stops were
+ * unusable *as a working size* — squares too small to read a four-word note in,
+ * so nobody ever worked at them, and "a zoom range whose first half is unusable
+ * is really a shorter range that starts in the wrong place".
+ *
+ * That argument was right about working and wrong about looking. Zooming out is
+ * not a smaller place to work, it is a way to see the whole wall for a moment:
+ * where the pile-up is, whether the timeline still reads left to right, how much
+ * of it there is. At those stops the notes are recognised by colour and position
+ * rather than read, which is exactly what that question needs.
+ *
+ * What changed is the cost of going there. When the only way down was a button
+ * at the top of the frame, a look at the whole wall was a journey out and back
+ * and the stop was not worth having. Ctrl and the wheel makes it a flick and a
+ * flick back — see `wheel-zoom.ts` — and a stop nobody would have clicked to is
+ * one people now pass through constantly.
+ *
+ * 55% is the floor because it is roughly where the words stop being words. Below
+ * it a board wants a different drawing — blocks of colour, no text — and that is
+ * a feature rather than another stop on this ladder.
  */
-const ZOOM_STOPS = [1, 1.15, 1.3, 1.45, 1.6] as const;
-const DEFAULT_ZOOM_INDEX = 0;
+const ZOOM_STOPS = [0.55, 0.7, 0.85, 1, 1.15, 1.3, 1.45, 1.6] as const;
+const DEFAULT_ZOOM_INDEX = 3;
 
 /**
  * History over text.
@@ -665,6 +688,16 @@ export default function EventStormBoard({
 	}, []);
 
 	const zoom = ZOOM_STOPS[zoomIndex] ?? 1;
+	/**
+	 * One stop, clamped at both ends.
+	 *
+	 * The toolbar's two buttons and ctrl with the wheel are the same request
+	 * asked in two places, so they go through one function: two copies of the
+	 * clamp would eventually disagree about whether 160% is the last stop.
+	 */
+	const stepZoom = useCallback((direction: 1 | -1) => {
+		setZoomIndex((index) => Math.min(Math.max(index + direction, 0), ZOOM_STOPS.length - 1));
+	}, []);
 
 	useEffect(() => {
 		const sync = () => setFullscreen(document.fullscreenElement === stage.current);
@@ -961,8 +994,8 @@ export default function EventStormBoard({
 				zoom={zoom}
 				canZoomIn={zoomIndex < ZOOM_STOPS.length - 1}
 				canZoomOut={zoomIndex > 0}
-				onZoomIn={() => setZoomIndex((i) => Math.min(i + 1, ZOOM_STOPS.length - 1))}
-				onZoomOut={() => setZoomIndex((i) => Math.max(i - 1, 0))}
+				onZoomIn={() => stepZoom(1)}
+				onZoomOut={() => stepZoom(-1)}
 				onZoomReset={() => setZoomIndex(DEFAULT_ZOOM_INDEX)}
 				fullscreen={fullscreen}
 				onToggleFullscreen={toggleFullscreen}
@@ -1166,6 +1199,7 @@ export default function EventStormBoard({
 					board={board}
 					dispatch={dispatch}
 					zoom={zoom}
+					onZoomStep={stepZoom}
 					fullscreen={fullscreen}
 					documentKey={documentKey}
 					expanded={expanded}

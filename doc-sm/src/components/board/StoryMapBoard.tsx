@@ -107,16 +107,32 @@ const AUTOSAVE_DELAY_MS = 1_000;
  *
  * A fixed ladder rather than a continuous slider: the useful question is "show
  * me more of the board" or "let me read this", and a handful of stops answers it
- * without anyone fiddling to find a round number.
+ * without anyone fiddling to find a round number. Eight of them now, 55% to
+ * 160%, fifteen points apart the whole way.
  *
- * The range starts at 100% and only goes up. It used to run from 60%, on the
- * theory that shrinking is how you fit a wide board on a screen — but the board
- * has since grown two better answers to that, in the narrow columns and in
- * detail that stays collapsed until asked for. Neither of those costs any
- * legibility, and shrinking below a readable size costs nothing else.
+ * ## Why it goes below 100% again
+ *
+ * It used to run from 60%, and that was cut because the board had grown two
+ * better answers to a wide map — narrow columns, and detail that stays collapsed
+ * until asked for — neither of which costs any legibility, while shrinking does.
+ *
+ * Both of those are still true, and they answer a different question. They make
+ * a wide board *workable*; zooming out lets you see the shape of it — where the
+ * releases fall, whether one activity has swallowed half the map. At these stops
+ * the cards are recognised by column and colour rather than read, which is what
+ * that question needs.
+ *
+ * What changed is the cost of asking. When the only way down was a button at the
+ * top of the frame, a look at the whole map was a journey out and back; ctrl and
+ * the wheel makes it a flick and a flick back — see `wheel-zoom.ts` — and a stop
+ * nobody would have clicked to is one people now pass through constantly.
+ *
+ * 55% is the floor because it is roughly where the words stop being words. Below
+ * it a board wants a different drawing — blocks of colour, no text — and that is
+ * a feature rather than another stop on this ladder.
  */
-const ZOOM_STOPS = [1, 1.15, 1.3, 1.45, 1.6] as const;
-const DEFAULT_ZOOM_INDEX = 0;
+const ZOOM_STOPS = [0.55, 0.7, 0.85, 1, 1.15, 1.3, 1.45, 1.6] as const;
+const DEFAULT_ZOOM_INDEX = 3;
 
 /**
  * One entry in the undo stack: what the visitor did, and the file it produced.
@@ -586,6 +602,16 @@ export default function StoryMapBoard({
 	/* ---- zoom and fullscreen ----------------------------------------------- */
 
 	const zoom = ZOOM_STOPS[zoomIndex] ?? 1;
+	/**
+	 * One stop, clamped at both ends.
+	 *
+	 * The toolbar's two buttons and ctrl with the wheel are the same request
+	 * asked in two places, so they go through one function: two copies of the
+	 * clamp would eventually disagree about whether 160% is the last stop.
+	 */
+	const stepZoom = useCallback((direction: 1 | -1) => {
+		setZoomIndex((index) => Math.min(Math.max(index + direction, 0), ZOOM_STOPS.length - 1));
+	}, []);
 
 	/**
 	 * Fullscreen the board, not the page.
@@ -1170,8 +1196,8 @@ export default function StoryMapBoard({
 				zoom={zoom}
 				canZoomIn={zoomIndex < ZOOM_STOPS.length - 1}
 				canZoomOut={zoomIndex > 0}
-				onZoomIn={() => setZoomIndex((i) => Math.min(i + 1, ZOOM_STOPS.length - 1))}
-				onZoomOut={() => setZoomIndex((i) => Math.max(i - 1, 0))}
+				onZoomIn={() => stepZoom(1)}
+				onZoomOut={() => stepZoom(-1)}
 				onZoomReset={() => setZoomIndex(DEFAULT_ZOOM_INDEX)}
 				fullscreen={fullscreen}
 				onToggleFullscreen={toggleFullscreen}
@@ -1411,6 +1437,7 @@ export default function StoryMapBoard({
 							onCreateTicket={createTicket}
 							ticketingConfigured={ticketingConfigured}
 							zoom={zoom}
+							onZoomStep={stepZoom}
 							fullscreen={fullscreen}
 							documentKey={documentKey}
 							expanded={expanded}

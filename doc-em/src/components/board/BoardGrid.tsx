@@ -82,6 +82,7 @@ import { StoryNeed } from './StoryNeed.tsx';
 import { ExampleSteps } from './ExampleSteps.tsx';
 import type { CardMenuAction } from './CardMenu.tsx';
 import { Icon } from './Icon.tsx';
+import { useWheelZoom } from '../../lib/board/wheel-zoom.ts';
 
 /**
  * Track widths in `em`, against the font-size the scroll container gets from the
@@ -115,6 +116,7 @@ export function BoardGrid({
 	board,
 	dispatch,
 	zoom,
+	onZoomStep,
 	fullscreen,
 	documentKey,
 	expanded,
@@ -126,6 +128,14 @@ export function BoardGrid({
 	board: BoardState;
 	dispatch: (action: BoardAction) => void;
 	zoom: number;
+	/**
+	 * One stop in or out, asked for by ctrl and the wheel over the board.
+	 *
+	 * The grid owns the scroller, so the gesture has to be bound here; the stops
+	 * and the clamping stay where the toolbar's buttons already found them, so
+	 * that the two ways of asking cannot come to different answers.
+	 */
+	onZoomStep: (direction: 1 | -1) => void;
 	fullscreen: boolean;
 	documentKey: number;
 	/** The card whose text the source pane is emphasising, if any. */
@@ -157,6 +167,8 @@ export function BoardGrid({
 		element.scrollLeft = 0;
 		element.scrollTop = 0;
 	}, [documentKey]);
+
+	useWheelZoom({ target: scroller, zoom, onStep: onZoomStep });
 
 	/*
 	 * The rule row pins below the story row, and the question row below that, and

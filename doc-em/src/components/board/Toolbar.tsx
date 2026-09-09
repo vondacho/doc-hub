@@ -321,7 +321,7 @@ export function Toolbar({
 					<span className="mx-1 h-6 w-px bg-slate-200 dark:bg-slate-700" aria-hidden="true" />
 
 					{/* How the board is being looked at. None of these change the file. */}
-					<IconButton icon="zoomOut" label="Zoom out" onClick={onZoomOut} disabled={!canZoomOut} />
+					<IconButton icon="zoomOut" label="Zoom out — or ctrl and the wheel over the board" onClick={onZoomOut} disabled={!canZoomOut} />
 					<button
 						type="button"
 						onClick={onZoomReset}
@@ -330,7 +330,7 @@ export function Toolbar({
 					>
 						{Math.round(zoom * 100)}%
 					</button>
-					<IconButton icon="zoomIn" label="Zoom in" onClick={onZoomIn} disabled={!canZoomIn} />
+					<IconButton icon="zoomIn" label="Zoom in — or ctrl and the wheel over the board" onClick={onZoomIn} disabled={!canZoomIn} />
 					<IconButton
 						icon={fullscreen ? 'fullscreenExit' : 'fullscreen'}
 						label={fullscreen ? 'Leave fullscreen' : 'Fullscreen the board'}

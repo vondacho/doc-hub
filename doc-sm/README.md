@@ -118,6 +118,24 @@ rail's move and delete) do use `title`, because they sit inside the board's
 scroll container where an absolutely positioned tooltip would be clipped, and
 because every one of them is also reachable from a card's menu.
 
+
+**Zoom is also ctrl and the wheel**, anywhere over the board. The buttons at the
+top of the frame were the only way to it, which is a journey out of the wall and
+back for every stop when the thing you want to look at is at the bottom of a long
+scroller. On a Mac trackpad it arrives as pinch-to-zoom for nothing: a pinch is
+delivered as a wheel event with `ctrlKey` set.
+
+Three things it has to do, and each of them is a bug if it is skipped. The
+listener is **native and non-passive**, because React registers `onWheel` as
+passive and `preventDefault` from a React handler does nothing — without it, one
+gesture zooms the board *and* the browser window. The deltas **accumulate to a
+threshold**, because the board zooms in eight fixed stops and one flick of a trackpad is
+a dozen small deltas that would otherwise cross the whole range. And the point
+**under the pointer stays under the pointer**: the board is a scroller sized in
+`em`, so a stop multiplies every distance in it including the scroll offset, and
+left alone a zoom aimed at a card two screens to the right sends that card off
+the edge.
+
 ## Personas and the need
 
 **Each activity lists its cast.** Personas are declared inside the activity they
@@ -300,12 +318,15 @@ cheap, for horizontal space, which is not. **Notes are never clamped**: a note
 that runs to five lines runs to five lines. Truncating it would hide the one
 sentence somebody wrote down to be remembered.
 
-**Zoom**, on a fixed ladder from 100% to 160%; the percentage is a button that
-resets to 100%. The range only goes up: it used to start at 60%, on the theory
-that shrinking is how a wide board fits on a screen, but the board has since
-grown two better answers to that — narrow columns, and detail that stays
-collapsed until asked for. Neither costs any legibility, and shrinking below a
-readable size costs nothing else. It is implemented by scaling the board's font size, with every
+**Zoom**, on a fixed ladder from 55% to 160% in steps of fifteen points; the
+percentage is a button that resets to 100%. The range once stopped at 100%,
+because the board had grown two better answers to a wide map — narrow columns,
+and detail that stays collapsed until asked for — and neither of those costs any
+legibility while shrinking does. Both are still true, and they answer the other
+question: they make a wide map *workable*, where zooming out is how you see the
+shape of it for a moment. What brought the lower stops back is what they cost to
+reach — a button at the top of the frame made a look at the whole map a journey
+out and back, and ctrl with the wheel makes it a flick. It is implemented by scaling the board's font size, with every
 width, gap and padding measured in `em` against it — *not* by `transform:
 scale()`. A transformed ancestor breaks `position: sticky`, which the header rows
 and the band rail depend on, and confuses dnd-kit's hit-testing, which every drag

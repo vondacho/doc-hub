@@ -53,6 +53,7 @@ import {
 	type Id,
 } from '../../lib/board/state.ts';
 import { DIRECTIONS, neighbour } from '../../lib/board/navigate.ts';
+import { useWheelZoom } from '../../lib/board/wheel-zoom.ts';
 import { CardMenu, type CardMenuAction } from './CardMenu.tsx';
 import { newTag, Tags } from './Tags.tsx';
 import { EDGE, GAP, KindPalette } from './KindPalette.tsx';
@@ -67,16 +68,16 @@ const RAIL = '9em';
  * Font-size at 100%, in px. Everything on the board is `em` against this.
  *
  * 25.6 rather than 16, which is 16 × 1.6: what used to be the *top* zoom stop is
- * now the bottom one. The squares were too small to read a four-word note in at
- * the old 100%, so nobody ever worked at it — the stops below what this board
- * needs are stops nobody visits, and a zoom range whose first half is unusable
- * is really a shorter range that starts in the wrong place.
+ * now the size the board opens at. The squares were too small to read a
+ * four-word note in at the old 100%, so nobody ever worked at it, and a zoom
+ * range whose first half is unusable is really a shorter range that starts in
+ * the wrong place.
  *
- * The stops themselves are unchanged at 100–160% (see `ZOOM_STOPS` in
- * EventStormBoard). Moving the base rather than the multipliers keeps the
- * percentages the toolbar shows meaning what they say — 100% is this board's
- * natural size, whatever that happens to be in pixels — and it is one number
- * rather than five.
+ * Moving the base rather than the multipliers is what keeps the percentages the
+ * toolbar shows meaning what they say — 100% is this board's natural size,
+ * whatever that happens to be in pixels — and it is one number rather than
+ * eight. The ladder below it came back later, for looking rather than for
+ * working; `ZOOM_STOPS` in EventStormBoard carries that argument.
  *
  * Larger than doc-sm's and doc-em's 20.8 because this board's cards are squares
  * with clamped text rather than columns that grow to fit. A square has to be big
@@ -92,6 +93,7 @@ export function BoardGrid({
 	board,
 	dispatch,
 	zoom,
+	onZoomStep,
 	fullscreen,
 	documentKey,
 	expanded,
@@ -104,6 +106,14 @@ export function BoardGrid({
 	board: BoardState;
 	dispatch: (action: BoardAction) => void;
 	zoom: number;
+	/**
+	 * One stop in or out, asked for by ctrl and the wheel over the board.
+	 *
+	 * The grid owns the scroller, so the gesture has to be bound here; the stops
+	 * and the clamping stay where the toolbar's buttons already found them, so
+	 * that the two ways of asking cannot come to different answers.
+	 */
+	onZoomStep: (direction: 1 | -1) => void;
 	fullscreen: boolean;
 	/** Changes on every import, so the scroller can go back to the start. */
 	documentKey: number;
@@ -147,6 +157,8 @@ export function BoardGrid({
 	useLayoutEffect(() => {
 		scroller.current?.scrollTo({ left: 0, top: 0 });
 	}, [documentKey]);
+
+	useWheelZoom({ target: scroller, zoom, onStep: onZoomStep });
 
 	/**
 	 * Where the keyboard cursor should land once the text has been re-read.
