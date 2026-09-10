@@ -43,6 +43,21 @@ export function practiceUrl(): string {
 }
 
 /**
+ * doc-em, the board a story is refined on — a browser-facing link.
+ *
+ * The other end of the story map: a story picked here is broken into rules and
+ * examples there, and the card menu links straight to it with the story in the
+ * query string. The contract for that query string lives in doc-em's
+ * src/lib/examplemap/handoff.ts, which is the side that reads it.
+ *
+ * `EXAMPLE_MAPPER_URL` is the name doc-portal already uses for the same address
+ * on /hub, so a deployment sets one value for both.
+ */
+export function exampleMapperUrl(): string {
+  return fromEnv('EXAMPLE_MAPPER_URL', 'http://doc-em.localhost');
+}
+
+/**
  * The registry's admin UI, as the *browser* sees it — a link, not a call.
  *
  * Where somebody goes to register a product that is missing from the picker.

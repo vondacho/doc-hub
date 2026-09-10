@@ -483,6 +483,34 @@ colour (magenta, blue, yellow for the card kinds), and a second colour system on
 top would wreck the first. The status is a word, with weight and fill separating
 work in flight from work that is finished.
 
+## Refining a story in doc-em
+
+A story map says what the product does and in what order. An example map takes
+**one** story and asks, for twenty-five minutes, what the rules under it are.
+They are the two halves of the same conversation, and they are two applications.
+
+Every story card's menu carries **Refine in example mapping**. It opens doc-em in
+a new tab with the story in the query string — its title, the map's product and
+ticketing space, the story's own ticket, status, need and tags — and doc-em
+starts a board from them. The link is built in `src/lib/board/refine.ts`; the
+contract for what it carries is written up on the side that reads it, in
+doc-em's `src/lib/examplemap/handoff.ts`.
+
+**The title is the address.** doc-em names a saved board by its product and
+title exactly as this board does, so the same story linked twice lands on the
+same entry: the first visit starts a map, the second reopens the one the room
+left behind, rules and questions and all. A refinement session is rarely
+finished in one sitting, and this is how you get back to it.
+
+Nothing is sent to a server on the way. The visitor's browser follows the link,
+doc-em keeps the map in *their* browser, and neither board's promise about where
+a map lives changes because the two now link to each other. The consequence is
+that a story renamed here after a session has been mapped no longer finds it —
+the link would open a new board, and the old one is still in doc-em's store
+panel under the name it was mapped as.
+
+The entry is disabled, with the reason on it, on a story that has no title yet.
+
 ## The DSL
 
 Full reference at `/dsl`; the grammar lives in `src/lib/storymap/`.
@@ -595,7 +623,7 @@ untouched.
 
 ## Configuration
 
-Four browser-facing links and two in-cluster calls. The split is the one
+Five browser-facing links and two in-cluster calls. The split is the one
 `doc-portal` already draws: a link is resolved by the visitor's browser and must
 be an address the browser can reach; a call is made by this server and must not
 be, or it leaves the cluster to come back in to a Service one DNS name away.
@@ -604,6 +632,7 @@ be, or it leaves the cluster to come back in to a Service one DNS name away.
 |---|---|---|
 | `DOC_PORTAL_URL` | `http://doc-portal.localhost` | the board's footer |
 | `PRACTICE_URL` | `http://dev-portal.localhost/doc/practices/story-mapping/` | the header and `/dsl` |
+| `EXAMPLE_MAPPER_URL` | `http://doc-em.localhost` | a story's "Refine in example mapping" |
 | `REGISTRY_URL` | `http://doc-registry.localhost` | the footer, and the picker's "register one" link |
 | `REGISTRY_API_URL` | `http://localhost:1337` | **in-cluster**: the product picker's list |
 | `TICKETING_API_URL` | *(empty)* | **in-cluster**: raising tickets. Empty is a working state |

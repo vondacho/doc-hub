@@ -34,7 +34,9 @@ import {
 	type BoardState,
 	type CardKind,
 	type Id,
+	type Story,
 } from '../../lib/board/state.ts';
+import { refineUrl } from '../../lib/board/refine.ts';
 import { kindLabel } from '../../lib/board/kinds.ts';
 import {
 	STORY_STATUSES,
@@ -91,6 +93,7 @@ export function BoardGrid({
 	onLinkTicket,
 	onCreateTicket,
 	ticketingConfigured,
+	exampleMapperUrl,
 	zoom,
 	onZoomStep,
 	fullscreen,
@@ -108,6 +111,13 @@ export function BoardGrid({
 	/** Ask the ticketing system for a new ticket — an epic for a step. */
 	onCreateTicket: (kind: CardKind, id: Id) => void;
 	ticketingConfigured: boolean;
+	/**
+	 * doc-em's address, for the story menu's way out to a refinement session.
+	 *
+	 * A browser-facing link, resolved on the Astro page and handed down — see
+	 * src/lib/board/refine.ts for what the link carries.
+	 */
+	exampleMapperUrl: string;
 	/** The card whose text the source pane is emphasising, if any. */
 	selected: { kind: CardKind | 'delivery'; id: Id } | null;
 	onSelect: (pick: { kind: CardKind | 'delivery'; id: Id }) => void;
@@ -514,11 +524,16 @@ export function BoardGrid({
 															onEditTicket={() => onLinkTicket('story', storyId)}
 														/>
 													}
-													menu={storyMenu(board, dispatch, storyId, key, index, ids.length, {
-														onLinkTicket,
-														onCreateTicket,
-														ticketingConfigured,
-													})}
+													menu={storyMenu(
+														board,
+														dispatch,
+														storyId,
+														key,
+														index,
+														ids.length,
+														{ onLinkTicket, onCreateTicket, ticketingConfigured },
+														exampleMapperUrl,
+													)}
 												/>
 											</li>
 										);
@@ -745,6 +760,34 @@ function cardMenu(
 	];
 }
 
+/**
+ * "Refine in example mapping" — the way out to doc-em.
+ *
+ * This is the only entry in any menu here that leaves the application, and it is
+ * on the story rather than on the step above it because a session is about one
+ * story: that is the whole of the technique on the other side.
+ *
+ * A new tab, not this one. The map is unexported work held in this browser, and
+ * navigating away from it to a different origin — where Back would reload the
+ * board and the beforeunload guard would have to argue about it — is not what
+ * somebody pressing a menu item asked for. `noopener` because the opened page
+ * has no business reaching back into this one.
+ *
+ * Disabled with its reason when the story has no title, which is the ordinary
+ * state of a card somebody just added. The title is how doc-em addresses the
+ * board it opens; an untitled story would start a map that no second visit could
+ * find again.
+ */
+function refineAction(board: BoardState, story: Story | undefined, exampleMapperUrl: string): CardMenuAction {
+	const href = story === undefined ? null : refineUrl(exampleMapperUrl, board, story);
+	return {
+		label: 'Refine in example mapping',
+		separated: true,
+		run: href === null ? undefined : () => window.open(href, '_blank', 'noopener'),
+		disabledReason: href === null ? 'Name the story first — the example map opens under its title.' : undefined,
+	};
+}
+
 function storyMenu(
 	board: BoardState,
 	dispatch: (action: BoardAction) => void,
@@ -757,6 +800,7 @@ function storyMenu(
 		onCreateTicket: (kind: CardKind, id: Id) => void;
 		ticketingConfigured: boolean;
 	},
+	exampleMapperUrl: string,
 ): CardMenuAction[] {
 	const separator = from.indexOf('|');
 	const stepId = from.slice(0, separator);
@@ -798,6 +842,7 @@ function storyMenu(
 		...ticketMoves,
 		addNoteAction(dispatch, 'story', storyId, story?.notes ?? []),
 		addTagAction(dispatch, 'story', storyId, story?.tags ?? []),
+		refineAction(board, story, exampleMapperUrl),
 		...kindChangeActions(board, dispatch, 'story', storyId),
 		{ label: 'Delete story', separated: true, run: () => dispatch({ type: 'removeCard', kind: 'story', id: storyId }) },
 	];

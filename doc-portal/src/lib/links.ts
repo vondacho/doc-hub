@@ -36,7 +36,9 @@ export function docPortalUrl(): string {
  *
  * `STORY_MAPPER_URL` is the name doc-em and doc-es already use for the same
  * address, and the other two follow it rather than inventing a second
- * convention for the same kind of thing.
+ * convention for the same kind of thing. `EXAMPLE_MAPPER_URL` is doc-sm's name
+ * for it too, since a story's menu links straight into a refinement session
+ * there — so an environment sets one value and both find doc-em.
  */
 export function storyMapperUrl(): string {
   return fromEnv('STORY_MAPPER_URL', 'http://doc-sm.localhost');

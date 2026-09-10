@@ -128,6 +128,14 @@ app:
   # ba-portal's prompt page, linked from the assistant panel.
   baPortalUrl: http://ba-portal.localhost
 
+  # doc-em, where a story picked on this board is refined into rules and
+  # examples. Linked from each story's own menu, with the story in the query
+  # string — the browser follows it, so it is an ingress host and not a Service.
+  #
+  # The same variable name doc-portal uses for this address on /hub, so an
+  # environment sets one value for both.
+  exampleMapperUrl: http://doc-em.localhost
+
   # The registry's admin UI, as the browser sees it — where somebody goes to
   # register a product that is missing from the picker.
   registryUrl: http://doc-registry.localhost

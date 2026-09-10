@@ -42,6 +42,10 @@ app:
   docPortalUrl: http://doc-portal.localhost
   practiceUrl: http://dev-portal.localhost/doc/practices/story-mapping/
   baPortalUrl: http://ba-portal.localhost
+  # doc-em on this cluster, for the "Refine in example mapping" link on a story.
+  # Install doc-em before or after doc-sm — the link is resolved by the browser
+  # when somebody follows it, so neither release waits for the other.
+  exampleMapperUrl: http://doc-em.localhost
   registryUrl: http://doc-registry.localhost
   registryApiUrl: http://doc-registry:1337
   # No ticketing adapter runs on the local cluster, so stories stay unlinked and

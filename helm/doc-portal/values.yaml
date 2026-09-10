@@ -120,7 +120,9 @@ app:
   docPortalUrl: http://doc-portal.localhost
 
   # doc-hub's three boards, listed on /hub. `storyMapperUrl` is the name doc-em
-  # and doc-es already give the same address in their own charts.
+  # and doc-es already give the same address in their own charts, and
+  # `exampleMapperUrl` is doc-sm's name for doc-em in its own chart — a story's
+  # menu links into a refinement session there.
   storyMapperUrl: http://doc-sm.localhost
   exampleMapperUrl: http://doc-em.localhost
   eventStormerUrl: http://doc-es.localhost

@@ -113,6 +113,10 @@ services:
       # The practice this board implements, written up in dev-hub. doc-em and
       # doc-es carry the same link to their own practice page.
       PRACTICE_URL: https://dev-portal.obya.ch/doc/practices/story-mapping/
+      # doc-em, where a story from this board is refined. Followed by the
+      # visitor's browser from a story's menu, so it is the public host — the
+      # compose-network name would not resolve out there.
+      EXAMPLE_MAPPER_URL: https://doc-em.obya.ch
       REGISTRY_URL: https://doc-registry.obya.ch
       REGISTRY_API_URL: http://doc-registry:1337
       # No ticketing system wired up. Empty is the chart's default too, and the

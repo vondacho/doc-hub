@@ -57,6 +57,7 @@ import { parse } from '../../lib/examplemap/parser.ts';
 import type { ExampleMapDocument } from '../../lib/examplemap/model.ts';
 import { ExampleMapParseError, type Problem } from '../../lib/examplemap/problems.ts';
 import { EMPTY_SOURCE, freshSource, SAMPLE_SOURCE } from '../../lib/examplemap/sample.ts';
+import { handoffSource, readHandoff } from '../../lib/examplemap/handoff.ts';
 import type { Product } from '../../lib/products.ts';
 import { BASE_FONT, BoardGrid } from './BoardGrid.tsx';
 import { StoreState } from './StoreState.tsx';
@@ -597,12 +598,37 @@ export default function ExampleMapBoard({
 	}, [board.story, board.ruleOrder.length, board.title, flush, load]);
 
 	/**
-	 * Reopen whatever this browser had open last.
+	 * What the board opens on: a story handed over, or the last session.
 	 *
-	 * Once, on mount, and only when there is something to reopen. This is the
-	 * point of autosave: a closed laptop or a crashed tab should cost nothing,
-	 * and a person who has to remember to reopen their own board after a crash is
-	 * exactly the person who will not.
+	 * Once, on mount, and in that order — a link that names a story is somebody
+	 * saying which map they want *now*, and it outranks whatever the tab happened
+	 * to be showing yesterday.
+	 *
+	 * ## Arriving from the story map
+	 *
+	 * doc-sm links here with the story to refine in the query string; the
+	 * contract is written up in `handoff.ts`. The title is resolved through the
+	 * ordinary storage key, so the *second* visit to a story reopens the map the
+	 * first one produced — rules, examples, questions and all — and only a story
+	 * nobody has mapped yet starts a new board. That is the whole feature: a
+	 * refinement session is rarely finished in one sitting, and the link is how
+	 * you get back to it.
+	 *
+	 * A reopened map is said out loud, because the link carried the story's need
+	 * and ticket and they were *not* applied over it. The saved board wins — it
+	 * is somebody's work, and a link is not a reason to overwrite it — but a
+	 * story reworded in doc-sm since would otherwise silently differ here.
+	 *
+	 * The query string is then removed from the address bar. What is on screen is
+	 * a board, not a request, and a reload should reopen the board rather than
+	 * re-run the handover against a map that may since have been renamed.
+	 *
+	 * ## Otherwise, the last session
+	 *
+	 * Only when there is something to reopen. This is the point of autosave: a
+	 * closed laptop or a crashed tab should cost nothing, and a person who has to
+	 * remember to reopen their own board after a crash is exactly the person who
+	 * will not.
 	 *
 	 * A stored entry that no longer parses is *left alone* rather than dropped.
 	 * It is the only copy, it is recoverable by hand from devtools, and silently
@@ -610,15 +636,41 @@ export default function ExampleMapBoard({
 	 * differently would be the worst thing this module could do.
 	 */
 	useEffect(() => {
+		const openBoard = (key: string, text: string, held: boolean) => {
+			send({ action: { type: 'import', text }, text });
+			setDocumentKey((n) => n + 1);
+			previousKey.current = key;
+			// Only true when it came *from* the store, and only then does the store
+			// already hold it. A seeded map is new work and autosave should write it.
+			if (held) savedText.current = text;
+		};
+
+		const handoff = readHandoff(window.location.search);
+		if (handoff !== null) {
+			const key = storage.storageKey(handoff.product, handoff.title);
+			const held = storage.load(key);
+			openBoard(key, held ?? handoffSource(handoff), held !== null);
+			if (held !== null) {
+				// Rewriting the same bytes, for the one side effect that matters: this
+				// is now the board this browser had open last. Without it, closing the
+				// tab without touching anything and coming back to doc-em directly
+				// would reopen whatever was open before the link was followed. A
+				// failure here costs nothing — the entry is already there.
+				storage.save(key, held);
+				setNote({
+					kind: 'warn',
+					text: `Reopened “${handoff.title}” from this browser. What the story map sent was not written over it.`,
+				});
+			}
+			window.history.replaceState(null, '', window.location.pathname);
+			return;
+		}
+
 		const last = storage.lastOpened();
 		if (last === null) return;
 		const text = storage.load(last);
 		if (text === null) return;
-		send({ action: { type: 'import', text }, text });
-		setDocumentKey((n) => n + 1);
-		previousKey.current = last;
-		// It came *from* the store, so the store already holds it.
-		savedText.current = text;
+		openBoard(last, text, true);
 		// Mount only. `board` is deliberately not a dependency: this restores the
 		// last session, it does not keep re-reading storage.
 		// eslint-disable-next-line react-hooks/exhaustive-deps

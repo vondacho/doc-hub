@@ -90,6 +90,48 @@ not an error, it is a session that has not named its story yet. A file with
 *two* is an error — two stories on one map is two sessions, and quietly merging
 them would hide that.
 
+## Arriving from the story map
+
+doc-sm's story cards carry **Refine in example mapping**, and it opens this
+board with the story in the query string:
+
+```
+http://doc-em.localhost/?story=Redeem+a+voucher&product=client-onboarding
+    &ticket=CLONB-42&status=analysing&as=…&want=…&so=…&tag=payments
+```
+
+| Parameter | What it is |
+|---|---|
+| `story` | the story's title. **Required** — nothing else on its own opens anything |
+| `product` | the product shortname, as the picker spells it |
+| `space` | the ticketing space |
+| `ticket` | the id the tracker issued for the story |
+| `status` | one of the six; anything else is dropped and the story reads Open |
+| `as`, `want`, `so` | the three clauses of the need |
+| `tag` | repeatable: `&tag=payments&tag=legal` |
+
+The title is resolved through the ordinary storage key — `<product>_<title>`,
+the same one the store panel lists and the export filename uses. So the **second
+visit to a story reopens the map the first one produced**, rules, examples and
+questions and all; only a story nobody has mapped yet starts a new board, seeded
+with its story card and nothing else. No rules and no examples: those are what
+the session is for.
+
+A reopened map wins over what the link carried, and the board says so once in
+the message strip. The saved board is somebody's work, and a link is not a
+reason to write over it — but a story reworded in doc-sm since would otherwise
+differ here silently.
+
+The query string is then removed from the address bar: what is on screen is a
+board, not a request, and a reload should reopen the board rather than re-run
+the handover against a map that may since have been renamed.
+
+Two applications, two origins, and no server between them — `localStorage` is
+per-origin, so a URL is the one channel the two boards already share. The
+reading side is `src/lib/examplemap/handoff.ts`; every parameter but `story` is
+optional, and an unreadable one is dropped rather than refused, because a link
+somebody edited by hand should open a board and not an error page.
+
 ## Pages
 
 | Route | What it is |

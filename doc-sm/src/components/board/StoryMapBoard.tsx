@@ -173,6 +173,15 @@ export interface StoryMapBoardProps {
 	/** ba-portal's prompt page, for the assistant's link out. Browser-facing. */
 	readonly promptsUrl: string;
 	/**
+	 * doc-em, where a story is refined into rules and examples. Browser-facing.
+	 *
+	 * Passed down to the story menu, which builds the link — see
+	 * src/lib/board/refine.ts. Resolved on the page rather than here for the
+	 * usual reason: `links.ts` reads `process.env`, which a client bundle has
+	 * none of.
+	 */
+	readonly exampleMapperUrl: string;
+	/**
 	 * Whether a ticketing system is configured for this deployment.
 	 *
 	 * Passed down rather than probed from here: the address is in-cluster and the
@@ -187,6 +196,7 @@ export default function StoryMapBoard({
 	productsUnavailable,
 	registryUrl,
 	promptsUrl,
+	exampleMapperUrl,
 	ticketingConfigured,
 }: StoryMapBoardProps) {
 	/*
@@ -1436,6 +1446,7 @@ export default function StoryMapBoard({
 							onLinkTicket={linkTicket}
 							onCreateTicket={createTicket}
 							ticketingConfigured={ticketingConfigured}
+							exampleMapperUrl={exampleMapperUrl}
 							zoom={zoom}
 							onZoomStep={stepZoom}
 							fullscreen={fullscreen}
