@@ -138,6 +138,8 @@ somebody edited by hand should open a board and not an error page.
 |---|---|
 | `/` | the board |
 | `/dsl` | the `.examplemap` format: a worked example, the grammar, and what the format decides for you |
+| `/notation` | `examplemap-notation.md` as `text/markdown` — the export dialog's notation document, for an agent to fetch |
+| `/doctrine` | `examplemap-doctrine.md` as `text/markdown` — how to read an example map, for an agent to fetch |
 | `/healthz` | `{"status":"UP"}` for the kubelet |
 
 ## The toolbar

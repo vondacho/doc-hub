@@ -316,6 +316,20 @@ back to the same document.
 Lost: comments, blank lines and your indentation. The board is the source, the
 file is a render of it.
 
+## Pages
+
+| Route | What it is |
+|---|---|
+| `/` | the board |
+| `/dsl` | the `.eventstorm` format: a worked example, the rules, the grammar |
+| `/notation` | `eventstorm-notation.md` as `text/markdown` — the export dialog's notation document, for an agent to fetch |
+| `/doctrine` | `eventstorm-doctrine.md` as `text/markdown` — how to read an event storm, for an agent to fetch |
+| `/healthz` | `{"status":"UP"}` for the kubelet |
+
+Both Markdown routes are rendered by the same functions as the export dialog's
+downloads (`src/lib/board/instructions.ts`), so `curl` and the dialog cannot hand
+out different text.
+
 ## Persistence
 
 The same as the other two boards: `localStorage`, a second after you stop

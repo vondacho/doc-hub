@@ -1,0 +1,37 @@
+// Story map exported by doc-sm.
+// The worked example from doc-sm/doc/sm-grammar.md, section 1.
+
+storymap "Doc-Hub Onboarding" {
+  product "client-onboarding"
+  space "CLONB"
+
+  delivery "Sprint 24" sprint #CLONB-S24
+  delivery "Sprint 25" sprint #CLONB-S25
+  delivery "MVP" release #CLONB-R1
+
+  activity "Discover documentation" #CLONB-1 ~in-progress +search {
+    persona "Business analyst"
+    persona "Product manager"
+    persona "Support engineer"
+    step "Search the catalog" #CLONB-10 ~in-progress {
+      story "Full-text search" @"Sprint 24" #CLONB-42 ~in-progress +search +"needs an index" {
+        as "Business analyst"
+        want "to search every product at once"
+        so "I can answer a question without knowing which product owns it"
+      }
+      story "Filter by domain" @"Sprint 25" #CLONB-43 ~ready {
+        as "Product manager"
+        want "to narrow the catalogue to one domain"
+        so "I review only the products my portfolio covers"
+        note "Domain comes from the registry entry, not a\
+              free-text field that anyone can mistype."
+      }
+      story "Saved searches" {
+        as "Support engineer"
+        want "to keep the searches I run every week"
+        so "I stop retyping the same query"
+      }
+    }
+    step "Open a product" #CLONB-11 ~analysing
+  }
+}

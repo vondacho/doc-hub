@@ -29,6 +29,8 @@ Browse the board:
 {{- $scheme := ternary "https" "http" (not (empty $.Values.ingress.tls)) }}
   {{ $scheme }}://{{ $host.host }}/                     the story mapping board
   {{ $scheme }}://{{ $host.host }}/dsl                  the .storymap format
+  {{ $scheme }}://{{ $host.host }}/notation             the .storymap notation, as Markdown for an agent
+  {{ $scheme }}://{{ $host.host }}/doctrine             how to read a story map, as Markdown for an agent
 {{- end }}
 {{- else }}
   kubectl --namespace {{ .Release.Namespace }} port-forward svc/{{ include "doc-sm.fullname" . }} 4322:{{ .Values.service.port }}

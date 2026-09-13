@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "docdsl"
+version = "0.1.0"
+description = "Validators for doc-hub's three source-text DSLs: .eventstorm, .storymap and .examplemap."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Proprietary" }
+authors = [{ name = "Olivier von Dach" }]
+keywords = ["eventstorming", "story-mapping", "example-mapping", "bdd", "dsl"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Topic :: Software Development :: Quality Assurance",
+]
+# Deliberately none. The three boards' own parsers depend on nothing but the
+# runtime, and a validator that has to be installed before a CI job can read a
+# story map is a validator nobody runs.
+dependencies = []
+
+[project.scripts]
+docdsl-validate = "docdsl.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["docdsl*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"

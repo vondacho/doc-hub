@@ -142,7 +142,7 @@ The tag vocabulary is open on purpose. The useful labels on a real map are the
 ones nobody could have guessed — the team that owns the answer, the regulation
 that applies, the system it only affects, the thing that went wrong last time —
 so a closed set decided by this notation would be wrong for every team and would
-make the right answer unspellable. The price is that \`+leagl\` is a tag rather
+make the right answer unspellable. The price is that \`+legal\` is a tag rather
 than an error.
 
 Three mechanical rules, and then the conventions:

@@ -83,6 +83,8 @@ differently would be the worst thing this feature could do.
 |---|---|
 | `/` | The board. Server-rendered shell with the product list; the board itself is a React island |
 | `/dsl` | The `.storymap` format — a worked example, the rules, the grammar |
+| `/notation` | `storymap-notation.md` as `text/markdown` — the export dialog's notation document, for an agent to fetch |
+| `/doctrine` | `storymap-doctrine.md` as `text/markdown` — how to read a story map, for an agent to fetch |
 | `/healthz` | `{"status":"UP"}` for the chart's probes |
 | `/404` | Two links, because doc-sm has two pages |
 

@@ -18,8 +18,10 @@ spec:
     #              that loads the island
     #   /dsl       the format reference, which renders the event storm that
     #              ships as the board's sample
+    #   /notation the notation and doctrine Markdown an agent fetches, built from
+    #   /doctrine the assistant's own prompt — a broken import there breaks both
     #
-    # There is no fourth URL, and that is a fact about doc-es rather than a gap
+    # There is no URL beyond these, and that is a fact about doc-es rather than a gap
     # in the test. It calls no registry and owns no database, so there is no
     # integration for a request to prove.
     #
@@ -38,3 +40,5 @@ spec:
         - http://{{ include "doc-es.fullname" . }}:{{ .Values.service.port }}{{ .Values.probes.path }}
         - http://{{ include "doc-es.fullname" . }}:{{ .Values.service.port }}/
         - http://{{ include "doc-es.fullname" . }}:{{ .Values.service.port }}/dsl
+        - http://{{ include "doc-es.fullname" . }}:{{ .Values.service.port }}/notation
+        - http://{{ include "doc-es.fullname" . }}:{{ .Values.service.port }}/doctrine

@@ -147,7 +147,7 @@ helm test doc-em -n doc-hub
 open http://doc-em.localhost
 ```
 
-Both boards' tests fetch `/healthz`, `/` and `/dsl`, and that is the whole list —
+Both boards' tests fetch `/healthz`, `/`, `/dsl`, `/notation` and `/doctrine`, and that is the whole list —
 not a thinner test than the portal's eight, but components with less to check.
 Neither owns a database, and `doc-sm`'s one call degrades to a text box when the
 registry is down, so a 200 on `/` cannot prove it either way; that is

@@ -24,6 +24,8 @@ Browse the board:
 {{- $scheme := ternary "https" "http" (not (empty $.Values.ingress.tls)) }}
   {{ $scheme }}://{{ $host.host }}/                     the event storming board
   {{ $scheme }}://{{ $host.host }}/dsl                  the .eventstorm format
+  {{ $scheme }}://{{ $host.host }}/notation             the .eventstorm notation, as Markdown for an agent
+  {{ $scheme }}://{{ $host.host }}/doctrine             how to read an event storm, as Markdown for an agent
 {{- end }}
 {{- else }}
   kubectl --namespace {{ .Release.Namespace }} port-forward svc/{{ include "doc-es.fullname" . }} 4324:{{ .Values.service.port }}

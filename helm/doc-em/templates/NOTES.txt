@@ -24,6 +24,8 @@ Browse the board:
 {{- $scheme := ternary "https" "http" (not (empty $.Values.ingress.tls)) }}
   {{ $scheme }}://{{ $host.host }}/                     the example mapping board
   {{ $scheme }}://{{ $host.host }}/dsl                  the .examplemap format
+  {{ $scheme }}://{{ $host.host }}/notation             the .examplemap notation, as Markdown for an agent
+  {{ $scheme }}://{{ $host.host }}/doctrine             how to read an example map, as Markdown for an agent
 {{- end }}
 {{- else }}
   kubectl --namespace {{ .Release.Namespace }} port-forward svc/{{ include "doc-em.fullname" . }} 4323:{{ .Values.service.port }}

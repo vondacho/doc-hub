@@ -18,8 +18,10 @@ spec:
     #              that loads the island
     #   /dsl       the format reference, which renders the example story map
     #              through the same parser the board uses
+    #   /notation the notation and doctrine Markdown an agent fetches, built from
+    #   /doctrine the assistant's own prompt — a broken import there breaks both
     #
-    # There is no fourth URL. doc-sm owns no database, and its one in-cluster
+    # There is no URL beyond these. doc-sm owns no database, and its one in-cluster
     # call — the registry read that fills the product picker — happens while
     # rendering /, so a 200 there already covers it. Or rather, it does not: the
     # picker degrades to a text box when the registry is unreachable, by design,
@@ -41,3 +43,5 @@ spec:
         - http://{{ include "doc-sm.fullname" . }}:{{ .Values.service.port }}{{ .Values.probes.path }}
         - http://{{ include "doc-sm.fullname" . }}:{{ .Values.service.port }}/
         - http://{{ include "doc-sm.fullname" . }}:{{ .Values.service.port }}/dsl
+        - http://{{ include "doc-sm.fullname" . }}:{{ .Values.service.port }}/notation
+        - http://{{ include "doc-sm.fullname" . }}:{{ .Values.service.port }}/doctrine
