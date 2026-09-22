@@ -158,6 +158,30 @@ export const icons = {
 	 * multi-part icon here is drawn.
 	 */
 	agent: 'M20 4H4v11h4v4l4-4h8V4Z M12 7l.8 2.2L15 10l-2.2.8L12 13l-.8-2.2L9 10l2.2-.8L12 7Z',
+	/*
+	 * GitHub's mark — the one glyph here that is somebody else's.
+	 *
+	 * It is also the one that is *filled* rather than stroked, and it has to be:
+	 * a logo is a silhouette, and an outline traced around this one reads as a
+	 * blob with a tail rather than as GitHub. Icon.tsx keeps the list of which
+	 * names are drawn that way, so no call site has to know.
+	 *
+	 * Redrawing it in this file's house style was the alternative and would have
+	 * been worse — a mark nobody recognises is a link nobody follows, and the
+	 * whole point of the control is that it needs no words.
+	 */
+	github:
+		'M12 .3a12 12 0 0 0-3.8 23.4c.6.1.8-.3.8-.6v-2c-3.3.7-4-1.6-4-1.6-.6-1.4-1.4-1.8-1.4-1.8-1-.7.1-.7.1-.7 1.2 0 1.8 1.2 1.8 1.2 1.1 1.8 2.8 1.3 3.5 1 .1-.8.4-1.3.8-1.6-2.7-.3-5.5-1.3-5.5-5.9 0-1.3.5-2.4 1.2-3.2 0-.3-.5-1.5.2-3.2 0 0 1-.3 3.3 1.2a11.5 11.5 0 0 1 6 0C17.3 5 18.3 5.3 18.3 5.3c.7 1.7.2 2.9.1 3.2.8.8 1.2 1.9 1.2 3.2 0 4.6-2.8 5.6-5.5 5.9.5.4.9 1.1.9 2.3v3.3c0 .3.2.7.8.6A12 12 0 0 0 12 .3Z',
 } as const;
+
+/**
+ * The names drawn as a silhouette rather than as a stroke.
+ *
+ * One entry, and it is a brand mark — see the note beside `github` above.
+ * Icon.tsx reads this to decide what to hand the `<svg>`; everything not listed
+ * here is a 1.6-weight stroke in `currentColor`, which is every glyph this file
+ * draws itself.
+ */
+export const FILLED: ReadonlySet<string> = new Set(['github']);
 
 export type IconName = keyof typeof icons;

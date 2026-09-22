@@ -2,6 +2,7 @@
 import Layout from '../layouts/Layout.astro';
 import EventStormBoard from '../components/board/EventStormBoard.tsx';
 import { swatchClass } from '../lib/board/kinds';
+import { Icon } from '../components/board/Icon.tsx';
 import { cardLabel, cardMeaning, kindsFor } from '../lib/eventstorm/model';
 import { promptsUrl, docPortalUrl, practiceUrl, registryApiUrl, registryUrl, storyMapperUrl } from '../lib/links';
 import { fetchProducts } from '../lib/products';
@@ -25,6 +26,14 @@ const registry = registryUrl();
 // the board renders is passed in the same way.
 const prompts = promptsUrl();
 const storyMapper = storyMapperUrl();
+
+// The repository every one of these boards is built from.
+//
+// A constant rather than an entry in src/lib/links.ts: that module is for the
+// addresses that *differ per environment* — the portal, the registry, the
+// neighbouring boards — and this one is the same from any cluster. Nothing to
+// configure means nothing to get wrong in a values file.
+const codebase = 'https://github.com/vondacho/doc-hub';
 ---
 
 <Layout
@@ -51,7 +60,38 @@ const storyMapper = storyMapperUrl();
       <p class="text-xs font-semibold tracking-[0.16em] text-ink-muted uppercase dark:text-slate-400">
         doc-hub · event storming
       </p>
-      <h1 class="mt-2 text-3xl font-bold sm:text-4xl">Everything that happens, in order</h1>
+      <div class="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
+        <h1 class="mt-2 text-3xl font-bold sm:text-4xl">Everything that happens, in order</h1>
+
+        {/*
+          The title line carries one link, hard against the right margin: where this
+          thing was written.
+
+          It sits in the header rather than in the toolbar because it is a fact about
+          the *tool*, not a control on the document — everything in that row acts on
+          the board in front of you, and a control among them that navigated away
+          would be the one press nobody expects. Level with the title and at the far
+          edge is where a reader looks for provenance, and it is out of the way of the
+          row that gets used.
+
+          Words as well as the mark. An octocat on its own is recognisable but mute
+          about *which* repository it opens, and this is a link somebody follows once
+          — it does not have to be compact enough to earn a place in a row of thirty.
+
+          `items-baseline` so the link sits on the title's baseline rather than in the
+          middle of its line box, and `flex-wrap` so it drops under the title on a
+          narrow window instead of squeezing it.
+        */}
+        <a
+          href={codebase}
+          target="_blank"
+          rel="noreferrer noopener"
+          class="inline-flex shrink-0 items-center gap-2 text-sm font-semibold text-brand hover:underline"
+        >
+          View on GitHub
+          <Icon name="github" className="h-5 w-5" />
+        </a>
+      </div>
       <p class="mt-3 text-ink-muted dark:text-slate-400">
         Domain events along a timeline, the actors and systems around them, and the disagreements
         nobody could settle — then commands and policies, then aggregates, as the room goes deeper.

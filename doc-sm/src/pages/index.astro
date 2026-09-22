@@ -2,6 +2,7 @@
 import Layout from '../layouts/Layout.astro';
 import StoryMapBoard from '../components/board/StoryMapBoard.tsx';
 import { swatchClass, kindLabel, kindDescription, KIND_ORDER } from '../lib/board/kinds';
+import { Icon } from '../components/board/Icon.tsx';
 import { promptsUrl, docPortalUrl, exampleMapperUrl, practiceUrl, registryApiUrl, registryUrl, ticketingApiUrl } from '../lib/links';
 import { fetchProducts } from '../lib/products';
 import { isConfigured } from '../lib/ticketing';
@@ -38,6 +39,14 @@ const exampleMapper = exampleMapperUrl();
 // is in-cluster and stays on this side — the board only needs to know whether
 // offering to raise a ticket would be honest.
 const ticketingConfigured = isConfigured(ticketingApiUrl());
+
+// The repository every one of these boards is built from.
+//
+// A constant rather than an entry in src/lib/links.ts: that module is for the
+// addresses that *differ per environment* — the portal, the registry, the
+// neighbouring boards — and this one is the same from any cluster. Nothing to
+// configure means nothing to get wrong in a values file.
+const codebase = 'https://github.com/vondacho/doc-hub';
 ---
 
 <Layout
@@ -64,7 +73,38 @@ const ticketingConfigured = isConfigured(ticketingApiUrl());
 			<p class="text-xs font-semibold tracking-[0.16em] text-ink-muted uppercase dark:text-slate-400">
 				doc-hub · story mapping
 			</p>
-			<h1 class="mt-2 text-3xl font-bold sm:text-4xl">Map the work before you plan it</h1>
+			<div class="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
+				<h1 class="mt-2 text-3xl font-bold sm:text-4xl">Map the work before you plan it</h1>
+
+				{/*
+					The title line carries one link, hard against the right margin: where this
+					thing was written.
+
+					It sits in the header rather than in the toolbar because it is a fact about
+					the *tool*, not a control on the document — everything in that row acts on
+					the board in front of you, and a control among them that navigated away
+					would be the one press nobody expects. Level with the title and at the far
+					edge is where a reader looks for provenance, and it is out of the way of the
+					row that gets used.
+
+					Words as well as the mark. An octocat on its own is recognisable but mute
+					about *which* repository it opens, and this is a link somebody follows once
+					— it does not have to be compact enough to earn a place in a row of thirty.
+
+					`items-baseline` so the link sits on the title's baseline rather than in the
+					middle of its line box, and `flex-wrap` so it drops under the title on a
+					narrow window instead of squeezing it.
+				*/}
+				<a
+					href={codebase}
+					target="_blank"
+					rel="noreferrer noopener"
+					class="inline-flex shrink-0 items-center gap-2 text-sm font-semibold text-brand hover:underline"
+				>
+					View on GitHub
+					<Icon name="github" className="h-5 w-5" />
+				</a>
+			</div>
 			{/*
 				One line, so no `max-w-prose`: a measure of 65ch is right for a
 				paragraph and wrong for a standfirst, which is read at a glance
