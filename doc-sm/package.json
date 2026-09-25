@@ -7,11 +7,12 @@
   },
   "scripts": {
     "dev": "astro dev",
-    "build": "astro build",
+    "build": "astro build && npm run build:cli",
     "preview": "astro preview",
     "start": "node ./dist/server/entry.mjs",
     "astro": "astro",
-    "check": "astro check"
+    "check": "astro check",
+    "build:cli": "node src/cli/build.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.121.0",
@@ -20,6 +21,7 @@
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
+    "@resvg/resvg-js": "^2.6.2",
     "@tailwindcss/vite": "^4.3.3",
     "astro": "^7.2.0",
     "react": "^19.2.0",
@@ -31,6 +33,7 @@
     "@types/node": "^26.2.0",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
+    "esbuild": "^0.28.2",
     "typescript": "^6.0.3"
   }
 }

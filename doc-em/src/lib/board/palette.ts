@@ -72,6 +72,21 @@ export interface Palette {
 }
 
 /**
+ * Where the tokens come from when there is no live stylesheet to read.
+ *
+ * `null` in the browser, which reads `:root` as described above. The command-line
+ * renderer (src/cli/render.ts) runs in Node, where there is no `document` and
+ * every read would fall through to the grey placeholders; it parses global.css
+ * itself and hands the declarations in here. Same file, same names — the one
+ * place the colours are written down stays the one place they are read from.
+ */
+let tokenSource: ((name: string) => string | undefined) | null = null;
+
+export function setTokenSource(lookup: (name: string) => string | undefined): void {
+	tokenSource = lookup;
+}
+
+/**
  * The palette for one theme, read out of the live stylesheet.
  *
  * `dark` rather than "read whatever the board is showing", because the board's
@@ -83,8 +98,13 @@ export interface Palette {
 export function palette(dark: boolean): Palette {
 	const root = typeof document === 'undefined' ? null : document.documentElement;
 	const read = (name: string, fallback: string): string => {
-		if (root === null) return fallback;
-		const value = getComputedStyle(root).getPropertyValue(name).trim();
+		const raw =
+			tokenSource !== null
+				? tokenSource(name)
+				: root === null
+					? undefined
+					: getComputedStyle(root).getPropertyValue(name);
+		const value = raw?.trim() ?? '';
 		return value === '' ? fallback : toHex(value);
 	};
 

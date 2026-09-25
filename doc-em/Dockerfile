@@ -46,6 +46,19 @@ ENV NODE_ENV=production
 RUN addgroup -g 10001 app \
  && adduser -u 10001 -G app -D -H -s /sbin/nologin app
 
+# The same image also renders a .examplemap file without a browser. See
+# src/cli/render.ts:
+#
+#   docker run --rm -i <image> render --format feature < story.examplemap > story.feature
+#
+# `render` is on PATH, so the node image's entrypoint runs it in place of the
+# CMD, and the server's CMD, the chart and the compose file stay as they are.
+# resvg rasters the PNG from system fonts, and Alpine has none. DejaVu is the
+# sans-serif the picture's generic font stack resolves to.
+RUN apk add --no-cache font-dejavu \
+ && printf '#!/bin/sh\nexec node /app/dist/cli/render.mjs "$@"\n' > /usr/local/bin/render \
+ && chmod 755 /usr/local/bin/render
+
 COPY --from=build --chown=app:app /app/node_modules ./node_modules
 COPY --from=build --chown=app:app /app/dist ./dist
 COPY --from=build --chown=app:app /app/package.json ./package.json

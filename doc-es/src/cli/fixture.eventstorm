@@ -1,0 +1,38 @@
+// Event storm exported by doc-es.
+// Comments and blank lines in an imported file are not preserved: the board
+// is the source, this file is a render of it.
+
+eventstorm "Ordering a pizza" {
+  product "client-onboarding"
+
+  lane "Customer" {
+    actor "Hungry customer" @1
+    event "Menu opened" @1
+    event "Pizza added to the basket" @2
+    event "Basket emptied and started again" @2 {
+      note "Happens more than anybody expected. Worth\
+            understanding before it is designed away."
+    }
+    event "Order placed" @3 +revenue
+    event "Pizza delivered" @8
+  }
+
+  lane "Payments" {
+    command "Take the payment" @3
+    event "Payment requested" @4
+    system "Payment provider" @4
+    policy "Whenever a payment is refused, hold the order" @5
+    event "Payment refused" @5 +revenue
+    event "Payment accepted" @5
+    hotspot "Nobody agrees whether a refused payment cancels the order" @5 +"ask payments" +revenue
+  }
+
+  lane "Kitchen" {
+    readmodel "Orders waiting" @6
+    event "Order sent to the kitchen" @6
+    actor "Kitchen staff" @6
+    event "Pizza put in the oven" @6
+    opportunity "Tell the customer when it goes in the oven" @6
+    event "Pizza handed to the driver" @7
+  }
+}

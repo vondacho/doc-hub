@@ -33,6 +33,10 @@
 # package is private until you flip it in Packages > Package settings; a
 # cluster pulling from it needs an imagePullSecret until then.
 #
+# doc-sm, doc-em and doc-es also render their notation without a browser —
+# `docker run --rm -i <image> render --format png < board.eventstorm > board.png`
+# — and the build job smoke-tests that before the image is used anywhere.
+#
 # To consume them from the charts, override the bare local repository name that
 # helm/<component>/values.yaml defaults to:
 #
@@ -186,11 +190,15 @@ jobs:
             org.opencontainers.image.title=${{ matrix.component }}
 
       - name: Build and push
+        id: build
         uses: docker/build-push-action@v6
         with:
           context: ./${{ matrix.component }}
           platforms: ${{ env.PLATFORMS }}
           push: ${{ github.event_name != 'pull_request' }}
+          # Also into the runner's local docker, so the smoke test below runs
+          # the very image that was just published and not a rebuild of it.
+          load: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           # Per-component cache scopes. Sharing one scope would let the
@@ -201,6 +209,36 @@ jobs:
           # story attached, and without one it shows up in the GHCR package list
           # as a phantom "unknown/unknown" platform next to every tag.
           provenance: false
+
+      # The board images also render their notation from the command line
+      # (src/cli/render.ts). A renderer that no longer starts, has lost its
+      # native rasteriser, or has lost its fonts fails here, the same way a
+      # compile error fails the build.
+      - name: Smoke-test render
+        if: contains(fromJSON('["doc-es","doc-sm","doc-em"]'), matrix.component)
+        env:
+          IMAGE: ${{ steps.build.outputs.imageid }}
+          COMPONENT: ${{ matrix.component }}
+        run: |
+          set -euo pipefail
+          case "$COMPONENT" in
+            doc-es) ext=eventstorm; formats='svg png md' ;;
+            doc-sm) ext=storymap; formats='svg png md' ;;
+            doc-em) ext=examplemap; formats='svg png md feature' ;;
+          esac
+          fixture="$COMPONENT/src/cli/fixture.$ext"
+          out="$RUNNER_TEMP/render"
+          mkdir -p "$out"
+          for format in $formats; do
+            docker run --rm -i "$IMAGE" render --format "$format" < "$fixture" > "$out/fixture.$format"
+            test -s "$out/fixture.$format"
+          done
+          head -c 8 "$out/fixture.png" | od -An -tx1 | tr -d ' \n' | grep -qx 89504e470d0a1a0a
+          # A broken source has to fail, not render an empty picture.
+          if printf 'not a board\n' | docker run --rm -i "$IMAGE" render --format svg > /dev/null; then
+            echo 'render accepted a source that does not parse' >&2
+            exit 1
+          fi
 
       - name: Summarise
         if: github.event_name != 'pull_request'

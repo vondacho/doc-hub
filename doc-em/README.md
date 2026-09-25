@@ -566,6 +566,45 @@ Port 4323 follows doc-portal's 4321 and doc-sm's 4322.
 build-only ones — the built server entry imports the React renderer even though
 `client:only` means the server never renders with it.
 
+## Rendering from the command line
+
+The image that serves the board also renders a `.examplemap` file without a browser:
+
+```
+docker run --rm -i ghcr.io/vondacho/doc-hub/doc-em render --format png < story.examplemap > story.png
+
+docker run --rm -v "$PWD:/work" -w /work --user "$(id -u):$(id -g)" \
+  ghcr.io/vondacho/doc-hub/doc-em render story.examplemap -o story.feature
+```
+
+`render [<input>|-] [-o <output>|-] [--format svg|png|md|feature] [--scale N]`.
+The format comes from the output's extension, and `--format` is only needed
+when writing to stdout. When there is no input, the source is read from stdin.
+Only stdin and stdout are used in the first form, so it needs no volume mount
+and no `--user`. The second form writes into the mounted directory, which is why
+it runs as you rather than as the image's uid 10001.
+
+`feature` is the same Gherkin file as the dialog's row. Open questions cannot
+be written into a feature file, so the renderer names how many were left out
+on stderr, as the dialog does on the row.
+
+It runs the export dialog's own `produce`, so the files match what the dialog
+downloads, with three differences:
+
+- The picture is always in daylight.
+- Nothing is filtered, so the whole map is drawn.
+- `png` is rastered by resvg, where the dialog uses the browser's canvas (2× by
+  default, set with `--scale`).
+
+The colours are read from `src/styles/global.css`, which is bundled into the
+CLI, so there is still only one place where they are written down. A source that
+does not parse prints each problem as `line:column message` and exits with 1.
+Bad usage exits with 2.
+
+The CLI is `src/cli/render.ts`, bundled to `dist/cli/render.mjs` by `npm run
+build`. Locally, run `node dist/cli/render.mjs src/cli/fixture.examplemap -o /tmp/x.svg`.
+CI runs the same fixture through the published image on every build.
+
 ## Deploy
 
 ```

@@ -685,6 +685,41 @@ unprivileged `app` user at uid/gid 10001 matching the chart's `securityContext`.
 build-only ones — the built server entry imports the React renderer even though
 `client:only` means the server never renders with it.
 
+## Rendering from the command line
+
+The image that serves the board also renders a `.storymap` file without a browser:
+
+```
+docker run --rm -i ghcr.io/vondacho/doc-hub/doc-sm render --format png < map.storymap > map.png
+
+docker run --rm -v "$PWD:/work" -w /work --user "$(id -u):$(id -g)" \
+  ghcr.io/vondacho/doc-hub/doc-sm render map.storymap -o map.png
+```
+
+`render [<input>|-] [-o <output>|-] [--format svg|png|md] [--scale N]`.
+The format comes from the output's extension, and `--format` is only needed
+when writing to stdout. When there is no input, the source is read from stdin.
+Only stdin and stdout are used in the first form, so it needs no volume mount
+and no `--user`. The second form writes into the mounted directory, which is why
+it runs as you rather than as the image's uid 10001.
+
+It runs the export dialog's own `produce`, so the files match what the dialog
+downloads, with three differences:
+
+- The picture is always in daylight.
+- Nothing is filtered, so the whole map is drawn.
+- `png` is rastered by resvg, where the dialog uses the browser's canvas (2× by
+  default, set with `--scale`).
+
+The colours are read from `src/styles/global.css`, which is bundled into the
+CLI, so there is still only one place where they are written down. A source that
+does not parse prints each problem as `line:column message` and exits with 1.
+Bad usage exits with 2.
+
+The CLI is `src/cli/render.ts`, bundled to `dist/cli/render.mjs` by `npm run
+build`. Locally, run `node dist/cli/render.mjs src/cli/fixture.storymap -o /tmp/x.svg`.
+CI runs the same fixture through the published image on every build.
+
 ## What is not built
 
 - **No link from doc-portal.** Deferred to its own change. When it lands, the
